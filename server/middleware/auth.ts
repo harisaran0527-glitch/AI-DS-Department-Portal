@@ -1,0 +1,123 @@
+import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import { db } from '../db';
+
+export const JWT_SECRET = process.env.JWT_SECRET || 'aids_dept_secure_jwt_secret_v1_99420';
+
+export interface AuthRequest extends Request {
+  user?: {
+    id: string;
+    email: string;
+    name: string;
+    role: 'STUDENT' | 'FACULTY' | 'HOD' | 'ADMIN';
+    assignedYear?: string;
+    assignedSection?: string;
+    registerNo?: string;
+    studentId?: string;
+  };
+}
+
+export function authenticateToken(req: AuthRequest, res: Response, next: NextFunction) {
+  const token = req.cookies?.aids_session_token || req.headers.authorization?.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized: Missing authentication session token.' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    req.user = decoded;
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Unauthorized: Invalid or expired session token.' });
+  }
+}
+
+export function requireRole(...roles: string[]) {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ error: `Forbidden: Requires ${roles.join(' or ')} permissions.` });
+    }
+
+    next();
+  };
+}
+
+// Server-Side Authorization: Faculty Workspace & Staff-Wise Data Isolation Check
+export function verifyFacultySectionAccess(req: AuthRequest, res: Response, next: NextFunction) {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+
+  // HOD & Admin have elevated department-wide permissions
+  if (req.user.role === 'HOD' || req.user.role === 'ADMIN') {
+    return next();
+  }
+
+  if (req.user.role !== 'FACULTY') {
+    return res.status(403).json({ error: 'Forbidden: Faculty access required.' });
+  }
+
+  const targetStudentId =
+    req.params.studentId ||
+    req.params.id ||
+    req.body?.studentId ||
+    req.body?.id ||
+    (req.query?.studentId as string) ||
+    (req.query?.id as string);
+
+  if (!targetStudentId) {
+    return res.status(400).json({ error: 'Bad Request: Target Student ID missing.' });
+  }
+
+  const targetStudent = db.getStudentById(targetStudentId);
+  if (!targetStudent) {
+    return res.status(404).json({ error: 'Student record not found.' });
+  }
+
+  const isCreatedByStaff = targetStudent.created_by_faculty_id === req.user.id;
+  const isWorkspaceStaff = targetStudent.faculty_workspace_id === req.user.id;
+
+  // STRICT STAFF-WISE ISOLATION: If student belongs to another staff member's workspace, reject cross-staff access
+  const isOwnedByAnotherStaff =
+    (targetStudent.created_by_faculty_id && targetStudent.created_by_faculty_id !== req.user.id) ||
+    (targetStudent.faculty_workspace_id && targetStudent.faculty_workspace_id !== req.user.id);
+
+  if (isOwnedByAnotherStaff && !isCreatedByStaff && !isWorkspaceStaff) {
+    return res.status(403).json({
+      error: "Forbidden: You do not have permission to access or modify another staff member's assigned student workspace."
+    });
+  }
+
+  // Derived from relational faculty_assignments
+  const facultyAssignment = db.getFacultyAssignment(req.user.id);
+  const assignedYear = facultyAssignment ? facultyAssignment.year : req.user.assignedYear;
+  const assignedSection = facultyAssignment ? facultyAssignment.section : req.user.assignedSection;
+
+  // Enforce Section match (or workspace ownership)
+  const isYearMatch = !assignedYear || assignedYear === 'ALL' || targetStudent.year === assignedYear;
+  const isSectionMatch = !assignedSection || assignedSection === 'ALL' || targetStudent.section === assignedSection;
+
+  if ((!isYearMatch || !isSectionMatch) && !isCreatedByStaff && !isWorkspaceStaff) {
+    return res.status(403).json({
+      error: `Forbidden: Access denied. Student is outside your assigned workspace (${assignedYear} Section ${assignedSection}).`
+    });
+  }
+
+  next();
+}
+
+// Server-Side Authorization: Lockout Student Mutation Attempts (100% View-Only)
+export function verifyStudentSelfAccess(req: AuthRequest, res: Response, next: NextFunction) {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+
+  if (req.user.role === 'STUDENT') {
+    return res.status(403).json({
+      error: 'Forbidden: Student Portal is strictly VIEW-ONLY. Mutation operations are disabled.'
+    });
+  }
+
+  next();
+}

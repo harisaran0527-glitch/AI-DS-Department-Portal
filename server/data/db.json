@@ -1,0 +1,47 @@
+{
+  "users": [
+    {
+      "id": "usr-admin-1",
+      "email": "admin@aids.edu",
+      "identifier": "admin",
+      "name": "System Administrator",
+      "role": "ADMIN",
+      "passwordHash": "$2b$10$csOHf9jgifMzm4AEGK9qHO3QX8LdfbJ3/37S44rZmJ1Z9.ta1bgAy",
+      "isActive": true,
+      "createdAt": "2026-08-26T09:43:46.930Z"
+    },
+    {
+      "id": "usr-hod-1",
+      "email": "hod@aids.edu",
+      "identifier": "hod",
+      "name": "Head of Department",
+      "role": "HOD",
+      "passwordHash": "$2b$10$nuHEXBkAMYUk6g/eca7cnOEYDSGdxQl0vwjd2Kvynbbfh0YJmyZFm",
+      "isActive": true,
+      "createdAt": "2026-08-26T09:43:47.023Z"
+    }
+  ],
+  "students": [],
+  "academics": [],
+  "arrears": [],
+  "skillEdge": [],
+  "nptel": [],
+  "attendance": [],
+  "discipline": [],
+  "leetcode": [],
+  "projects": [],
+  "scoringConfig": {
+    "academicWeight": 25,
+    "skillEdgeWeight": 15,
+    "nptelWeight": 10,
+    "participationWeight": 10,
+    "certificatesWeight": 10,
+    "attendanceWeight": 10,
+    "disciplineWeight": 5,
+    "leetcodeWeight": 10,
+    "projectsWeight": 5
+  },
+  "finalizedAwards": [],
+  "auditLogs": [],
+  "loginAttempts": {}
+}

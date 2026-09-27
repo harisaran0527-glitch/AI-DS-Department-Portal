@@ -1,0 +1,145 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+:root {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  color-scheme: dark;
+}
+
+*, ::before, ::after {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+body, button, input, select, textarea, table, td, th {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: linear-gradient(135deg, #0A0E1A 0%, #0E172A 50%, #0A101F 100%);
+  background-attachment: fixed;
+  color: #f3f4f6;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.4);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.7);
+}
+
+/* 3D Perspective Utilities */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.perspective-2000 {
+  perspective: 2000px;
+}
+
+.transform-style-3d {
+  transform-style: preserve-3d;
+}
+
+/* Book Animation CSS */
+.book-cover {
+  box-shadow: 
+    -10px 10px 30px rgba(0, 0, 0, 0.6),
+    inset 0 0 15px rgba(255, 255, 255, 0.1);
+}
+
+.book-page-turning {
+  transform-origin: left center;
+  animation: turnPage 3s ease-in-out infinite alternate;
+}
+
+@keyframes turnPage {
+  0% {
+    transform: rotateY(0deg) rotateZ(0deg);
+  }
+  50% {
+    transform: rotateY(-85deg) rotateZ(-2deg);
+  }
+  100% {
+    transform: rotateY(-170deg) rotateZ(-4deg);
+  }
+}
+
+/* Floating 3D Portal Glows */
+.portal-glow-student {
+  box-shadow: 
+    0 0 50px rgba(99, 102, 241, 0.35),
+    0 0 100px rgba(168, 85, 247, 0.25),
+    inset 0 0 30px rgba(99, 102, 241, 0.2);
+}
+
+.portal-glow-faculty {
+  box-shadow: 
+    0 0 50px rgba(14, 165, 233, 0.35),
+    0 0 100px rgba(99, 102, 241, 0.25),
+    inset 0 0 30px rgba(14, 165, 233, 0.2);
+}
+
+.portal-glow-hod {
+  box-shadow: 
+    0 0 50px rgba(245, 158, 11, 0.35),
+    0 0 100px rgba(234, 179, 8, 0.2),
+    inset 0 0 30px rgba(245, 158, 11, 0.2);
+}
+
+/* Floating Ring Animation */
+@keyframes floatRing {
+  0%, 100% {
+    transform: translateY(0px) rotateX(15deg) rotateY(0deg);
+  }
+  50% {
+    transform: translateY(-12px) rotateX(12deg) rotateY(3deg);
+  }
+}
+
+.animate-float-ring {
+  animation: floatRing 6s ease-in-out infinite;
+}
+
+/* Shimmer Button */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 2.5s infinite;
+}
+
+/* Shake Animation for Invalid Auth */
+@keyframes shakeError {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+
+.animate-shake {
+  animation: shakeError 0.5s cubic-bezier(.36,.07,.19,.97) both;
+}
