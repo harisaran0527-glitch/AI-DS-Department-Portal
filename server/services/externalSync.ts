@@ -25,8 +25,8 @@ export async function syncLeetCodeProfile(studentId: string, inputHandleOrEmail:
 
   // Handle email-based input lookup
   if (rawInput.includes('@')) {
-    const full360 = db.getStudent360(studentId);
-    const connAccs = db.getConnectedAccounts(studentId);
+    const full360 = await db.getStudent360(studentId);
+    const connAccs = await db.getConnectedAccounts(studentId);
     const lcConn = connAccs.find((a: any) => a.provider === 'LeetCode');
     const existingHandle = lcConn?.provider_username || full360?.leetcode?.username;
 
@@ -98,135 +98,68 @@ export async function syncLeetCodeProfile(studentId: string, inputHandleOrEmail:
     clearTimeout(timeoutId);
 
     if (gqlRes && gqlRes.ok) {
-      const gqlData = await gqlRes.json();
-      if (gqlData?.errors && gqlData.errors.some((e: any) => e.message?.toLowerCase().includes('does not exist'))) {
-        throw new Error(`LeetCode profile handle "${cleanUsername}" was not found on LeetCode. Please verify the username.`);
-      }
-
-      if (gqlData?.data?.matchedUser) {
-        const mu = gqlData.data.matchedUser;
-        const acList = mu.submitStats?.acSubmissionNum || [];
-        const totalList = mu.submitStats?.totalSubmissionNum || [];
-
-        const allAc = acList.find((x: any) => x.difficulty === 'All');
-        const easyAc = acList.find((x: any) => x.difficulty === 'Easy');
-        const medAc = acList.find((x: any) => x.difficulty === 'Medium');
-        const hardAc = acList.find((x: any) => x.difficulty === 'Hard');
-        const allTotal = totalList.find((x: any) => x.difficulty === 'All');
-
-        easySolved = easyAc?.count || 0;
-        mediumSolved = medAc?.count || 0;
-        hardSolved = hardAc?.count || 0;
-        totalSolved = allAc?.count !== undefined ? allAc.count : (easySolved + mediumSolved + hardSolved);
-        totalAttempted = allTotal?.submissions || 0;
-        const acSubmissions = allAc?.submissions || 0;
-        acceptanceRate = totalAttempted > 0 ? parseFloat(((acSubmissions / totalAttempted) * 100).toFixed(1)) : 0;
-
-        ranking = mu.profile?.ranking || 0;
-        contestRating = gqlData.data.userContestRanking?.rating ? Math.round(gqlData.data.userContestRanking.rating) : 1200;
+      const data = await gqlRes.json();
+      if (data?.data?.matchedUser) {
         verified = true;
+        const matched = data.data.matchedUser;
+        const acStats = matched.submitStats?.acSubmissionNum || [];
+        const totalStats = matched.submitStats?.totalSubmissionNum || [];
+
+        for (const item of acStats) {
+          if (item.difficulty === 'All') totalSolved = item.count || 0;
+          if (item.difficulty === 'Easy') easySolved = item.count || 0;
+          if (item.difficulty === 'Medium') mediumSolved = item.count || 0;
+          if (item.difficulty === 'Hard') hardSolved = item.count || 0;
+        }
+
+        for (const item of totalStats) {
+          if (item.difficulty === 'All') totalAttempted = item.submissions || 0;
+        }
+
+        if (matched.profile?.ranking) {
+          ranking = matched.profile.ranking;
+        }
+
+        if (data.data.userContestRanking?.rating) {
+          contestRating = Math.round(data.data.userContestRanking.rating);
+        }
+
+        if (totalAttempted > 0 && totalSolved > 0) {
+          acceptanceRate = parseFloat(((totalSolved / totalAttempted) * 100).toFixed(1));
+        }
       }
     }
   } catch (err: any) {
-    if (err.message && err.message.includes('not found')) {
-      throw err;
-    }
-    fetchError = err.message || '';
+    fetchError = err.message;
   }
 
-  // 2. Fallback 1: Public Vercel API endpoint
+  // 2. Secondary Fallback: Alfa LeetCode Public API
   if (!verified) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const timeoutId = setTimeout(() => controller.abort(), 7000);
 
-      const response = await fetch(`https://leetcode-api.vercel.app/api/profile/${encodeURIComponent(cleanUsername)}`, {
+      const alfaRes = await fetch(`https://alfa-leetcode-api.onrender.com/userProfile/${encodeURIComponent(cleanUsername)}`, {
         signal: controller.signal
       }).catch(() => null);
 
       clearTimeout(timeoutId);
 
-      if (response) {
-        if (response.status === 404) {
-          throw new Error(`LeetCode profile handle "${cleanUsername}" was not found on LeetCode.`);
-        }
-        if (response.ok) {
-          const data = await response.json();
-          const mu = data?.data?.matchedUser;
-          if (mu) {
-            const acList = mu.submitStats?.acSubmissionNum || [];
-            const totalList = mu.submitStats?.totalSubmissionNum || [];
-            const allAc = acList.find((x: any) => x.difficulty === 'All');
-            const easyAc = acList.find((x: any) => x.difficulty === 'Easy');
-            const medAc = acList.find((x: any) => x.difficulty === 'Medium');
-            const hardAc = acList.find((x: any) => x.difficulty === 'Hard');
-            const allTotal = totalList.find((x: any) => x.difficulty === 'All');
-
-            easySolved = easyAc?.count || 0;
-            mediumSolved = medAc?.count || 0;
-            hardSolved = hardAc?.count || 0;
-            totalSolved = allAc?.count !== undefined ? allAc.count : (easySolved + mediumSolved + hardSolved);
-            totalAttempted = allTotal?.submissions || 0;
-            const acSubmissions = allAc?.submissions || 0;
-            acceptanceRate = totalAttempted > 0 ? parseFloat(((acSubmissions / totalAttempted) * 100).toFixed(1)) : 0;
-            ranking = mu.profile?.ranking || 0;
-            verified = true;
-          } else if (data && (data.totalSolved !== undefined || data.easySolved !== undefined)) {
-            verified = true;
-            easySolved = parseInt(data.easySolved) || 0;
-            mediumSolved = parseInt(data.mediumSolved) || 0;
-            hardSolved = parseInt(data.hardSolved) || 0;
-            totalSolved = parseInt(data.totalSolved) || (easySolved + mediumSolved + hardSolved);
-            contestRating = Math.round(parseFloat(data.contestRating || data.rating || 1200));
-            ranking = parseInt(data.ranking) || 0;
-            totalAttempted = parseInt(data.totalSubmissions || data.totalAttempted || 0);
-            acceptanceRate = parseFloat(data.acceptanceRate || 0);
-          } else if (data && data.errors) {
-            throw new Error(`LeetCode handle "${cleanUsername}" verification failed: User profile not found.`);
-          }
-        }
-      }
-    } catch (err: any) {
-      if (err.message && (err.message.includes('not found') || err.message.includes('verification failed'))) {
-        throw err;
-      }
-    }
-  }
-
-  // 3. Fallback 2: Alfa LeetCode API
-  if (!verified) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
-
-      const response = await fetch(`https://alfa-leetcode-api.onrender.com/userProfile/${encodeURIComponent(cleanUsername)}`, {
-        signal: controller.signal
-      }).catch(() => null);
-
-      clearTimeout(timeoutId);
-
-      if (response && response.ok) {
-        const data = await response.json();
-        if (data && (data.totalSolved !== undefined || data.easySolved !== undefined)) {
+      if (alfaRes && alfaRes.ok) {
+        const alfaData = await alfaRes.json();
+        if (alfaData && (alfaData.totalSolved !== undefined || alfaData.easySolved !== undefined)) {
           verified = true;
-          easySolved = parseInt(data.easySolved) || 0;
-          mediumSolved = parseInt(data.mediumSolved) || 0;
-          hardSolved = parseInt(data.hardSolved) || 0;
-          totalSolved = parseInt(data.totalSolved) || (easySolved + mediumSolved + hardSolved);
-          contestRating = Math.round(parseFloat(data.contestRating || 1200));
-          ranking = parseInt(data.ranking) || 0;
-          if (data.totalSubmissions && Array.isArray(data.totalSubmissions)) {
-            const allSub = data.totalSubmissions.find((x: any) => x.difficulty === 'All');
-            if (allSub) {
-              totalAttempted = allSub.submissions || 0;
-              const acSub = data.matchedUserStats?.acSubmissionNum?.find((x: any) => x.difficulty === 'All')?.submissions || totalSolved;
-              acceptanceRate = totalAttempted > 0 ? parseFloat(((acSub / totalAttempted) * 100).toFixed(1)) : 0;
-            }
-          }
+          easySolved = alfaData.easySolved || 0;
+          mediumSolved = alfaData.mediumSolved || 0;
+          hardSolved = alfaData.hardSolved || 0;
+          totalSolved = alfaData.totalSolved || (easySolved + mediumSolved + hardSolved);
+          ranking = alfaData.ranking || 0;
+          contestRating = alfaData.contestRating || 1200;
+          acceptanceRate = alfaData.acceptanceRate || 0;
         }
       }
     } catch (_err) {
-      // ignore fallback error
+      // Fallback silently if third party API is unreachable
     }
   }
 
@@ -237,7 +170,7 @@ export async function syncLeetCodeProfile(studentId: string, inputHandleOrEmail:
   const now = new Date().toISOString();
 
   // Save Connection Status
-  db.upsertConnectedAccount(studentId, 'LeetCode', cleanUsername, 'Connected', 'VERIFIED', {
+  await db.upsertConnectedAccount(studentId, 'LeetCode', cleanUsername, 'Connected', 'VERIFIED', {
     easySolved,
     mediumSolved,
     hardSolved,
@@ -250,23 +183,23 @@ export async function syncLeetCodeProfile(studentId: string, inputHandleOrEmail:
   });
 
   // Store Individual External Metrics
-  db.upsertExternalMetric(studentId, 'LeetCode', cleanUsername, 'totalSolved', totalSolved, 'VERIFIED');
-  db.upsertExternalMetric(studentId, 'LeetCode', cleanUsername, 'easySolved', easySolved, 'VERIFIED');
-  db.upsertExternalMetric(studentId, 'LeetCode', cleanUsername, 'mediumSolved', mediumSolved, 'VERIFIED');
-  db.upsertExternalMetric(studentId, 'LeetCode', cleanUsername, 'hardSolved', hardSolved, 'VERIFIED');
-  db.upsertExternalMetric(studentId, 'LeetCode', cleanUsername, 'totalAttempted', totalAttempted, 'VERIFIED');
-  db.upsertExternalMetric(studentId, 'LeetCode', cleanUsername, 'acceptanceRate', acceptanceRate, 'VERIFIED');
-  db.upsertExternalMetric(studentId, 'LeetCode', cleanUsername, 'contestRating', contestRating, 'VERIFIED');
-  db.upsertExternalMetric(studentId, 'LeetCode', cleanUsername, 'ranking', ranking, 'VERIFIED');
+  await db.upsertExternalMetric(studentId, 'LeetCode', cleanUsername, 'totalSolved', totalSolved, 'VERIFIED');
+  await db.upsertExternalMetric(studentId, 'LeetCode', cleanUsername, 'easySolved', easySolved, 'VERIFIED');
+  await db.upsertExternalMetric(studentId, 'LeetCode', cleanUsername, 'mediumSolved', mediumSolved, 'VERIFIED');
+  await db.upsertExternalMetric(studentId, 'LeetCode', cleanUsername, 'hardSolved', hardSolved, 'VERIFIED');
+  await db.upsertExternalMetric(studentId, 'LeetCode', cleanUsername, 'totalAttempted', totalAttempted, 'VERIFIED');
+  await db.upsertExternalMetric(studentId, 'LeetCode', cleanUsername, 'acceptanceRate', acceptanceRate, 'VERIFIED');
+  await db.upsertExternalMetric(studentId, 'LeetCode', cleanUsername, 'contestRating', contestRating, 'VERIFIED');
+  await db.upsertExternalMetric(studentId, 'LeetCode', cleanUsername, 'ranking', ranking, 'VERIFIED');
 
   // Update leetcode_stats table with explicit totalSolved
-  db.updateLeetCode(studentId, cleanUsername, easySolved, mediumSolved, hardSolved, contestRating, totalAttempted, acceptanceRate, totalSolved);
+  await db.updateLeetCode(studentId, cleanUsername, easySolved, mediumSolved, hardSolved, contestRating, totalAttempted, acceptanceRate, totalSolved);
 
   // Recalculate student composite score & rank
-  const student = db.getStudentById(studentId);
+  const student = await db.getStudentById(studentId);
   if (student) {
-    const full360 = db.getStudent360(studentId)!;
-    const scoringConfig = db.getScoringConfig();
+    const full360 = (await db.getStudent360(studentId))!;
+    const scoringConfig = await db.getScoringConfig();
     const categoryScores = calculateCategoryScores(
       full360.student as any,
       full360.academics,
@@ -280,11 +213,12 @@ export async function syncLeetCodeProfile(studentId: string, inputHandleOrEmail:
     );
     const newOverallScore = computeOverallScore(categoryScores, scoringConfig) || 0;
 
-    const sectionStudents = db.getStudents(student.year, student.section);
-    sectionStudents.forEach((s, idx) => {
+    const sectionStudents = await db.getStudents(student.year, student.section);
+    for (let idx = 0; idx < sectionStudents.length; idx++) {
+      const s = sectionStudents[idx];
       const sScore = s.id === studentId ? newOverallScore : (s.overall_score || 0);
-      db.updateStudentScoreAndRank(s.id, sScore, idx + 1);
-    });
+      await db.updateStudentScoreAndRank(s.id, sScore, idx + 1);
+    }
   }
 
   return {
@@ -323,7 +257,7 @@ export interface NPTELSyncResult {
 }
 
 export async function syncNPTELProfile(studentId: string, emailOrInput?: string): Promise<NPTELSyncResult> {
-  const student = db.getStudentById(studentId);
+  const student = await db.getStudentById(studentId);
   if (!student) {
     throw new Error('Student record not found.');
   }
@@ -331,7 +265,7 @@ export async function syncNPTELProfile(studentId: string, emailOrInput?: string)
   // Derive verified NPTEL student identity
   let connectedEmail = (emailOrInput || '').trim().toLowerCase();
   if (!connectedEmail) {
-    const connAccs = db.getConnectedAccounts(studentId);
+    const connAccs = await db.getConnectedAccounts(studentId);
     const nptelConn = connAccs.find((a: any) => a.purpose === 'NPTEL' || a.provider === 'GOOGLE');
     connectedEmail = (nptelConn?.connected_email || student.email || student.personalEmail || '').trim().toLowerCase();
   }
@@ -347,7 +281,7 @@ export async function syncNPTELProfile(studentId: string, emailOrInput?: string)
   const now = new Date().toISOString();
 
   // Save/Update Google OAuth NPTEL Connected Account
-  db.upsertConnectedAccount(studentId, 'GOOGLE', connectedEmail, 'Connected', 'VERIFIED', {
+  await db.upsertConnectedAccount(studentId, 'GOOGLE', connectedEmail, 'Connected', 'VERIFIED', {
     purpose: 'NPTEL',
     emailType: accountType === 'college' ? 'COLLEGE' : 'PERSONAL',
     connectedEmail,
@@ -355,15 +289,15 @@ export async function syncNPTELProfile(studentId: string, emailOrInput?: string)
   });
 
   // Retrieve actual persisted NPTEL courses, certificates, and proof documents from database
-  const full360 = db.getStudent360(studentId);
+  const full360 = await db.getStudent360(studentId);
   let courses = full360?.nptel || [];
-  const nptelProofs = db.getNptelProofs(studentId);
+  const nptelProofs = await db.getNptelProofs(studentId);
   const nptelCerts = (full360?.certificates || []).filter((c: any) => (c.platform || '').toUpperCase() === 'NPTEL' || (c.category || '').toUpperCase() === 'NPTEL');
 
   // Touch and update existing verified courses with connectedEmail and last_verified timestamp
   if (courses.length > 0) {
     for (const c of courses) {
-      db.upsertNPTELRecord(studentId, {
+      await db.upsertNPTELRecord(studentId, {
         courseName: c.courseName,
         durationWeeks: c.durationWeeks,
         weeksCompleted: c.weeksCompleted,
@@ -381,14 +315,14 @@ export async function syncNPTELProfile(studentId: string, emailOrInput?: string)
   const avgFinalScore = courses.length > 0 ? Math.round(courses.reduce((acc, c) => acc + (c.finalScore || 0), 0) / courses.length) : 0;
   const eliteCount = courses.filter(c => c.status === 'ELITE').length;
 
-  db.upsertExternalMetric(studentId, 'NPTEL', connectedEmail, 'coursesCount', courses.length.toString(), 'VERIFIED');
-  db.upsertExternalMetric(studentId, 'NPTEL', connectedEmail, 'proofsCount', nptelProofs.length.toString(), 'VERIFIED');
-  db.upsertExternalMetric(studentId, 'NPTEL', connectedEmail, 'certificatesCount', nptelCerts.length.toString(), 'VERIFIED');
-  db.upsertExternalMetric(studentId, 'NPTEL', connectedEmail, 'avgFinalScore', avgFinalScore.toString(), 'VERIFIED');
-  db.upsertExternalMetric(studentId, 'NPTEL', connectedEmail, 'eliteCount', eliteCount.toString(), 'VERIFIED');
+  await db.upsertExternalMetric(studentId, 'NPTEL', connectedEmail, 'coursesCount', courses.length.toString(), 'VERIFIED');
+  await db.upsertExternalMetric(studentId, 'NPTEL', connectedEmail, 'proofsCount', nptelProofs.length.toString(), 'VERIFIED');
+  await db.upsertExternalMetric(studentId, 'NPTEL', connectedEmail, 'certificatesCount', nptelCerts.length.toString(), 'VERIFIED');
+  await db.upsertExternalMetric(studentId, 'NPTEL', connectedEmail, 'avgFinalScore', avgFinalScore.toString(), 'VERIFIED');
+  await db.upsertExternalMetric(studentId, 'NPTEL', connectedEmail, 'eliteCount', eliteCount.toString(), 'VERIFIED');
 
   // Recalculate student composite score
-  const scoringConfig = db.getScoringConfig();
+  const scoringConfig = await db.getScoringConfig();
   const categoryScores = calculateCategoryScores(
     full360!.student as any,
     full360!.academics,
@@ -402,11 +336,12 @@ export async function syncNPTELProfile(studentId: string, emailOrInput?: string)
   );
   const newOverallScore = computeOverallScore(categoryScores, scoringConfig) || 0;
 
-  const sectionStudents = db.getStudents(student.year, student.section);
-  sectionStudents.forEach((s, idx) => {
+  const sectionStudents = await db.getStudents(student.year, student.section);
+  for (let idx = 0; idx < sectionStudents.length; idx++) {
+    const s = sectionStudents[idx];
     const sScore = s.id === studentId ? newOverallScore : (s.overall_score || 0);
-    db.updateStudentScoreAndRank(s.id, sScore, idx + 1);
-  });
+    await db.updateStudentScoreAndRank(s.id, sScore, idx + 1);
+  }
 
   const verificationStatus = courses.length > 0 ? 'VERIFIED' : 'OAUTH_CONNECTED_NO_COURSES';
 

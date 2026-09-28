@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API } from '../../services/api';
 import { User, Lock, Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { ForgotPasswordModal } from '../common/ForgotPasswordModal';
 
 export const StudentVideoLogin: React.FC = () => {
   const navigate = useNavigate();
@@ -10,6 +11,7 @@ export const StudentVideoLogin: React.FC = () => {
   const [isVideoEnded, setIsVideoEnded] = useState(false);
   const [isPlayingExit, setIsPlayingExit] = useState(false);
   const [hasVideoError, setHasVideoError] = useState(false);
+  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -217,7 +219,11 @@ export const StudentVideoLogin: React.FC = () => {
                   </button>
 
                   {/* Forgot Password Link */}
-                  <button type="button" className="text-[10px] text-cyan-300/70 hover:text-cyan-200 transition-colors font-mono">
+                  <button
+                    type="button"
+                    onClick={() => setIsForgotPasswordOpen(true)}
+                    className="text-[10px] text-cyan-300/70 hover:text-cyan-200 transition-colors font-mono cursor-pointer"
+                  >
                     Forgot Password?
                   </button>
                 </form>
@@ -226,6 +232,13 @@ export const StudentVideoLogin: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Forgot Password Guidance Modal */}
+      <ForgotPasswordModal
+        isOpen={isForgotPasswordOpen}
+        portalRole="STUDENT"
+        onClose={() => setIsForgotPasswordOpen(false)}
+      />
     </div>
   );
 };

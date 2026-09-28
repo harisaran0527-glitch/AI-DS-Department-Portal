@@ -8,7 +8,7 @@ const router = Router();
 router.use(authenticateToken);
 
 // GET /api/subjects - List subjects with optional filters
-router.get('/', (req: AuthRequest, res: Response) => {
+router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const { year, semester, section, search } = req.query;
 
@@ -32,7 +32,7 @@ router.get('/', (req: AuthRequest, res: Response) => {
       filters.search = search;
     }
 
-    const subjects = db.getSubjects(filters);
+    const subjects = await db.getSubjects(filters);
     return res.json({ subjects });
   } catch (error: any) {
     console.error('Error fetching subjects:', error);
@@ -41,7 +41,7 @@ router.get('/', (req: AuthRequest, res: Response) => {
 });
 
 // POST /api/subjects - Create a new subject
-router.post('/', requireRole('FACULTY', 'HOD', 'ADMIN'), (req: AuthRequest, res: Response) => {
+router.post('/', requireRole('FACULTY', 'HOD', 'ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
     const {
       subject_code,
@@ -64,7 +64,7 @@ router.post('/', requireRole('FACULTY', 'HOD', 'ADMIN'), (req: AuthRequest, res:
 
     const createdByUserId = req.user?.id || 'system';
 
-    const newSubject = db.addSubject({
+    const newSubject = await db.addSubject({
       subject_code: subject_code.toString().trim(),
       subject_name: subject_name.toString().trim(),
       department: department?.toString().trim() || 'AI & Data Science',
@@ -92,7 +92,7 @@ router.post('/', requireRole('FACULTY', 'HOD', 'ADMIN'), (req: AuthRequest, res:
 });
 
 // PUT /api/subjects/:id - Update an existing subject
-router.put('/:id', requireRole('FACULTY', 'HOD', 'ADMIN'), (req: AuthRequest, res: Response) => {
+router.put('/:id', requireRole('FACULTY', 'HOD', 'ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const {
@@ -108,12 +108,12 @@ router.put('/:id', requireRole('FACULTY', 'HOD', 'ADMIN'), (req: AuthRequest, re
       faculty_handler
     } = req.body;
 
-    const existing = db.getSubjectById(id);
+    const existing = await db.getSubjectById(id);
     if (!existing) {
       return res.status(404).json({ error: 'Subject not found.' });
     }
 
-    const updated = db.updateSubject(id, {
+    const updated = await db.updateSubject(id, {
       subject_code: subject_code ? subject_code.toString().trim() : undefined,
       subject_name: subject_name ? subject_name.toString().trim() : undefined,
       department: department ? department.toString().trim() : undefined,
@@ -140,15 +140,15 @@ router.put('/:id', requireRole('FACULTY', 'HOD', 'ADMIN'), (req: AuthRequest, re
 });
 
 // DELETE /api/subjects/:id - Delete a subject
-router.delete('/:id', requireRole('FACULTY', 'HOD', 'ADMIN'), (req: AuthRequest, res: Response) => {
+router.delete('/:id', requireRole('FACULTY', 'HOD', 'ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const existing = db.getSubjectById(id);
+    const existing = await db.getSubjectById(id);
     if (!existing) {
       return res.status(404).json({ error: 'Subject not found.' });
     }
 
-    const success = db.deleteSubject(id);
+    const success = await db.deleteSubject(id);
     if (!success) {
       return res.status(500).json({ error: 'Failed to delete subject.' });
     }

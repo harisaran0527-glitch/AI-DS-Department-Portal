@@ -322,12 +322,12 @@ CREATE TABLE IF NOT EXISTS connected_accounts (
   provider TEXT NOT NULL DEFAULT 'GOOGLE',
   purpose TEXT NOT NULL DEFAULT 'NPTEL',
   email_type TEXT NOT NULL DEFAULT 'COLLEGE',
-  connected_email TEXT NOT NULL,
+  connected_email TEXT,
   provider_username TEXT NOT NULL,
   provider_account_id TEXT,
   connection_status TEXT NOT NULL DEFAULT 'CONNECTED',
   verification_status TEXT NOT NULL DEFAULT 'VERIFIED',
-  connected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  connected_at TIMESTAMPTZ DEFAULT NOW(),
   last_synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   raw_payload_json JSONB
 );
@@ -462,8 +462,26 @@ CREATE INDEX IF NOT EXISTS idx_attachments_student ON attachments(student_id);
 CREATE INDEX IF NOT EXISTS idx_attachments_record ON attachments(record_type, record_id);
 CREATE INDEX IF NOT EXISTS idx_team_heads_fac ON team_heads(faculty_id);
 CREATE INDEX IF NOT EXISTS idx_team_head_members_th ON team_head_members(team_head_id);
-CREATE INDEX IF NOT EXISTS idx_skilledge_sync_history_stu ON skilledge_sync_history(student_id, synced_at DESC);
 CREATE INDEX IF NOT EXISTS idx_subjects_code_ctx ON subjects(subject_code, year, semester, section);
+
+-- 30. NPTEL PROOFS TABLE
+CREATE TABLE IF NOT EXISTS nptel_proofs (
+  id TEXT PRIMARY KEY,
+  student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  proof_file_path TEXT NOT NULL,
+  uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 31. LEETCODE PROOFS TABLE
+CREATE TABLE IF NOT EXISTS leetcode_proofs (
+  id TEXT PRIMARY KEY,
+  student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  proof_file_path TEXT NOT NULL,
+  uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_nptel_proofs_stu ON nptel_proofs(student_id);
+CREATE INDEX IF NOT EXISTS idx_leetcode_proofs_stu ON leetcode_proofs(student_id);
 
 -- ====================================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES

@@ -1,8 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
 import { db } from '../db';
 
-export const JWT_SECRET = process.env.JWT_SECRET || 'aids_dept_secure_jwt_secret_v1_99420';
+dotenv.config();
+
+if (!process.env.JWT_SECRET) {
+  console.error('FATAL ERROR: JWT_SECRET is not configured in process.env! Shutting down server for security.');
+  process.exit(1);
+}
+
+export const JWT_SECRET = process.env.JWT_SECRET;
 
 export interface AuthRequest extends Request {
   user?: {
@@ -48,7 +56,7 @@ export function requireRole(...roles: string[]) {
 }
 
 // Server-Side Authorization: Faculty Workspace & Staff-Wise Data Isolation Check
-export function verifyFacultySectionAccess(req: AuthRequest, res: Response, next: NextFunction) {
+export async function verifyFacultySectionAccess(req: AuthRequest, res: Response, next: NextFunction) {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
   // HOD & Admin have elevated department-wide permissions
@@ -72,7 +80,7 @@ export function verifyFacultySectionAccess(req: AuthRequest, res: Response, next
     return res.status(400).json({ error: 'Bad Request: Target Student ID missing.' });
   }
 
-  const targetStudent = db.getStudentById(targetStudentId);
+  const targetStudent = await db.getStudentById(targetStudentId);
   if (!targetStudent) {
     return res.status(404).json({ error: 'Student record not found.' });
   }
@@ -92,7 +100,7 @@ export function verifyFacultySectionAccess(req: AuthRequest, res: Response, next
   }
 
   // Derived from relational faculty_assignments
-  const facultyAssignment = db.getFacultyAssignment(req.user.id);
+  const facultyAssignment = await db.getFacultyAssignment(req.user.id);
   const assignedYear = facultyAssignment ? facultyAssignment.year : req.user.assignedYear;
   const assignedSection = facultyAssignment ? facultyAssignment.section : req.user.assignedSection;
 

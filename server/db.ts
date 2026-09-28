@@ -3,22 +3,33 @@ import path from 'path';
 import fs from 'fs';
 import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
+import { isPostgresActive, queryOne, queryAll, executeRun, executeTransaction, sqliteDb } from './postgresAdapter';
 
 dotenv.config();
 
-const DATA_DIR = path.resolve(process.cwd(), 'server', 'data');
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+export function safeParseJson<T = any>(val: any, fallback: T): T {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === 'object') return val as T;
+  if (typeof val === 'string') {
+    try {
+      return JSON.parse(val) as T;
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
 }
 
-const DB_PATH = process.env.DATABASE_PATH
-  ? path.resolve(process.cwd(), process.env.DATABASE_PATH)
-  : path.join(DATA_DIR, 'aids_system.db');
-const sqlite = new Database(DB_PATH);
-sqlite.pragma('journal_mode = WAL');
-sqlite.pragma('foreign_keys = ON');
+export function safeStringifyJson(val: any): string {
+  if (val === null || val === undefined) return '[]';
+  if (typeof val === 'string') return val;
+  return JSON.stringify(val);
+}
+
+const sqlite = sqliteDb;
 
 function initSchema() {
+  if (isPostgresActive() || !sqlite) return;
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -847,77 +858,67 @@ export class SQLiteDB {
   public static async initSystemAccounts(): Promise<void> {
     const adminEmail = (process.env.ADMIN_EMAIL || 'departmentai&ds@gmail.com').trim().toLowerCase();
     const adminInitialPassword = process.env.ADMIN_INITIAL_PASSWORD || 'aids@avs';
-    const hash = await bcrypt.hash(adminInitialPassword, 10);
 
-    const existingAdmin = sqlite.prepare("SELECT id, email, password_hash FROM users WHERE role = 'ADMIN'").get() as any;
+    const existingAdmin = await queryOne("SELECT id, email, password_hash FROM users WHERE role = 'ADMIN' OR id = 'admin-sys' OR email = ?", [adminEmail]);
 
     if (!existingAdmin) {
-      sqlite.prepare(`
+      const hash = await bcrypt.hash(adminInitialPassword, 10);
+      await executeRun(`
         INSERT INTO users (id, email, identifier, name, role, password_hash, is_active, created_at)
         VALUES (?, ?, ?, ?, ?, ?, 1, ?)
-      `).run('admin-sys', adminEmail, 'admin', 'System Administrator', 'ADMIN', hash, new Date().toISOString());
+      `, ['admin-sys', adminEmail, 'admin', 'System Administrator', 'ADMIN', hash, new Date().toISOString()]);
       console.log(`🔒 Secure Admin Bootstrap: Initial ADMIN account created for ${adminEmail}.`);
     } else {
-      const isPassMatch = await bcrypt.compare(adminInitialPassword, existingAdmin.password_hash);
-      if (existingAdmin.email !== adminEmail || !isPassMatch) {
-        sqlite.prepare(`
-          UPDATE users SET email = ?, identifier = 'admin', password_hash = ? WHERE id = ?
-        `).run(adminEmail, hash, existingAdmin.id);
-        console.log(`🔒 Secure Admin Bootstrap: Updated existing ADMIN account credentials to ${adminEmail}.`);
+      console.log(`🔒 Admin Account Verified: Existing ADMIN account (${existingAdmin.email}) retained without modification.`);
+    }
+
+    // BOOTSTRAP DEMO ACCOUNTS ONLY IF EXPLICITLY ENABLED
+    if (process.env.INITIALIZE_DEMO_ACCOUNTS === 'true') {
+      // BOOTSTRAP DEFAULT HOD ACCOUNT IF ABSENT
+      const existingHOD = await queryOne("SELECT id FROM users WHERE role = 'HOD' OR id = 'hod-sys' OR identifier = 'hod' OR email = 'hod.aids@avsenggcollege.ac.in'");
+      if (!existingHOD) {
+        const hodHash = await bcrypt.hash('hod@123', 10);
+        await executeRun(`
+          INSERT INTO users (id, email, identifier, name, role, password_hash, is_active, created_at)
+          VALUES (?, ?, ?, ?, 'HOD', ?, 1, ?)
+        `, ['hod-sys', 'hod.aids@avsenggcollege.ac.in', 'hod', 'Head of Department', hodHash, new Date().toISOString()]);
+        console.log('🔒 Default HOD account initialized (hod.aids@avsenggcollege.ac.in / hod).');
       }
-    }
 
-    // BOOTSTRAP DEFAULT HOD ACCOUNT IF ABSENT
-    const existingHOD = sqlite.prepare("SELECT id FROM users WHERE role = 'HOD' OR id = 'hod-sys' OR identifier = 'hod' OR email = 'hod.aids@avsenggcollege.ac.in'").get() as any;
-    const hodHash = await bcrypt.hash('hod@123', 10);
-    if (!existingHOD) {
-      sqlite.prepare(`
-        INSERT INTO users (id, email, identifier, name, role, password_hash, is_active, created_at)
-        VALUES (?, ?, ?, ?, 'HOD', ?, 1, ?)
-      `).run('hod-sys', 'hod.aids@avsenggcollege.ac.in', 'hod', 'Head of Department', hodHash, new Date().toISOString());
-      console.log('🔒 Default HOD account initialized (hod.aids@avsenggcollege.ac.in / hod).');
-    } else {
-      sqlite.prepare("UPDATE users SET password_hash = ?, is_active = 1 WHERE id = ?").run(hodHash, existingHOD.id);
-    }
-
-    // BOOTSTRAP DEFAULT FACULTY ACCOUNT IF ABSENT
-    const existingFaculty = sqlite.prepare("SELECT id, password_hash FROM users WHERE id = 'fac-sys' OR email = 'faculty.aids@avsenggcollege.ac.in' OR identifier = 'faculty'").get() as any;
-    const facHash = await bcrypt.hash('faculty@123', 10);
-    if (!existingFaculty) {
-      sqlite.prepare(`
-        INSERT INTO users (id, email, identifier, name, role, password_hash, year, section, faculty_role, is_active, created_at)
-        VALUES (?, ?, ?, ?, 'FACULTY', ?, '2nd Year', 'A', 'Class Coordinator', 1, ?)
-      `).run('fac-sys', 'faculty.aids@avsenggcollege.ac.in', 'faculty', 'Assigned Faculty Member', facHash, new Date().toISOString());
-      console.log('🔒 Default FACULTY account initialized (faculty.aids@avsenggcollege.ac.in / faculty).');
-    } else {
-      sqlite.prepare("UPDATE users SET password_hash = ?, is_active = 1 WHERE id = ?").run(facHash, existingFaculty.id);
-    }
-
-    // BOOTSTRAP DEFAULT STUDENT ACCOUNT IF ABSENT
-    const existingStudent = sqlite.prepare("SELECT id, password_hash FROM users WHERE id = 'stu-sys' OR email = 'student.aids@avsenggcollege.ac.in' OR identifier = 'student'").get() as any;
-    const stuHash = await bcrypt.hash('student@123', 10);
-    if (!existingStudent) {
-      sqlite.prepare(`
-        INSERT INTO users (id, email, identifier, name, role, password_hash, year, section, is_active, created_at)
-        VALUES (?, ?, ?, ?, 'STUDENT', ?, '2nd Year', 'A', 1, ?)
-      `).run('stu-sys', 'student.aids@avsenggcollege.ac.in', 'student', 'Sample AI & DS Student', stuHash, new Date().toISOString());
-
-      // Ensure corresponding student profile in students table
-      const stuProfile = sqlite.prepare("SELECT id FROM students WHERE register_no = '730123243001' OR email = 'student.aids@avsenggcollege.ac.in'").get() as any;
-      if (!stuProfile) {
-        sqlite.prepare(`
-          INSERT INTO students (id, register_no, name, email, department, year, section, batch, class_coordinator_name, cgpa, overall_score, current_rank, is_representative, is_elite_student)
-          VALUES (?, '730123243001', 'Sample AI & DS Student', 'student.aids@avsenggcollege.ac.in', 'AI & DS', '2nd Year', 'A', '2023-2027', 'Assigned Faculty Member', 8.5, 85.0, 1, 0, 1)
-        `).run('stu-sys');
+      // BOOTSTRAP DEFAULT FACULTY ACCOUNT IF ABSENT
+      const existingFaculty = await queryOne("SELECT id, password_hash FROM users WHERE id = 'fac-sys' OR email = 'faculty.aids@avsenggcollege.ac.in' OR identifier = 'faculty'");
+      if (!existingFaculty) {
+        const facHash = await bcrypt.hash('faculty@123', 10);
+        await executeRun(`
+          INSERT INTO users (id, email, identifier, name, role, password_hash, year, section, faculty_role, is_active, created_at)
+          VALUES (?, ?, ?, ?, 'FACULTY', ?, '2nd Year', 'A', 'Class Coordinator', 1, ?)
+        `, ['fac-sys', 'faculty.aids@avsenggcollege.ac.in', 'faculty', 'Assigned Faculty Member', facHash, new Date().toISOString()]);
+        console.log('🔒 Default FACULTY account initialized (faculty.aids@avsenggcollege.ac.in / faculty).');
       }
-      console.log('🔒 Default STUDENT account initialized (student.aids@avsenggcollege.ac.in / student / 730123243001).');
-    } else {
-      sqlite.prepare("UPDATE users SET password_hash = ?, is_active = 1 WHERE id = ?").run(stuHash, existingStudent.id);
+
+      // BOOTSTRAP DEFAULT STUDENT ACCOUNT IF ABSENT
+      const existingStudent = await queryOne("SELECT id, password_hash FROM users WHERE id = 'stu-sys' OR email = 'student.aids@avsenggcollege.ac.in' OR identifier = 'student'");
+      if (!existingStudent) {
+        const stuHash = await bcrypt.hash('student@123', 10);
+        await executeRun(`
+          INSERT INTO users (id, email, identifier, name, role, password_hash, year, section, is_active, created_at)
+          VALUES (?, ?, ?, ?, 'STUDENT', ?, '2nd Year', 'A', 1, ?)
+        `, ['stu-sys', 'student.aids@avsenggcollege.ac.in', 'student', 'Sample AI & DS Student', stuHash, new Date().toISOString()]);
+
+        const stuProfile = await queryOne("SELECT id FROM students WHERE register_no = '730123243001' OR email = 'student.aids@avsenggcollege.ac.in'");
+        if (!stuProfile) {
+          await executeRun(`
+            INSERT INTO students (id, register_no, name, email, department, year, section, batch, class_coordinator_name, cgpa, overall_score, current_rank, is_representative, is_elite_student)
+            VALUES (?, '730123243001', 'Sample AI & DS Student', 'student.aids@avsenggcollege.ac.in', 'AI & DS', '2nd Year', 'A', '2023-2027', 'Assigned Faculty Member', 8.5, 85.0, 1, 0, 1)
+          `, ['stu-sys']);
+        }
+        console.log('🔒 Default STUDENT account initialized (student.aids@avsenggcollege.ac.in / student / 730123243001).');
+      }
     }
   }
 
   // USER CRUD
-  public findUserByIdentifier(identifier: string, role?: string): UserRecord | undefined {
+  public async findUserByIdentifier(identifier: string, role?: string): Promise<UserRecord | undefined> {
     const lowerId = identifier.trim().toLowerCase();
     let sql = 'SELECT * FROM users WHERE (LOWER(email) = ? OR LOWER(identifier) = ?)';
     const params: any[] = [lowerId, lowerId];
@@ -925,30 +926,30 @@ export class SQLiteDB {
       sql += ' AND UPPER(role) = ?';
       params.push(role.trim().toUpperCase());
     }
-    let user = sqlite.prepare(sql).get(...params) as UserRecord | undefined;
+    let user = (await queryOne<UserRecord>(sql, params)) || undefined;
 
     if (!user && (role?.toUpperCase() === 'STUDENT' || !role)) {
-      const student = sqlite.prepare('SELECT email FROM students WHERE LOWER(register_no) = ? OR LOWER(email) = ?').get(lowerId, lowerId) as any;
+      const student = await queryOne<{ email: string }>('SELECT email FROM students WHERE LOWER(register_no) = ? OR LOWER(email) = ?', [lowerId, lowerId]);
       if (student && student.email) {
-        user = sqlite.prepare('SELECT * FROM users WHERE (LOWER(email) = ? OR LOWER(identifier) = ?) AND UPPER(role) = \'STUDENT\'').get(student.email.toLowerCase(), student.email.toLowerCase()) as UserRecord | undefined;
+        user = (await queryOne<UserRecord>('SELECT * FROM users WHERE (LOWER(email) = ? OR LOWER(identifier) = ?) AND UPPER(role) = \'STUDENT\'', [student.email.toLowerCase(), student.email.toLowerCase()])) || undefined;
       }
     }
 
     return user;
   }
 
-  public getUserById(id: string): UserRecord | undefined {
-    return sqlite.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRecord | undefined;
+  public async getUserById(id: string): Promise<UserRecord | undefined> {
+    return (await queryOne<UserRecord>('SELECT * FROM users WHERE id = ?', [id])) || undefined;
   }
 
-  public getUsers(role?: string): UserRecord[] {
+  public async getUsers(role?: string): Promise<UserRecord[]> {
     if (role) {
-      return sqlite.prepare('SELECT * FROM users WHERE role = ? ORDER BY created_at DESC').all(role) as UserRecord[];
+      return await queryAll<UserRecord>('SELECT * FROM users WHERE role = ? ORDER BY created_at DESC', [role]);
     }
-    return sqlite.prepare('SELECT * FROM users ORDER BY created_at DESC').all() as UserRecord[];
+    return await queryAll<UserRecord>('SELECT * FROM users ORDER BY created_at DESC');
   }
 
-  public createUser(user: {
+  public async createUser(user: {
     id: string;
     email: string;
     identifier: string;
@@ -959,12 +960,11 @@ export class SQLiteDB {
     section?: string;
     facultyRole?: string;
     isActive?: boolean;
-  }): void {
-    const stmt = sqlite.prepare(`
+  }): Promise<void> {
+    await executeRun(`
       INSERT INTO users (id, email, identifier, name, role, password_hash, year, section, faculty_role, is_active, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    stmt.run(
+    `, [
       user.id,
       user.email,
       user.identifier,
@@ -976,53 +976,52 @@ export class SQLiteDB {
       user.facultyRole || null,
       user.isActive !== false ? 1 : 0,
       new Date().toISOString()
-    );
+    ]);
   }
 
-  public updateUserPassword(userId: string, newHash: string): void {
-    sqlite.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, userId);
+  public async updateUserPassword(userId: string, newHash: string): Promise<void> {
+    await executeRun('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, userId]);
   }
 
-  public updateHODNameEmail(userId: string, name: string, email: string): void {
-    sqlite.prepare('UPDATE users SET name = ?, email = ? WHERE id = ?').run(name, email, userId);
+  public async updateHODNameEmail(userId: string, name: string, email: string): Promise<void> {
+    await executeRun('UPDATE users SET name = ?, email = ? WHERE id = ?', [name, email, userId]);
   }
 
-  public updateUserStatus(userId: string, isActive: boolean): void {
-    sqlite.prepare('UPDATE users SET is_active = ? WHERE id = ?').run(isActive ? 1 : 0, userId);
-    sqlite.prepare('UPDATE faculty_assignments SET is_active = ? WHERE faculty_id = ?').run(isActive ? 1 : 0, userId);
+  public async updateUserStatus(userId: string, isActive: boolean): Promise<void> {
+    await executeRun('UPDATE users SET is_active = ? WHERE id = ?', [isActive ? 1 : 0, userId]);
+    await executeRun('UPDATE faculty_assignments SET is_active = ? WHERE faculty_id = ?', [isActive ? 1 : 0, userId]);
   }
 
-  public updateUserAssignment(userId: string, year: string, section: string, facultyRole: string): void {
-    sqlite.prepare('UPDATE users SET year = ?, section = ?, faculty_role = ? WHERE id = ?').run(year, section, facultyRole, userId);
+  public async updateUserAssignment(userId: string, year: string, section: string, facultyRole: string): Promise<void> {
+    await executeRun('UPDATE users SET year = ?, section = ?, faculty_role = ? WHERE id = ?', [year, section, facultyRole, userId]);
 
-    const existingAssign = sqlite.prepare('SELECT id FROM faculty_assignments WHERE faculty_id = ?').get(userId);
+    const existingAssign = await queryOne('SELECT id FROM faculty_assignments WHERE faculty_id = ?', [userId]);
     if (existingAssign) {
-      sqlite.prepare('UPDATE faculty_assignments SET year = ?, section = ?, role = ? WHERE faculty_id = ?').run(year, section, facultyRole, userId);
+      await executeRun('UPDATE faculty_assignments SET year = ?, section = ?, role = ? WHERE faculty_id = ?', [year, section, facultyRole, userId]);
     } else {
-      sqlite.prepare(`
+      await executeRun(`
         INSERT INTO faculty_assignments (id, faculty_id, department, year, section, role, is_active, created_at)
         VALUES (?, ?, 'AI & DS', ?, ?, ?, 1, ?)
-      `).run(`fa-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, userId, year, section, facultyRole, new Date().toISOString());
+      `, [`fa-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, userId, year, section, facultyRole, new Date().toISOString()]);
     }
   }
 
-  public getFacultyAssignment(facultyId: string): FacultyAssignmentRecord | undefined {
-    return sqlite.prepare('SELECT * FROM faculty_assignments WHERE faculty_id = ? AND is_active = 1').get(facultyId) as FacultyAssignmentRecord | undefined;
+  public async getFacultyAssignment(facultyId: string): Promise<FacultyAssignmentRecord | undefined> {
+    return (await queryOne<FacultyAssignmentRecord>('SELECT * FROM faculty_assignments WHERE faculty_id = ? AND is_active = 1', [facultyId])) || undefined;
   }
 
-  public assignStudentsToFaculty(facultyId: string, studentIds: string[]): void {
-    const stmt = sqlite.prepare(`
-      UPDATE students
-      SET created_by_faculty_id = ?, faculty_workspace_id = ?
-      WHERE id = ?
-    `);
+  public async assignStudentsToFaculty(facultyId: string, studentIds: string[]): Promise<void> {
     for (const sid of studentIds) {
-      stmt.run(facultyId, facultyId, sid);
+      await executeRun(`
+        UPDATE students
+        SET created_by_faculty_id = ?, faculty_workspace_id = ?
+        WHERE id = ?
+      `, [facultyId, facultyId, sid]);
     }
   }
 
   // STUDENT CRUD
-  public getStudentsForFaculty(facultyId: string, year?: string, section?: string): StudentRecord[] {
+  public async getStudentsForFaculty(facultyId: string, year?: string, section?: string): Promise<StudentRecord[]> {
     let sql = 'SELECT * FROM students WHERE (created_by_faculty_id = ? OR faculty_workspace_id = ?)';
     const params: any[] = [facultyId, facultyId];
     if (year && year !== 'ALL') {
@@ -1034,13 +1033,13 @@ export class SQLiteDB {
       params.push(section);
     }
     sql += ' ORDER BY current_rank ASC, overall_score DESC';
-    const rows = sqlite.prepare(sql).all(...params) as any[];
+    const rows = await queryAll(sql, params);
     return rows.map((r) => normalizeStudentRecord(r)!);
   }
 
-  public getStudents(year?: string, section?: string, facultyId?: string): StudentRecord[] {
+  public async getStudents(year?: string, section?: string, facultyId?: string): Promise<StudentRecord[]> {
     if (facultyId) {
-      return this.getStudentsForFaculty(facultyId, year, section);
+      return await this.getStudentsForFaculty(facultyId, year, section);
     }
     let sql = 'SELECT * FROM students';
     const params: any[] = [];
@@ -1057,11 +1056,11 @@ export class SQLiteDB {
     }
 
     sql += ' ORDER BY current_rank ASC, overall_score DESC';
-    const rows = sqlite.prepare(sql).all(...params) as any[];
+    const rows = await queryAll(sql, params);
     return rows.map((r) => normalizeStudentRecord(r)!);
   }
 
-  public getEliteStudents(year?: string, section?: string, facultyId?: string): StudentRecord[] {
+  public async getEliteStudents(year?: string, section?: string, facultyId?: string): Promise<StudentRecord[]> {
     let sql = 'SELECT * FROM students WHERE is_elite_student = 1';
     const params: any[] = [];
     if (facultyId) {
@@ -1077,15 +1076,15 @@ export class SQLiteDB {
       params.push(section);
     }
     sql += ' ORDER BY current_rank ASC, overall_score DESC';
-    const rows = sqlite.prepare(sql).all(...params) as any[];
+    const rows = await queryAll(sql, params);
     return rows.map((r) => normalizeStudentRecord(r)!);
   }
 
-  public updateStudentEliteStatus(studentId: string, isElite: boolean): void {
-    sqlite.prepare('UPDATE students SET is_elite_student = ? WHERE id = ?').run(isElite ? 1 : 0, studentId);
+  public async updateStudentEliteStatus(studentId: string, isElite: boolean): Promise<void> {
+    await executeRun('UPDATE students SET is_elite_student = ? WHERE id = ?', [isElite ? 1 : 0, studentId]);
   }
 
-  public updateStudentProfile(
+  public async updateStudentProfile(
     studentId: string,
     updates: {
       linkedinUrl?: string;
@@ -1094,61 +1093,61 @@ export class SQLiteDB {
       cgpa?: number;
       skillEdgePoints?: number;
     }
-  ): void {
-    const student = this.getStudentById(studentId);
+  ): Promise<void> {
+    const student = await this.getStudentById(studentId);
     if (!student) throw new Error('Student record not found.');
 
     if (updates.linkedinUrl !== undefined || updates.githubUrl !== undefined || updates.cgpa !== undefined) {
-      sqlite.prepare(`
+      await executeRun(`
         UPDATE students
         SET linkedin_url = ?, github_url = ?, cgpa = ?
         WHERE id = ?
-      `).run(
+      `, [
         updates.linkedinUrl !== undefined ? updates.linkedinUrl : student.linkedinUrl || null,
         updates.githubUrl !== undefined ? updates.githubUrl : student.githubUrl || null,
         updates.cgpa !== undefined ? updates.cgpa : student.cgpa,
         studentId
-      );
+      ]);
     }
 
     if (updates.leetcodeUsername !== undefined) {
       const username = updates.leetcodeUsername.trim();
-      const existingLc = sqlite.prepare('SELECT id FROM leetcode_stats WHERE student_id = ?').get(studentId);
+      const existingLc = await queryOne('SELECT id FROM leetcode_stats WHERE student_id = ?', [studentId]);
       if (existingLc) {
-        sqlite.prepare('UPDATE leetcode_stats SET username = ?, last_updated = ? WHERE student_id = ?').run(username, new Date().toISOString(), studentId);
+        await executeRun('UPDATE leetcode_stats SET username = ?, last_updated = ? WHERE student_id = ?', [username, new Date().toISOString(), studentId]);
       } else if (username) {
-        sqlite.prepare(`
+        await executeRun(`
           INSERT INTO leetcode_stats (id, student_id, username, total_solved, easy_solved, medium_solved, hard_solved, contest_rating, total_attempted, acceptance_rate, streak_days, last_updated)
           VALUES (?, ?, ?, 0, 0, 0, 0, 1200, 0, 0.0, 0, ?)
-        `).run(`lc-${studentId}`, studentId, username, new Date().toISOString());
+        `, [`lc-${studentId}`, studentId, username, new Date().toISOString()]);
       }
     }
 
     if (updates.skillEdgePoints !== undefined) {
       const points = updates.skillEdgePoints;
-      const existingSe = sqlite.prepare('SELECT id FROM skilledge_records WHERE student_id = ?').get(studentId);
+      const existingSe = await queryOne('SELECT id FROM skilledge_records WHERE student_id = ?', [studentId]);
       if (existingSe) {
-        sqlite.prepare('UPDATE skilledge_records SET total_reward_points = ? WHERE student_id = ?').run(points, studentId);
+        await executeRun('UPDATE skilledge_records SET total_reward_points = ? WHERE student_id = ?', [points, studentId]);
       } else {
-        sqlite.prepare(`
+        await executeRun(`
           INSERT INTO skilledge_records (id, student_id, overall_completion_pct, total_reward_points, tracks_json)
           VALUES (?, ?, 0, ?, '[]')
-        `).run(`se-${studentId}`, studentId, points);
+        `, [`se-${studentId}`, studentId, points]);
       }
     }
   }
 
-  public getStudentById(id: string): StudentRecord | undefined {
-    const row = sqlite.prepare('SELECT * FROM students WHERE id = ?').get(id);
+  public async getStudentById(id: string): Promise<StudentRecord | undefined> {
+    const row = await queryOne('SELECT * FROM students WHERE id = ?', [id]);
     return row ? (normalizeStudentRecord(row) as StudentRecord) : undefined;
   }
 
-  public getStudentByRegisterNo(regNo: string): StudentRecord | undefined {
-    const row = sqlite.prepare('SELECT * FROM students WHERE register_no = ?').get(regNo);
+  public async getStudentByRegisterNo(regNo: string): Promise<StudentRecord | undefined> {
+    const row = await queryOne('SELECT * FROM students WHERE register_no = ?', [regNo]);
     return row ? (normalizeStudentRecord(row) as StudentRecord) : undefined;
   }
 
-  public createStudent(stu: {
+  public async createStudent(stu: {
     id: string;
     registerNo: string;
     name: string;
@@ -1162,12 +1161,11 @@ export class SQLiteDB {
     overallScore?: number;
     createdByFacultyId?: string;
     facultyWorkspaceId?: string;
-  }): void {
-    const stmt = sqlite.prepare(`
+  }): Promise<void> {
+    await executeRun(`
       INSERT INTO students (id, register_no, name, email, personal_email, department, year, section, batch, class_coordinator_name, cgpa, overall_score, current_rank, created_by_faculty_id, faculty_workspace_id)
       VALUES (?, ?, ?, ?, ?, 'AI & DS', ?, ?, ?, ?, ?, ?, 99, ?, ?)
-    `);
-    stmt.run(
+    `, [
       stu.id,
       stu.registerNo,
       stu.name,
@@ -1181,34 +1179,34 @@ export class SQLiteDB {
       stu.overallScore || 0,
       stu.createdByFacultyId || null,
       stu.facultyWorkspaceId || stu.createdByFacultyId || null
-    );
+    ]);
   }
 
-  public updateStudentCGPA(studentId: string, cgpa: number): void {
-    sqlite.prepare('UPDATE students SET cgpa = ? WHERE id = ?').run(cgpa, studentId);
+  public async updateStudentCGPA(studentId: string, cgpa: number): Promise<void> {
+    await executeRun('UPDATE students SET cgpa = ? WHERE id = ?', [cgpa, studentId]);
   }
 
-  public updateStudentScoreAndRank(studentId: string, overallScore: number, currentRank: number): void {
-    sqlite.prepare('UPDATE students SET overall_score = ?, current_rank = ? WHERE id = ?').run(overallScore, currentRank, studentId);
+  public async updateStudentScoreAndRank(studentId: string, overallScore: number, currentRank: number): Promise<void> {
+    await executeRun('UPDATE students SET overall_score = ?, current_rank = ? WHERE id = ?', [overallScore, currentRank, studentId]);
   }
 
   // 360 DEGREE GETTER
-  public getStudent360(studentId: string) {
-    const student = this.getStudentById(studentId);
+  public async getStudent360(studentId: string) {
+    const student = await this.getStudentById(studentId);
     if (!student) return null;
 
-    const academicsRaw = sqlite.prepare('SELECT * FROM academic_records WHERE student_id = ?').all(studentId) as any[];
+    const academicsRaw = await queryAll('SELECT * FROM academic_records WHERE student_id = ?', [studentId]);
     const academics: AcademicRecord[] = academicsRaw.map((a) => ({
       ...a,
-      subjects: JSON.parse(a.subjects_json || '[]')
+      subjects: safeParseJson(a.subjects_json, [])
     }));
 
-    const arrears = sqlite.prepare('SELECT * FROM arrear_history WHERE student_id = ?').all(studentId) as ArrearRecord[];
+    const arrears = await queryAll<ArrearRecord>('SELECT * FROM arrear_history WHERE student_id = ?', [studentId]);
 
-    const skillRaw = sqlite.prepare('SELECT * FROM skilledge_records WHERE student_id = ?').get(studentId) as any;
+    const skillRaw = await queryOne('SELECT * FROM skilledge_records WHERE student_id = ?', [studentId]);
     let skillEdge: any | undefined = undefined;
     if (skillRaw) {
-      const historyRows = sqlite.prepare('SELECT * FROM skilledge_sync_history WHERE student_id = ? ORDER BY synced_at DESC LIMIT 15').all(studentId) as any[];
+      const historyRows = await queryAll('SELECT * FROM skilledge_sync_history WHERE student_id = ? ORDER BY synced_at DESC LIMIT 15', [studentId]);
       const history = historyRows.map((h) => ({
         id: h.id,
         student_id: h.student_id,
@@ -1216,7 +1214,7 @@ export class SQLiteDB {
         currentPoints: h.current_points,
         earnedDelta: h.earned_delta,
         overallCompletionPct: h.overall_completion_pct,
-        tracks: JSON.parse(h.tracks_json || '[]'),
+        tracks: safeParseJson(h.tracks_json, []),
         syncedAt: h.synced_at,
         syncSource: h.sync_source,
         status: h.status,
@@ -1234,12 +1232,12 @@ export class SQLiteDB {
         status: skillRaw.status || 'VERIFIED',
         skilledgeHandle: skillRaw.skilledge_handle || '',
         lastSyncedAt: skillRaw.last_synced_at || '',
-        tracks: JSON.parse(skillRaw.tracks_json || '[]'),
+        tracks: safeParseJson(skillRaw.tracks_json, []),
         history
       };
     }
 
-    const nptelRaw = sqlite.prepare('SELECT * FROM nptel_records WHERE student_id = ?').all(studentId) as any[];
+    const nptelRaw = await queryAll('SELECT * FROM nptel_records WHERE student_id = ?', [studentId]);
     const nptel: NPTELRecord[] = nptelRaw.map((n) => ({
       id: n.id,
       student_id: n.student_id,
@@ -1252,7 +1250,7 @@ export class SQLiteDB {
       status: n.status
     }));
 
-    const attRaw = sqlite.prepare('SELECT * FROM attendance_records WHERE student_id = ?').get(studentId) as any;
+    const attRaw = await queryOne('SELECT * FROM attendance_records WHERE student_id = ?', [studentId]);
     let attendance: AttendanceRecord | undefined = undefined;
     if (attRaw) {
       attendance = {
@@ -1268,9 +1266,9 @@ export class SQLiteDB {
       };
     }
 
-    const discipline = sqlite.prepare('SELECT * FROM discipline_records WHERE student_id = ?').all(studentId) as DisciplineRecord[];
+    const discipline = await queryAll<DisciplineRecord>('SELECT * FROM discipline_records WHERE student_id = ?', [studentId]);
 
-    const certsRaw = sqlite.prepare('SELECT * FROM certificate_records WHERE student_id = ?').all(studentId) as any[];
+    const certsRaw = await queryAll('SELECT * FROM certificate_records WHERE student_id = ?', [studentId]);
     const certificates: CertificateRecord[] = certsRaw.map((c) => ({
       id: c.id,
       student_id: c.student_id,
@@ -1284,7 +1282,7 @@ export class SQLiteDB {
       uploadedAt: c.uploaded_at
     }));
 
-    const partRaw = sqlite.prepare('SELECT * FROM participation_records WHERE student_id = ?').all(studentId) as any[];
+    const partRaw = await queryAll('SELECT * FROM participation_records WHERE student_id = ?', [studentId]);
     const participation: ParticipationRecord[] = partRaw.map((p) => ({
       id: p.id,
       student_id: p.student_id,
@@ -1309,8 +1307,8 @@ export class SQLiteDB {
       uploaded_at: p.uploaded_at
     }));
 
-    const lcRaw = sqlite.prepare('SELECT * FROM leetcode_stats WHERE student_id = ?').get(studentId) as any;
-    const connLc = sqlite.prepare("SELECT provider_username FROM connected_accounts WHERE student_id = ? AND LOWER(provider) = 'leetcode'").get(studentId) as any;
+    const lcRaw = await queryOne('SELECT * FROM leetcode_stats WHERE student_id = ?', [studentId]);
+    const connLc = await queryOne("SELECT provider_username FROM connected_accounts WHERE student_id = ? AND LOWER(provider) = 'leetcode'", [studentId]);
 
     const isValidHandle = (u: any) => {
       if (!u || typeof u !== 'string') return false;
@@ -1360,14 +1358,14 @@ export class SQLiteDB {
       };
     }
 
-    const prjRaw = sqlite.prepare('SELECT * FROM project_records WHERE student_id = ?').all(studentId) as any[];
+    const prjRaw = await queryAll('SELECT * FROM project_records WHERE student_id = ?', [studentId]);
     const projects: ProjectRecord[] = prjRaw.map((p) => ({
       id: p.id,
       student_id: p.student_id,
       title: p.title,
       description: p.description,
       domain: p.domain,
-      techStack: JSON.parse(p.tech_stack_json || '[]'),
+      techStack: safeParseJson(p.tech_stack_json, []),
       isTeam: Boolean(p.is_team),
       studentRole: p.student_role,
       githubUrl: p.github_url,
@@ -1376,10 +1374,10 @@ export class SQLiteDB {
       prizeAwarded: p.prize_awarded
     }));
 
-    const achievements = sqlite.prepare('SELECT * FROM achievement_records WHERE student_id = ?').all(studentId) as AchievementRecord[];
-    const nptelProofs = this.getNptelProofs(studentId);
-    const leetcodeProofs = this.getLeetcodeProofs(studentId);
-    const connectedAccounts = this.getConnectedAccounts(studentId);
+    const achievements = await queryAll<AchievementRecord>('SELECT * FROM achievement_records WHERE student_id = ?', [studentId]);
+    const nptelProofs = await this.getNptelProofs(studentId);
+    const leetcodeProofs = await this.getLeetcodeProofs(studentId);
+    const connectedAccounts = await this.getConnectedAccounts(studentId);
 
     return {
       student,
@@ -1401,25 +1399,25 @@ export class SQLiteDB {
   }
 
   // 360 UPDATERS
-  public updateAttendance(studentId: string, presentDays: number, totalDays: number): void {
+  public async updateAttendance(studentId: string, presentDays: number, totalDays: number): Promise<void> {
     const absent = totalDays - presentDays;
     const pct = totalDays > 0 ? Math.round((presentDays / totalDays) * 1000) / 10 : 0;
-    const existing = sqlite.prepare('SELECT id FROM attendance_records WHERE student_id = ?').get(studentId);
+    const existing = await queryOne('SELECT id FROM attendance_records WHERE student_id = ?', [studentId]);
 
     if (existing) {
-      sqlite.prepare(`
+      await executeRun(`
         UPDATE attendance_records SET total_working_days = ?, present_days = ?, absent_days = ?, percentage = ?, last_updated = ?
         WHERE student_id = ?
-      `).run(totalDays, presentDays, absent, pct, new Date().toISOString(), studentId);
+      `, [totalDays, presentDays, absent, pct, new Date().toISOString(), studentId]);
     } else {
-      sqlite.prepare(`
+      await executeRun(`
         INSERT INTO attendance_records (id, student_id, total_working_days, present_days, absent_days, od_days, ml_days, percentage, last_updated)
         VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?)
-      `).run(`att-${Date.now()}`, studentId, totalDays, presentDays, absent, pct, new Date().toISOString());
+      `, [`att-${Date.now()}`, studentId, totalDays, presentDays, absent, pct, new Date().toISOString()]);
     }
   }
 
-  public updateLeetCode(
+  public async updateLeetCode(
     studentId: string,
     arg2: string | number,
     arg3?: number,
@@ -1429,7 +1427,7 @@ export class SQLiteDB {
     totalAttempted = 0,
     acceptanceRate = 0,
     explicitTotalSolved?: number
-  ): void {
+  ): Promise<void> {
     let username = '';
     let easy = 0;
     let medium = 0;
@@ -1458,8 +1456,8 @@ export class SQLiteDB {
     }
 
     if (!isValidHandleStr(username)) {
-      const existingLc = sqlite.prepare('SELECT username FROM leetcode_stats WHERE student_id = ?').get(studentId) as any;
-      const existingConn = sqlite.prepare("SELECT provider_username FROM connected_accounts WHERE student_id = ? AND LOWER(provider) = 'leetcode'").get(studentId) as any;
+      const existingLc = await queryOne('SELECT username FROM leetcode_stats WHERE student_id = ?', [studentId]);
+      const existingConn = await queryOne("SELECT provider_username FROM connected_accounts WHERE student_id = ? AND LOWER(provider) = 'leetcode'", [studentId]);
 
       if (existingLc && isValidHandleStr(existingLc.username)) {
         username = existingLc.username.trim();
@@ -1475,51 +1473,51 @@ export class SQLiteDB {
       ? Math.max(explicitTotalSolved, sumSolved)
       : sumSolved;
 
-    const existing = sqlite.prepare('SELECT id FROM leetcode_stats WHERE student_id = ?').get(studentId);
+    const existing = await queryOne('SELECT id FROM leetcode_stats WHERE student_id = ?', [studentId]);
     const now = new Date().toISOString();
 
     if (existing) {
-      sqlite.prepare(`
+      await executeRun(`
         UPDATE leetcode_stats
         SET username = ?, total_solved = ?, easy_solved = ?, medium_solved = ?, hard_solved = ?, contest_rating = ?, total_attempted = ?, acceptance_rate = ?, last_updated = ?
         WHERE student_id = ?
-      `).run(username, total, easy, medium, hard, rating, totalAttempted, acceptanceRate, now, studentId);
+      `, [username, total, easy, medium, hard, rating, totalAttempted, acceptanceRate, now, studentId]);
     } else {
-      sqlite.prepare(`
+      await executeRun(`
         INSERT INTO leetcode_stats (id, student_id, username, total_solved, easy_solved, medium_solved, hard_solved, contest_rating, total_attempted, acceptance_rate, streak_days, last_updated)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
-      `).run(`lc-${Date.now()}`, studentId, username, total, easy, medium, hard, rating, totalAttempted, acceptanceRate, now);
+      `, [`lc-${Date.now()}`, studentId, username, total, easy, medium, hard, rating, totalAttempted, acceptanceRate, now]);
     }
 
     if (isValidHandleStr(username)) {
-      this.upsertConnectedAccount(studentId, 'LeetCode', username, 'Connected', 'VERIFIED');
+      await this.upsertConnectedAccount(studentId, 'LeetCode', username, 'Connected', 'VERIFIED');
     }
   }
 
-  public updateSkillEdge(studentId: string, pct: number, pts: number): void {
-    const existing = sqlite.prepare('SELECT id FROM skilledge_records WHERE student_id = ?').get(studentId);
+  public async updateSkillEdge(studentId: string, pct: number, pts: number): Promise<void> {
+    const existing = await queryOne('SELECT id FROM skilledge_records WHERE student_id = ?', [studentId]);
     if (existing) {
-      sqlite.prepare(`
+      await executeRun(`
         UPDATE skilledge_records SET overall_completion_pct = ?, total_reward_points = ? WHERE student_id = ?
-      `).run(pct, pts, studentId);
+      `, [pct, pts, studentId]);
     } else {
-      sqlite.prepare(`
+      await executeRun(`
         INSERT INTO skilledge_records (id, student_id, overall_completion_pct, total_reward_points, tracks_json)
         VALUES (?, ?, ?, ?, '[]')
-      `).run(`sk-${Date.now()}`, studentId, pct, pts);
+      `, [`sk-${Date.now()}`, studentId, pct, pts]);
     }
   }
 
-  public addArrearRecord(rec: { studentId: string; semesterNo?: number; subjectCode: string; subjectName: string; status?: string }): string {
+  public async addArrearRecord(rec: { studentId: string; semesterNo?: number; subjectCode: string; subjectName: string; status?: string }): Promise<string> {
     const id = `arr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    sqlite.prepare(`
+    await executeRun(`
       INSERT INTO arrear_history (id, student_id, semester_no, subject_code, subject_name, status, created_date)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, rec.studentId, rec.semesterNo || 3, rec.subjectCode, rec.subjectName, rec.status || 'PENDING', new Date().toISOString());
+    `, [id, rec.studentId, rec.semesterNo || 3, rec.subjectCode, rec.subjectName, rec.status || 'PENDING', new Date().toISOString()]);
     return id;
   }
 
-  public upsertNPTELRecord(studentId: string, rec: {
+  public async upsertNPTELRecord(studentId: string, rec: {
     id?: string;
     courseName: string;
     durationWeeks?: number;
@@ -1530,7 +1528,7 @@ export class SQLiteDB {
     status?: string;
     accountType?: string;
     connectedEmail?: string;
-  }): string {
+  }): Promise<string> {
     const courseName = rec.courseName.trim();
     const durationWeeks = Number(rec.durationWeeks) || 12;
     const weeksCompleted = rec.weeksCompleted !== undefined ? Number(rec.weeksCompleted) : durationWeeks;
@@ -1545,31 +1543,31 @@ export class SQLiteDB {
     const connectedEmail = rec.connectedEmail || null;
     const now = new Date().toISOString();
 
-    const existing = sqlite.prepare('SELECT id FROM nptel_records WHERE student_id = ? AND LOWER(course_name) = ?').get(studentId, courseName.toLowerCase()) as any;
+    const existing = await queryOne('SELECT id FROM nptel_records WHERE student_id = ? AND LOWER(course_name) = ?', [studentId, courseName.toLowerCase()]);
 
     if (existing) {
-      sqlite.prepare(`
+      await executeRun(`
         UPDATE nptel_records
         SET duration_weeks = ?, weeks_completed = ?, assignment_score = ?, exam_score = ?, final_score = ?, status = ?, account_type = ?, connected_email = ?, last_verified = ?
         WHERE id = ?
-      `).run(durationWeeks, weeksCompleted, assignmentScore, examScore, finalScore, status, accountType, connectedEmail, now, existing.id);
+      `, [durationWeeks, weeksCompleted, assignmentScore, examScore, finalScore, status, accountType, connectedEmail, now, existing.id]);
       return existing.id;
     } else {
       const id = rec.id || `nptel-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-      sqlite.prepare(`
+      await executeRun(`
         INSERT INTO nptel_records (id, student_id, course_name, duration_weeks, weeks_completed, assignment_score, exam_score, final_score, status, account_type, connected_email, connected_at, last_verified)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, studentId, courseName, durationWeeks, weeksCompleted, assignmentScore, examScore, finalScore, status, accountType, connectedEmail, now, now);
+      `, [id, studentId, courseName, durationWeeks, weeksCompleted, assignmentScore, examScore, finalScore, status, accountType, connectedEmail, now, now]);
       return id;
     }
   }
 
-  public saveNPTELRecords(studentId: string, records: any[]): void {
+  public async saveNPTELRecords(studentId: string, records: any[]): Promise<void> {
     if (!Array.isArray(records)) return;
     for (const r of records) {
       const courseName = r.courseName || r.course_name;
       if (courseName && typeof courseName === 'string') {
-        this.upsertNPTELRecord(studentId, {
+        await this.upsertNPTELRecord(studentId, {
           id: r.id,
           courseName,
           durationWeeks: Number(r.durationWeeks || r.duration_weeks) || 12,
@@ -1585,15 +1583,15 @@ export class SQLiteDB {
     }
   }
 
-  public addNPTELRecord(rec: { studentId: string; courseName: string; examScore?: number }): string {
-    return this.upsertNPTELRecord(rec.studentId, {
+  public async addNPTELRecord(rec: { studentId: string; courseName: string; examScore?: number }): Promise<string> {
+    return await this.upsertNPTELRecord(rec.studentId, {
       courseName: rec.courseName,
       examScore: rec.examScore || 75
     });
   }
 
-  public addDisciplineRecord(rec: { studentId: string; date?: string; time?: string; category?: string; remark: string; actionTaken?: string; recordedBy: string }): string {
-    return this.addDisciplineRecordWithFine({
+  public async addDisciplineRecord(rec: { studentId: string; date?: string; time?: string; category?: string; remark: string; actionTaken?: string; recordedBy: string }): Promise<string> {
+    return await this.addDisciplineRecordWithFine({
       studentId: rec.studentId,
       date: rec.date,
       time: rec.time,
@@ -1604,12 +1602,12 @@ export class SQLiteDB {
     });
   }
 
-  public addDisciplineRecordWithFine(rec: { studentId: string; date?: string; time?: string; category: string; remark: string; actionTaken?: string; recordedBy: string }): string {
+  public async addDisciplineRecordWithFine(rec: { studentId: string; date?: string; time?: string; category: string; remark: string; actionTaken?: string; recordedBy: string }): Promise<string> {
     const id = `disc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const date = rec.date || new Date().toISOString().split('T')[0];
     const time = rec.time || new Date().toLocaleTimeString('en-US', { hour12: true });
 
-    const existing = sqlite.prepare("SELECT COUNT(*) as count FROM discipline_records WHERE student_id = ? AND category = ?").get(rec.studentId, rec.category) as { count: number };
+    const existing = await queryOne<{ count: number }>("SELECT COUNT(*) as count FROM discipline_records WHERE student_id = ? AND category = ?", [rec.studentId, rec.category]);
     const violationCount = (existing?.count || 0) + 1;
     let fineAmount = 0;
     let warningAction = rec.actionTaken || 'Warning Logged';
@@ -1619,66 +1617,61 @@ export class SQLiteDB {
       warningAction = `Repeated Warning — Fine Applicable (₹${fineAmount})`;
     }
 
-    sqlite.prepare(`
+    await executeRun(`
       INSERT INTO discipline_records (id, student_id, date, time, category, remark, warning_action, fine_amount, action_taken, recorded_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, rec.studentId, date, time, rec.category, rec.remark, warningAction, fineAmount, rec.actionTaken || '', rec.recordedBy);
+    `, [id, rec.studentId, date, time, rec.category, rec.remark, warningAction, fineAmount, rec.actionTaken || '', rec.recordedBy]);
     return id;
   }
 
-  public getNptelProofs(studentId: string): any[] {
-    return sqlite.prepare('SELECT * FROM nptel_proofs WHERE student_id = ? ORDER BY week_no ASC, uploaded_at DESC').all(studentId);
+  public async getNptelProofs(studentId: string): Promise<any[]> {
+    return await queryAll('SELECT * FROM nptel_proofs WHERE student_id = ? ORDER BY week_no ASC, uploaded_at DESC', [studentId]);
   }
 
-  public getNptelProofById(proofId: string): any {
-    return sqlite.prepare('SELECT * FROM nptel_proofs WHERE id = ?').get(proofId);
+  public async getNptelProofById(proofId: string): Promise<any> {
+    return await queryOne('SELECT * FROM nptel_proofs WHERE id = ?', [proofId]);
   }
 
-  public addNptelProof(studentId: string, weekNo: number, proofFilePath: string, originalFileName: string): any {
-    // If proof for this week already exists, delete old one
-    const existing = sqlite.prepare('SELECT id FROM nptel_proofs WHERE student_id = ? AND week_no = ?').get(studentId, weekNo) as any;
+  public async addNptelProof(studentId: string, weekNo: number, proofFilePath: string, originalFileName: string): Promise<any> {
+    const existing = await queryOne('SELECT id FROM nptel_proofs WHERE student_id = ? AND week_no = ?', [studentId, weekNo]);
     if (existing) {
-      sqlite.prepare('DELETE FROM nptel_proofs WHERE id = ?').run(existing.id);
+      await executeRun('DELETE FROM nptel_proofs WHERE id = ?', [existing.id]);
     }
 
     const id = `np-proof-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const now = new Date().toISOString();
-    sqlite.prepare(`
+    await executeRun(`
       INSERT INTO nptel_proofs (id, student_id, week_no, proof_file_path, original_file_name, uploaded_at)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, studentId, weekNo, proofFilePath, originalFileName, now);
-    return sqlite.prepare('SELECT * FROM nptel_proofs WHERE id = ?').get(id);
+    `, [id, studentId, weekNo, proofFilePath, originalFileName, now]);
+    return await queryOne('SELECT * FROM nptel_proofs WHERE id = ?', [id]);
   }
 
-  public deleteNptelProof(proofId: string, studentId: string): void {
-    sqlite.prepare('DELETE FROM nptel_proofs WHERE id = ? AND student_id = ?').run(proofId, studentId);
+  public async deleteNptelProof(proofId: string, studentId: string): Promise<void> {
+    await executeRun('DELETE FROM nptel_proofs WHERE id = ? AND student_id = ?', [proofId, studentId]);
   }
 
-  public getLeetcodeProofs(studentId: string): any[] {
-    return sqlite.prepare('SELECT * FROM leetcode_proofs WHERE student_id = ? ORDER BY uploaded_at DESC').all(studentId);
+  public async getLeetcodeProofs(studentId: string): Promise<any[]> {
+    return await queryAll('SELECT * FROM leetcode_proofs WHERE student_id = ? ORDER BY uploaded_at DESC', [studentId]);
   }
 
-  public addLeetcodeProof(studentId: string, proofFilePath: string, originalFileName: string): any {
+  public async addLeetcodeProof(studentId: string, proofFilePath: string, originalFileName: string): Promise<any> {
     const id = `lc-proof-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const now = new Date().toISOString();
-    sqlite.prepare(`
+    await executeRun(`
       INSERT INTO leetcode_proofs (id, student_id, proof_file_path, original_file_name, uploaded_at)
       VALUES (?, ?, ?, ?, ?)
-    `).run(id, studentId, proofFilePath, originalFileName, now);
-    return sqlite.prepare('SELECT * FROM leetcode_proofs WHERE id = ?').get(id);
+    `, [id, studentId, proofFilePath, originalFileName, now]);
+    return await queryOne('SELECT * FROM leetcode_proofs WHERE id = ?', [id]);
   }
 
-  public deleteLeetcodeProof(proofId: string, studentId: string): void {
-    sqlite.prepare('DELETE FROM leetcode_proofs WHERE id = ? AND student_id = ?').run(proofId, studentId);
+  public async deleteLeetcodeProof(proofId: string, studentId: string): Promise<void> {
+    await executeRun('DELETE FROM leetcode_proofs WHERE id = ? AND student_id = ?', [proofId, studentId]);
   }
 
-  public saveAcademicRecords(studentId: string, records: any[]): void {
+  public async saveAcademicRecords(studentId: string, records: any[]): Promise<void> {
     if (!Array.isArray(records)) return;
-    sqlite.prepare('DELETE FROM academic_records WHERE student_id = ?').run(studentId);
-    const stmt = sqlite.prepare(`
-      INSERT INTO academic_records (id, student_id, semester_no, sgpa, cgpa, total_credits, subjects_json, exam_type)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    await executeRun('DELETE FROM academic_records WHERE student_id = ?', [studentId]);
     for (const r of records) {
       const recId = r.id || `acad-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
       const semNo = r.semesterNo || r.semester_no || 1;
@@ -1687,13 +1680,16 @@ export class SQLiteDB {
       const credits = r.totalCredits || r.total_credits || (r.subjects ? r.subjects.length : 0);
       const subjectsJson = JSON.stringify(r.subjects || []);
       const examType = r.examType || r.exam_type || 'Internal';
-      stmt.run(recId, studentId, semNo, sgpa, cgpa, credits, subjectsJson, examType);
+      await executeRun(`
+        INSERT INTO academic_records (id, student_id, semester_no, sgpa, cgpa, total_credits, subjects_json, exam_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [recId, studentId, semNo, sgpa, cgpa, credits, subjectsJson, examType]);
     }
   }
 
-  public saveSkillEdgeRecord(studentId: string, skilledge: any): void {
+  public async saveSkillEdgeRecord(studentId: string, skilledge: any): Promise<void> {
     if (!skilledge) return;
-    const existing = sqlite.prepare('SELECT id FROM skilledge_records WHERE student_id = ?').get(studentId);
+    const existing = await queryOne('SELECT id FROM skilledge_records WHERE student_id = ?', [studentId]);
     const pct = skilledge.overallCompletionPct || skilledge.overall_completion_pct || 0;
     const pts = skilledge.totalRewardPoints || skilledge.total_reward_points || 0;
     const prevPts = skilledge.previousPoints !== undefined ? skilledge.previousPoints : (skilledge.previous_points || 0);
@@ -1704,20 +1700,20 @@ export class SQLiteDB {
     const tracksJson = JSON.stringify(skilledge.tracks || []);
 
     if (existing) {
-      sqlite.prepare(`
+      await executeRun(`
         UPDATE skilledge_records
         SET overall_completion_pct = ?, total_reward_points = ?, previous_points = ?, earned_delta = ?, status = ?, skilledge_handle = ?, last_synced_at = ?, tracks_json = ?
         WHERE student_id = ?
-      `).run(pct, pts, prevPts, delta, status, handle, syncedAt, tracksJson, studentId);
+      `, [pct, pts, prevPts, delta, status, handle, syncedAt, tracksJson, studentId]);
     } else {
-      sqlite.prepare(`
+      await executeRun(`
         INSERT INTO skilledge_records (id, student_id, overall_completion_pct, total_reward_points, previous_points, earned_delta, status, skilledge_handle, last_synced_at, tracks_json)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(`sk-${Date.now()}`, studentId, pct, pts, prevPts, delta, status, handle, syncedAt, tracksJson);
+      `, [`sk-${Date.now()}`, studentId, pct, pts, prevPts, delta, status, handle, syncedAt, tracksJson]);
     }
   }
 
-  public saveSkillEdgeSyncHistory(data: {
+  public async saveSkillEdgeSyncHistory(data: {
     student_id: string;
     previousPoints: number;
     currentPoints: number;
@@ -1728,12 +1724,12 @@ export class SQLiteDB {
     syncSource: string;
     status: string;
     errorMessage?: string;
-  }): void {
+  }): Promise<void> {
     const histId = `skhist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    sqlite.prepare(`
+    await executeRun(`
       INSERT INTO skilledge_sync_history (id, student_id, previous_points, current_points, earned_delta, overall_completion_pct, tracks_json, synced_at, sync_source, status, error_message)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    `, [
       histId,
       data.student_id,
       data.previousPoints || 0,
@@ -1745,11 +1741,11 @@ export class SQLiteDB {
       data.syncSource || 'DAILY_AUTO',
       data.status || 'SUCCESS',
       data.errorMessage || null
-    );
+    ]);
   }
 
-  public getSkillEdgeSyncHistory(studentId: string): any[] {
-    const rows = sqlite.prepare('SELECT * FROM skilledge_sync_history WHERE student_id = ? ORDER BY synced_at DESC LIMIT 30').all(studentId) as any[];
+  public async getSkillEdgeSyncHistory(studentId: string): Promise<any[]> {
+    const rows = await queryAll('SELECT * FROM skilledge_sync_history WHERE student_id = ? ORDER BY synced_at DESC LIMIT 30', [studentId]);
     return rows.map((r) => ({
       id: r.id,
       student_id: r.student_id,
@@ -1757,7 +1753,7 @@ export class SQLiteDB {
       currentPoints: r.current_points,
       earnedDelta: r.earned_delta,
       overallCompletionPct: r.overall_completion_pct,
-      tracks: JSON.parse(r.tracks_json || '[]'),
+      tracks: safeParseJson(r.tracks_json, []),
       syncedAt: r.synced_at,
       syncSource: r.sync_source,
       status: r.status,
@@ -1765,8 +1761,8 @@ export class SQLiteDB {
     }));
   }
 
-  public getSkillEdgeRecord(studentId: string): any {
-    const r = sqlite.prepare('SELECT * FROM skilledge_records WHERE student_id = ?').get(studentId) as any;
+  public async getSkillEdgeRecord(studentId: string): Promise<any> {
+    const r = await queryOne('SELECT * FROM skilledge_records WHERE student_id = ?', [studentId]);
     if (!r) return undefined;
     return {
       id: r.id,
@@ -1778,17 +1774,13 @@ export class SQLiteDB {
       status: r.status || 'VERIFIED',
       skilledgeHandle: r.skilledge_handle || '',
       lastSyncedAt: r.last_synced_at || '',
-      tracks: JSON.parse(r.tracks_json || '[]')
+      tracks: safeParseJson(r.tracks_json, [])
     };
   }
 
-  public saveDisciplineRecords(studentId: string, records: any[]): void {
+  public async saveDisciplineRecords(studentId: string, records: any[]): Promise<void> {
     if (!Array.isArray(records)) return;
-    sqlite.prepare('DELETE FROM discipline_records WHERE student_id = ?').run(studentId);
-    const stmt = sqlite.prepare(`
-      INSERT INTO discipline_records (id, student_id, date, time, category, remark, warning_action, fine_amount, action_taken, recorded_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    await executeRun('DELETE FROM discipline_records WHERE student_id = ?', [studentId]);
     for (const r of records) {
       const recId = r.id || `disc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
       const date = r.date || new Date().toISOString().split('T')[0];
@@ -1799,17 +1791,16 @@ export class SQLiteDB {
       const fineAmount = r.fineAmount || r.fine_amount || 0;
       const actionTaken = r.actionTaken || r.action_taken || '';
       const recordedBy = r.recordedBy || r.recorded_by || 'Faculty';
-      stmt.run(recId, studentId, date, time, cat, remark, warningAction, fineAmount, actionTaken, recordedBy);
+      await executeRun(`
+        INSERT INTO discipline_records (id, student_id, date, time, category, remark, warning_action, fine_amount, action_taken, recorded_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [recId, studentId, date, time, cat, remark, warningAction, fineAmount, actionTaken, recordedBy]);
     }
   }
 
-  public saveCertificateRecords(studentId: string, records: any[]): void {
+  public async saveCertificateRecords(studentId: string, records: any[]): Promise<void> {
     if (!Array.isArray(records)) return;
-    sqlite.prepare('DELETE FROM certificate_records WHERE student_id = ?').run(studentId);
-    const stmt = sqlite.prepare(`
-      INSERT INTO certificate_records (id, student_id, course_name, platform, category, issue_date, certificate_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
+    await executeRun('DELETE FROM certificate_records WHERE student_id = ?', [studentId]);
     for (const r of records) {
       const recId = r.id || `cert-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
       const courseName = r.courseName || r.course_name || 'Certificate';
@@ -1817,17 +1808,16 @@ export class SQLiteDB {
       const category = r.category || 'Certification';
       const issueDate = r.issueDate || r.issue_date || new Date().toISOString().split('T')[0];
       const certId = r.certificateId || r.certificate_id || '';
-      stmt.run(recId, studentId, courseName, platform, category, issueDate, certId);
+      await executeRun(`
+        INSERT INTO certificate_records (id, student_id, course_name, platform, category, issue_date, certificate_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [recId, studentId, courseName, platform, category, issueDate, certId]);
     }
   }
 
-  public saveParticipationRecords(studentId: string, records: any[]): void {
+  public async saveParticipationRecords(studentId: string, records: any[]): Promise<void> {
     if (!Array.isArray(records)) return;
-    sqlite.prepare('DELETE FROM participation_records WHERE student_id = ?').run(studentId);
-    const stmt = sqlite.prepare(`
-      INSERT INTO participation_records (id, student_id, event_name, event_type, organizer, college_name, date, is_team, position, prize_amount, certificate_ref)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    await executeRun('DELETE FROM participation_records WHERE student_id = ?', [studentId]);
     for (const r of records) {
       const recId = r.id || `part-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
       const eventName = r.eventName || r.event_name || 'Event';
@@ -1839,17 +1829,16 @@ export class SQLiteDB {
       const position = r.position || 'Participant';
       const prizeAmount = r.prizeAmount || r.prize_amount || '';
       const certRef = r.certificateRef || r.certificate_ref || '';
-      stmt.run(recId, studentId, eventName, eventType, organizer, collegeName, date, isTeam, position, prizeAmount, certRef);
+      await executeRun(`
+        INSERT INTO participation_records (id, student_id, event_name, event_type, organizer, college_name, date, is_team, position, prize_amount, certificate_ref)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [recId, studentId, eventName, eventType, organizer, collegeName, date, isTeam, position, prizeAmount, certRef]);
     }
   }
 
-  public saveProjectRecords(studentId: string, records: any[]): void {
+  public async saveProjectRecords(studentId: string, records: any[]): Promise<void> {
     if (!Array.isArray(records)) return;
-    sqlite.prepare('DELETE FROM project_records WHERE student_id = ?').run(studentId);
-    const stmt = sqlite.prepare(`
-      INSERT INTO project_records (id, student_id, title, description, domain, tech_stack_json, is_team, student_role, github_url, live_url, category, status, prize_awarded)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    await executeRun('DELETE FROM project_records WHERE student_id = ?', [studentId]);
     for (const r of records) {
       const recId = r.id || `proj-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
       const title = r.title || 'Project Title';
@@ -1863,11 +1852,14 @@ export class SQLiteDB {
       const category = r.category || 'Software';
       const status = r.status || 'Completed';
       const prizeAwarded = r.prizeAwarded || r.prize_awarded || '';
-      stmt.run(recId, studentId, title, description, domain, techStackJson, isTeam, studentRole, githubUrl, liveUrl, category, status, prizeAwarded);
+      await executeRun(`
+        INSERT INTO project_records (id, student_id, title, description, domain, tech_stack_json, is_team, student_role, github_url, live_url, category, status, prize_awarded)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [recId, studentId, title, description, domain, techStackJson, isTeam, studentRole, githubUrl, liveUrl, category, status, prizeAwarded]);
     }
   }
 
-  public deleteStudent360Record(studentId: string, recordType: string, recordId: string): boolean {
+  public async deleteStudent360Record(studentId: string, recordType: string, recordId: string): Promise<boolean> {
     const type = recordType.toLowerCase();
     let tableName = '';
     if (type === 'academics') tableName = 'academic_records';
@@ -1877,15 +1869,15 @@ export class SQLiteDB {
     else if (type === 'projects' || type === 'project') tableName = 'project_records';
 
     if (!tableName) return false;
-    sqlite.prepare(`DELETE FROM ${tableName} WHERE id = ? AND student_id = ?`).run(recordId, studentId);
-    return true;
+    const res = await executeRun(`DELETE FROM ${tableName} WHERE id = ? AND student_id = ?`, [recordId, studentId]);
+    return res.changes > 0;
   }
 
-  public getCertificateById(certId: string): any {
-    return sqlite.prepare('SELECT * FROM certificate_records WHERE id = ?').get(certId);
+  public async getCertificateById(certId: string): Promise<any> {
+    return await queryOne('SELECT * FROM certificate_records WHERE id = ?', [certId]);
   }
 
-  public saveCertificateUpload(rec: {
+  public async saveCertificateUpload(rec: {
     studentId: string;
     courseName: string;
     platform: string;
@@ -1893,17 +1885,17 @@ export class SQLiteDB {
     issueDate: string;
     filePath?: string;
     originalFileName?: string;
-  }): string {
+  }): Promise<string> {
     const id = `cert-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const now = new Date().toISOString();
-    sqlite.prepare(`
+    await executeRun(`
       INSERT INTO certificate_records (id, student_id, course_name, platform, category, issue_date, file_path, original_file_name, uploaded_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, rec.studentId, rec.courseName, rec.platform, rec.category, rec.issueDate, rec.filePath || '', rec.originalFileName || '', now);
+    `, [id, rec.studentId, rec.courseName, rec.platform, rec.category, rec.issueDate, rec.filePath || '', rec.originalFileName || '', now]);
     return id;
   }
 
-  public updateCertificateUpload(
+  public async updateCertificateUpload(
     certId: string,
     studentId: string,
     rec: {
@@ -1914,35 +1906,35 @@ export class SQLiteDB {
       filePath?: string;
       originalFileName?: string;
     }
-  ): boolean {
-    const existing = this.getCertificateById(certId);
+  ): Promise<boolean> {
+    const existing = await this.getCertificateById(certId);
     if (!existing || existing.student_id !== studentId) return false;
 
     const filePath = rec.filePath !== undefined ? rec.filePath : existing.file_path;
     const originalFileName = rec.originalFileName !== undefined ? rec.originalFileName : existing.original_file_name;
 
-    sqlite.prepare(`
+    await executeRun(`
       UPDATE certificate_records
       SET course_name = ?, platform = ?, category = ?, issue_date = ?, file_path = ?, original_file_name = ?
       WHERE id = ? AND student_id = ?
-    `).run(rec.courseName, rec.platform, rec.category, rec.issueDate, filePath, originalFileName, certId, studentId);
+    `, [rec.courseName, rec.platform, rec.category, rec.issueDate, filePath, originalFileName, certId, studentId]);
     return true;
   }
 
-  public addCertificateRecord(rec: { studentId: string; courseName: string; platform?: string }): string {
+  public async addCertificateRecord(rec: { studentId: string; courseName: string; platform?: string }): Promise<string> {
     const id = `cert-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    sqlite.prepare(`
+    await executeRun(`
       INSERT INTO certificate_records (id, student_id, course_name, platform, category, issue_date)
       VALUES (?, ?, ?, ?, 'Technical Certification', ?)
-    `).run(id, rec.studentId, rec.courseName, rec.platform || 'Online Platform', new Date().toISOString());
+    `, [id, rec.studentId, rec.courseName, rec.platform || 'Online Platform', new Date().toISOString()]);
     return id;
   }
 
-  public getParticipationById(partId: string): any {
-    return sqlite.prepare('SELECT * FROM participation_records WHERE id = ?').get(partId);
+  public async getParticipationById(partId: string): Promise<any> {
+    return await queryOne('SELECT * FROM participation_records WHERE id = ?', [partId]);
   }
 
-  public saveParticipationUpload(rec: {
+  public async saveParticipationUpload(rec: {
     studentId: string;
     eventName: string;
     category: string;
@@ -1953,13 +1945,13 @@ export class SQLiteDB {
     description?: string;
     filePath?: string;
     originalFileName?: string;
-  }): string {
+  }): Promise<string> {
     const id = `part-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const now = new Date().toISOString();
-    sqlite.prepare(`
+    await executeRun(`
       INSERT INTO participation_records (id, student_id, event_name, event_type, organizer, college_name, date, event_level, achievement, position, description, proof_file_path, original_file_name, uploaded_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    `, [
       id,
       rec.studentId,
       rec.eventName,
@@ -1974,11 +1966,11 @@ export class SQLiteDB {
       rec.filePath || '',
       rec.originalFileName || '',
       now
-    );
+    ]);
     return id;
   }
 
-  public updateParticipationUpload(
+  public async updateParticipationUpload(
     partId: string,
     studentId: string,
     rec: {
@@ -1992,18 +1984,18 @@ export class SQLiteDB {
       filePath?: string;
       originalFileName?: string;
     }
-  ): boolean {
-    const existing = this.getParticipationById(partId);
+  ): Promise<boolean> {
+    const existing = await this.getParticipationById(partId);
     if (!existing || existing.student_id !== studentId) return false;
 
     const filePath = rec.filePath !== undefined ? rec.filePath : (existing.proof_file_path || existing.file_path);
     const originalFileName = rec.originalFileName !== undefined ? rec.originalFileName : (existing.original_file_name || existing.originalFileName);
 
-    sqlite.prepare(`
+    await executeRun(`
       UPDATE participation_records
       SET event_name = ?, event_type = ?, organizer = ?, college_name = ?, date = ?, event_level = ?, achievement = ?, position = ?, description = ?, proof_file_path = ?, original_file_name = ?
       WHERE id = ? AND student_id = ?
-    `).run(
+    `, [
       rec.eventName,
       rec.category,
       rec.organizer,
@@ -2017,133 +2009,133 @@ export class SQLiteDB {
       originalFileName || '',
       partId,
       studentId
-    );
+    ]);
     return true;
   }
 
-  public addParticipationRecord(rec: { studentId: string; eventName: string; organizer?: string }): string {
+  public async addParticipationRecord(rec: { studentId: string; eventName: string; organizer?: string }): Promise<string> {
     const id = `part-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    sqlite.prepare(`
+    await executeRun(`
       INSERT INTO participation_records (id, student_id, event_name, event_type, organizer, date, is_team)
       VALUES (?, ?, ?, 'Hackathon', ?, ?, 1)
-    `).run(id, rec.studentId, rec.eventName, rec.organizer || 'Institution', new Date().toISOString());
+    `, [id, rec.studentId, rec.eventName, rec.organizer || 'Institution', new Date().toISOString()]);
     return id;
   }
 
-  public addProjectRecord(rec: { studentId: string; title: string; description?: string }): string {
+  public async addProjectRecord(rec: { studentId: string; title: string; description?: string }): Promise<string> {
     const id = `prj-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    sqlite.prepare(`
+    await executeRun(`
       INSERT INTO project_records (id, student_id, title, description, domain, tech_stack_json, is_team, student_role, category, status)
       VALUES (?, ?, ?, ?, 'AI & DS', '["Python","React"]', 1, 'Lead', 'Capstone', 'Completed')
-    `).run(id, rec.studentId, rec.title, rec.description || 'AI & DS Project');
+    `, [id, rec.studentId, rec.title, rec.description || 'AI & DS Project']);
     return id;
   }
 
-  public addAchievementRecord(rec: { studentId: string; title: string; eventName?: string }): string {
+  public async addAchievementRecord(rec: { studentId: string; title: string; eventName?: string }): Promise<string> {
     const id = `ach-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    sqlite.prepare(`
+    await executeRun(`
       INSERT INTO achievement_records (id, student_id, title, category, event_name, date, description)
       VALUES (?, ?, ?, 'Honors', ?, ?, 'Awarded for performance excellence')
-    `).run(id, rec.studentId, rec.title, rec.eventName || 'Department Expo', new Date().toISOString());
+    `, [id, rec.studentId, rec.title, rec.eventName || 'Department Expo', new Date().toISOString()]);
     return id;
   }
 
   // CONNECTED ACCOUNTS & VERIFIED EXTERNAL METRICS ENGINE
-  public getConnectedAccounts(studentId: string): any[] {
-    return sqlite.prepare(`
+  public async getConnectedAccounts(studentId: string): Promise<any[]> {
+    return await queryAll(`
       SELECT * FROM connected_accounts WHERE student_id = ? ORDER BY provider ASC
-    `).all(studentId);
+    `, [studentId]);
   }
 
-  public upsertConnectedAccount(studentId: string, provider: string, providerUsername: string, status = 'Connected', verificationStatus = 'VERIFIED', rawPayload?: any): void {
-    const existing = sqlite.prepare('SELECT id FROM connected_accounts WHERE student_id = ? AND provider = ?').get(studentId, provider) as any;
+  public async upsertConnectedAccount(studentId: string, provider: string, providerUsername: string, status = 'Connected', verificationStatus = 'VERIFIED', rawPayload?: any): Promise<void> {
+    const existing = await queryOne('SELECT id FROM connected_accounts WHERE student_id = ? AND provider = ?', [studentId, provider]);
     const now = new Date().toISOString();
     const payloadStr = rawPayload ? JSON.stringify(rawPayload) : null;
 
     if (existing) {
-      sqlite.prepare(`
+      await executeRun(`
         UPDATE connected_accounts
         SET provider_username = ?, connection_status = ?, verification_status = ?, last_synced_at = ?, raw_payload_json = ?
         WHERE id = ?
-      `).run(providerUsername, status, verificationStatus, now, payloadStr, existing.id);
+      `, [providerUsername, status, verificationStatus, now, payloadStr, existing.id]);
     } else {
       const id = `conn-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-      sqlite.prepare(`
+      await executeRun(`
         INSERT INTO connected_accounts (id, student_id, provider, provider_username, connection_status, verification_status, last_synced_at, raw_payload_json)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, studentId, provider, providerUsername, status, verificationStatus, now, payloadStr);
+      `, [id, studentId, provider, providerUsername, status, verificationStatus, now, payloadStr]);
     }
   }
 
-  public getExternalMetrics(studentId: string): any[] {
-    return sqlite.prepare(`
+  public async getExternalMetrics(studentId: string): Promise<any[]> {
+    return await queryAll(`
       SELECT * FROM external_metrics WHERE student_id = ? ORDER BY synced_at DESC
-    `).all(studentId);
+    `, [studentId]);
   }
 
-  public upsertExternalMetric(studentId: string, source: string, sourceIdentifier: string, metric: string, value: any, verificationStatus = 'VERIFIED'): void {
-    const existing = sqlite.prepare('SELECT id FROM external_metrics WHERE student_id = ? AND source = ? AND metric = ?').get(studentId, source, metric) as any;
+  public async upsertExternalMetric(studentId: string, source: string, sourceIdentifier: string, metric: string, value: any, verificationStatus = 'VERIFIED'): Promise<void> {
+    const existing = await queryOne('SELECT id FROM external_metrics WHERE student_id = ? AND source = ? AND metric = ?', [studentId, source, metric]);
     const now = new Date().toISOString();
     const strVal = String(value);
 
     if (existing) {
-      sqlite.prepare(`
+      await executeRun(`
         UPDATE external_metrics
         SET source_identifier = ?, value = ?, verification_status = ?, synced_at = ?, verified_at = ?
         WHERE id = ?
-      `).run(sourceIdentifier, strVal, verificationStatus, now, now, existing.id);
+      `, [sourceIdentifier, strVal, verificationStatus, now, now, existing.id]);
     } else {
       const id = `em-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-      sqlite.prepare(`
+      await executeRun(`
         INSERT INTO external_metrics (id, student_id, source, source_identifier, metric, value, verification_status, synced_at, verified_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, studentId, source, sourceIdentifier, metric, strVal, verificationStatus, now, now);
+      `, [id, studentId, source, sourceIdentifier, metric, strVal, verificationStatus, now, now]);
     }
   }
 
-  public isClassCoordinator(facultyUserId: string): boolean {
-    const assign = this.getFacultyAssignment(facultyUserId);
+  public async isClassCoordinator(facultyUserId: string): Promise<boolean> {
+    const assign = await this.getFacultyAssignment(facultyUserId);
     if (assign && assign.role === 'Class Coordinator') return true;
-    const user = this.getUserById(facultyUserId);
-    return Boolean(user && user.role === 'FACULTY'); // Fallback if assigned
+    const user = await this.getUserById(facultyUserId);
+    return Boolean(user && user.role === 'FACULTY');
   }
 
-  public resetStudentPasswordByFaculty(facultyUserId: string, studentId: string, newPassword: string): void {
-    const student = this.getStudentById(studentId);
+  public async resetStudentPasswordByFaculty(facultyUserId: string, studentId: string, newPassword: string): Promise<void> {
+    const student = await this.getStudentById(studentId);
     if (!student) throw new Error('Student not found.');
 
-    const user = sqlite.prepare('SELECT id FROM users WHERE email = ? OR identifier = ?').get(student.email, student.register_no) as any;
+    const user = await queryOne('SELECT id FROM users WHERE email = ? OR identifier = ?', [student.email, student.register_no]);
     if (!user) throw new Error('Student user account not found.');
 
     const salt = bcrypt.genSaltSync(10);
     const passwordHash = bcrypt.hashSync(newPassword, salt);
 
-    sqlite.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, user.id);
-    const facUser = this.getUserById(facultyUserId);
-    this.logAudit(facultyUserId, facUser ? facUser.email : 'faculty@aids.edu', 'FACULTY', 'RESET_STUDENT_PASSWORD', `STUDENT:${student.register_no}`);
+    await executeRun('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, user.id]);
+    const facUser = await this.getUserById(facultyUserId);
+    await this.logAudit(facultyUserId, facUser ? facUser.email : 'faculty@aids.edu', 'FACULTY', 'RESET_STUDENT_PASSWORD', `STUDENT:${student.register_no}`);
   }
 
-  public setStudentStatusByFaculty(facultyUserId: string, studentId: string, isActive: boolean): void {
-    const student = this.getStudentById(studentId);
+  public async setStudentStatusByFaculty(facultyUserId: string, studentId: string, isActive: boolean): Promise<void> {
+    const student = await this.getStudentById(studentId);
     if (!student) throw new Error('Student not found.');
 
-    const user = sqlite.prepare('SELECT id FROM users WHERE email = ? OR identifier = ?').get(student.email, student.register_no) as any;
+    const user = await queryOne('SELECT id FROM users WHERE email = ? OR identifier = ?', [student.email, student.register_no]);
     if (user) {
-      sqlite.prepare('UPDATE users SET is_active = ? WHERE id = ?').run(isActive ? 1 : 0, user.id);
+      await executeRun('UPDATE users SET is_active = ? WHERE id = ?', [isActive ? 1 : 0, user.id]);
     }
-    const facUser = this.getUserById(facultyUserId);
-    this.logAudit(facultyUserId, facUser ? facUser.email : 'faculty@aids.edu', 'FACULTY', 'TOGGLE_STUDENT_STATUS', `STUDENT:${student.register_no}:ACTIVE:${isActive}`);
+    const facUser = await this.getUserById(facultyUserId);
+    await this.logAudit(facultyUserId, facUser ? facUser.email : 'faculty@aids.edu', 'FACULTY', 'TOGGLE_STUDENT_STATUS', `STUDENT:${student.register_no}:ACTIVE:${isActive}`);
   }
 
   // TEAMS MODULE
-  public createTeam(data: { teamName: string; eventName: string; teamHeadStudentId: string; category?: string; projectName?: string; resultPosition?: string; prize?: string; proofFile?: string; members?: string[] }): any {
+  public async createTeam(data: { teamName: string; eventName: string; teamHeadStudentId: string; category?: string; projectName?: string; resultPosition?: string; prize?: string; proofFile?: string; members?: string[] }): Promise<any> {
     const id = `team-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const now = new Date().toISOString();
 
-    sqlite.prepare(`
+    await executeRun(`
       INSERT INTO teams (id, team_name, event_name, team_head_student_id, category, project_name, result_position, prize, proof_file, created_date)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    `, [
       id,
       data.teamName,
       data.eventName,
@@ -2154,40 +2146,42 @@ export class SQLiteDB {
       data.prize || 'Award Winner',
       data.proofFile || null,
       now
-    );
+    ]);
 
     if (Array.isArray(data.members)) {
-      data.members.forEach((stuId) => {
+      for (const stuId of data.members) {
         const memId = `tm-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-        sqlite.prepare('INSERT INTO team_members (id, team_id, student_id, role_in_team) VALUES (?, ?, ?, ?)').run(memId, id, stuId, stuId === data.teamHeadStudentId ? 'Leader' : 'Member');
-      });
+        await executeRun('INSERT INTO team_members (id, team_id, student_id, role_in_team) VALUES (?, ?, ?, ?)', [memId, id, stuId, stuId === data.teamHeadStudentId ? 'Leader' : 'Member']);
+      }
     }
 
-    return this.getTeamById(id);
+    return await this.getTeamById(id);
   }
 
-  public getTeamById(id: string): any {
-    const team = sqlite.prepare('SELECT * FROM teams WHERE id = ?').get(id) as any;
+  public async getTeamById(id: string): Promise<any> {
+    const team = await queryOne('SELECT * FROM teams WHERE id = ?', [id]);
     if (!team) return null;
-    const members = sqlite.prepare('SELECT student_id, role_in_team FROM team_members WHERE team_id = ?').all(id);
+    const members = await queryAll('SELECT student_id, role_in_team FROM team_members WHERE team_id = ?', [id]);
     return { ...team, members };
   }
 
-  public getTeams(): any[] {
-    const teams = sqlite.prepare('SELECT * FROM teams ORDER BY created_date DESC').all() as any[];
-    return teams.map((t) => {
-      const members = sqlite.prepare('SELECT student_id, role_in_team FROM team_members WHERE team_id = ?').all(t.id);
-      return { ...t, members };
-    });
+  public async getTeams(): Promise<any[]> {
+    const teams = await queryAll('SELECT * FROM teams ORDER BY created_date DESC');
+    const result: any[] = [];
+    for (const t of teams) {
+      const members = await queryAll('SELECT student_id, role_in_team FROM team_members WHERE team_id = ?', [t.id]);
+      result.push({ ...t, members });
+    }
+    return result;
   }
 
   // REPRESENTATIVE EVALUATIONS MODULE
-  public upsertRepresentativeEvaluation(data: any): void {
-    const existing = sqlite.prepare('SELECT id FROM representative_evaluations WHERE student_id = ? AND evaluation_period = ?').get(data.studentId, data.evaluationPeriod || 'Current Semester') as any;
+  public async upsertRepresentativeEvaluation(data: any): Promise<void> {
+    const existing = await queryOne('SELECT id FROM representative_evaluations WHERE student_id = ? AND evaluation_period = ?', [data.studentId, data.evaluationPeriod || 'Current Semester']);
     const now = new Date().toISOString();
 
     if (existing) {
-      sqlite.prepare(`
+      await executeRun(`
         UPDATE representative_evaluations
         SET communication_score = ?, faculty_coordination_score = ?, student_coordination_score = ?,
             attendance_followup_score = ?, late_comer_monitoring_score = ?, academic_updates_score = ?,
@@ -2195,40 +2189,40 @@ export class SQLiteDB {
             event_coordination_score = ?, responsibility_completion_score = ?, overall_remarks = ?,
             evaluated_by = ?, evaluated_at = ?
         WHERE id = ?
-      `).run(
+      `, [
         data.communicationScore || 8, data.facultyCoordinationScore || 8, data.studentCoordinationScore || 8,
         data.attendanceFollowupScore || 8, data.lateComerMonitoringScore || 8, data.academicUpdatesScore || 8,
         data.disciplineSupportScore || 8, data.cleanlinessResponsibilityScore || 8, data.noticeBoardScore || 8,
         data.eventCoordinationScore || 8, data.responsibilityCompletionScore || 8, data.overallRemarks || 'Satisfactory CR Performance',
         data.evaluatedBy, now, existing.id
-      );
+      ]);
     } else {
       const id = `rep-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-      sqlite.prepare(`
+      await executeRun(`
         INSERT INTO representative_evaluations (
           id, student_id, year, section, evaluation_period, communication_score, faculty_coordination_score,
           student_coordination_score, attendance_followup_score, late_comer_monitoring_score, academic_updates_score,
           discipline_support_score, cleanliness_responsibility_score, notice_board_score, event_coordination_score,
           responsibility_completion_score, overall_remarks, evaluated_by, evaluated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
+      `, [
         id, data.studentId, data.year || '2nd Year', data.section || 'A', data.evaluationPeriod || 'Current Semester',
         data.communicationScore || 8, data.facultyCoordinationScore || 8, data.studentCoordinationScore || 8,
         data.attendanceFollowupScore || 8, data.lateComerMonitoringScore || 8, data.academicUpdatesScore || 8,
         data.disciplineSupportScore || 8, data.cleanlinessResponsibilityScore || 8, data.noticeBoardScore || 8,
         data.eventCoordinationScore || 8, data.responsibilityCompletionScore || 8, data.overallRemarks || 'Satisfactory CR Performance',
         data.evaluatedBy, now
-      );
+      ]);
     }
   }
 
-  public getRepresentativeEvaluation(studentId: string): any {
-    return sqlite.prepare('SELECT * FROM representative_evaluations WHERE student_id = ? ORDER BY evaluated_at DESC LIMIT 1').get(studentId);
+  public async getRepresentativeEvaluation(studentId: string): Promise<any> {
+    return await queryOne('SELECT * FROM representative_evaluations WHERE student_id = ? ORDER BY evaluated_at DESC LIMIT 1', [studentId]);
   }
 
   // NPTEL GOOGLE OAUTH CONNECTION DATABASE METHODS
-  public saveNptelGoogleConnection(studentId: string, data: { connectedEmail: string; emailType?: string; purpose?: string; providerAccountId?: string; connectedOn?: string; lastSynced?: string; status?: string; rawPayload?: any }): void {
-    const existing = sqlite.prepare("SELECT id FROM connected_accounts WHERE student_id = ? AND (provider = 'GOOGLE' OR provider = 'NPTEL_GOOGLE') AND (purpose = ? OR purpose IS NULL)").get(studentId, data.purpose || 'NPTEL') as any;
+  public async saveNptelGoogleConnection(studentId: string, data: { connectedEmail: string; emailType?: string; purpose?: string; providerAccountId?: string; connectedOn?: string; lastSynced?: string; status?: string; rawPayload?: any }): Promise<void> {
+    const existing = await queryOne("SELECT id FROM connected_accounts WHERE student_id = ? AND (provider = 'GOOGLE' OR provider = 'NPTEL_GOOGLE') AND (purpose = ? OR purpose IS NULL)", [studentId, data.purpose || 'NPTEL']);
     const now = new Date().toISOString();
     const rawStr = data.rawPayload ? JSON.stringify(data.rawPayload) : null;
     const emailType = data.emailType || 'COLLEGE';
@@ -2236,22 +2230,22 @@ export class SQLiteDB {
     const providerAccountId = data.providerAccountId || `gacc-${Date.now()}`;
 
     if (existing) {
-      sqlite.prepare(`
+      await executeRun(`
         UPDATE connected_accounts
         SET provider = 'GOOGLE', purpose = ?, email_type = ?, connected_email = ?, provider_username = ?, provider_account_id = ?, connection_status = ?, verification_status = 'VERIFIED', last_synced_at = ?, raw_payload_json = ?
         WHERE id = ?
-      `).run(purpose, emailType, data.connectedEmail, data.connectedEmail, providerAccountId, data.status || 'CONNECTED', data.lastSynced || now, rawStr, existing.id);
+      `, [purpose, emailType, data.connectedEmail, data.connectedEmail, providerAccountId, data.status || 'CONNECTED', data.lastSynced || now, rawStr, existing.id]);
     } else {
       const id = `conn-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-      sqlite.prepare(`
+      await executeRun(`
         INSERT INTO connected_accounts (id, student_id, provider, purpose, email_type, connected_email, provider_username, provider_account_id, connection_status, verification_status, connected_at, last_synced_at, raw_payload_json)
         VALUES (?, ?, 'GOOGLE', ?, ?, ?, ?, ?, ?, 'VERIFIED', ?, ?, ?)
-      `).run(id, studentId, purpose, emailType, data.connectedEmail, data.connectedEmail, providerAccountId, data.status || 'CONNECTED', data.connectedOn || now, data.lastSynced || now, rawStr);
+      `, [id, studentId, purpose, emailType, data.connectedEmail, data.connectedEmail, providerAccountId, data.status || 'CONNECTED', data.connectedOn || now, data.lastSynced || now, rawStr]);
     }
   }
 
-  public getNptelGoogleConnection(studentId: string, purpose = 'NPTEL'): any {
-    const record = sqlite.prepare("SELECT * FROM connected_accounts WHERE student_id = ? AND (provider = 'GOOGLE' OR provider = 'NPTEL_GOOGLE') AND (purpose = ? OR purpose IS NULL OR purpose = 'NPTEL')").get(studentId, purpose) as any;
+  public async getNptelGoogleConnection(studentId: string, purpose = 'NPTEL'): Promise<any> {
+    const record = await queryOne("SELECT * FROM connected_accounts WHERE student_id = ? AND (provider = 'GOOGLE' OR provider = 'NPTEL_GOOGLE') AND (purpose = ? OR purpose IS NULL OR purpose = 'NPTEL')", [studentId, purpose]);
     if (!record) return null;
     return {
       id: record.id,
@@ -2269,12 +2263,12 @@ export class SQLiteDB {
     };
   }
 
-  public disconnectNptelGoogleConnection(studentId: string, purpose = 'NPTEL'): void {
-    sqlite.prepare("DELETE FROM connected_accounts WHERE student_id = ? AND (provider = 'GOOGLE' OR provider = 'NPTEL_GOOGLE') AND (purpose = ? OR purpose IS NULL OR purpose = 'NPTEL')").run(studentId, purpose);
+  public async disconnectNptelGoogleConnection(studentId: string, purpose = 'NPTEL'): Promise<void> {
+    await executeRun("DELETE FROM connected_accounts WHERE student_id = ? AND (provider = 'GOOGLE' OR provider = 'NPTEL_GOOGLE') AND (purpose = ? OR purpose IS NULL OR purpose = 'NPTEL')", [studentId, purpose]);
   }
 
   // CR ATTENDANCE STYLE DAILY RECORD METHODS
-  public saveDailyAttendance(date: string, records: { studentId: string; status: string }[], recordedBy: string): void {
+  public async saveDailyAttendance(date: string, records: { studentId: string; status: string }[], recordedBy: string): Promise<void> {
     if (date < '2026-07-13') {
       throw new Error('Attendance dates before 13 July 2026 are not valid or selectable.');
     }
@@ -2282,41 +2276,39 @@ export class SQLiteDB {
 
     for (const r of records) {
       if (!r.status || r.status === 'UNMARKED') {
-        sqlite.prepare('DELETE FROM daily_attendance_records WHERE student_id = ? AND date = ?').run(r.studentId, date);
+        await executeRun('DELETE FROM daily_attendance_records WHERE student_id = ? AND date = ?', [r.studentId, date]);
       } else {
-        const existing = sqlite.prepare('SELECT id FROM daily_attendance_records WHERE student_id = ? AND date = ?').get(r.studentId, date) as any;
+        const existing = await queryOne('SELECT id FROM daily_attendance_records WHERE student_id = ? AND date = ?', [r.studentId, date]);
         if (existing) {
-          sqlite.prepare('UPDATE daily_attendance_records SET status = ?, recorded_by = ?, recorded_at = ? WHERE id = ?')
-            .run(r.status, recordedBy, now, existing.id);
+          await executeRun('UPDATE daily_attendance_records SET status = ?, recorded_by = ?, recorded_at = ? WHERE id = ?', [r.status, recordedBy, now, existing.id]);
         } else {
           const id = `attd-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-          sqlite.prepare('INSERT INTO daily_attendance_records (id, student_id, date, status, recorded_by, recorded_at) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(id, r.studentId, date, r.status, recordedBy, now);
+          await executeRun('INSERT INTO daily_attendance_records (id, student_id, date, status, recorded_by, recorded_at) VALUES (?, ?, ?, ?, ?, ?)', [id, r.studentId, date, r.status, recordedBy, now]);
         }
       }
-      this.recalculateStudentAttendancePercentage(r.studentId);
+      await this.recalculateStudentAttendancePercentage(r.studentId);
     }
   }
 
-  public getDailyAttendanceByDateForFaculty(facultyId: string, date: string): any[] {
-    return sqlite.prepare(`
+  public async getDailyAttendanceByDateForFaculty(facultyId: string, date: string): Promise<any[]> {
+    return await queryAll(`
       SELECT d.*, s.register_no, s.name, s.year, s.section
       FROM daily_attendance_records d
       JOIN students s ON d.student_id = s.id
       WHERE d.date = ? AND (s.created_by_faculty_id = ? OR s.faculty_workspace_id = ?)
-    `).all(date, facultyId, facultyId) as any[];
+    `, [date, facultyId, facultyId]);
   }
 
-  public getDailyAttendanceByDate(date: string): any[] {
-    return sqlite.prepare(`
+  public async getDailyAttendanceByDate(date: string): Promise<any[]> {
+    return await queryAll(`
       SELECT d.*, s.register_no, s.name, s.year, s.section
       FROM daily_attendance_records d
       JOIN students s ON d.student_id = s.id
       WHERE d.date = ?
-    `).all(date) as any[];
+    `, [date]);
   }
 
-  public getAttendanceHistoryForFaculty(facultyId: string): any[] {
+  public async getAttendanceHistoryForFaculty(facultyId: string): Promise<any[]> {
     const query = `
       SELECT d.date,
         SUM(CASE WHEN d.status = 'PRESENT' THEN 1 ELSE 0 END) as presentCount,
@@ -2330,10 +2322,10 @@ export class SQLiteDB {
       WHERE d.date >= '2026-07-13' AND (s.created_by_faculty_id = ? OR s.faculty_workspace_id = ?)
       GROUP BY d.date ORDER BY d.date DESC
     `;
-    return sqlite.prepare(query).all(facultyId, facultyId) as any[];
+    return await queryAll(query, [facultyId, facultyId]);
   }
 
-  public getAttendanceHistory(year?: string, section?: string): any[] {
+  public async getAttendanceHistory(year?: string, section?: string): Promise<any[]> {
     let query = `
       SELECT d.date,
         SUM(CASE WHEN d.status = 'PRESENT' THEN 1 ELSE 0 END) as presentCount,
@@ -2351,17 +2343,17 @@ export class SQLiteDB {
     if (section) { query += ' AND s.section = ?'; params.push(section); }
     query += ' GROUP BY d.date ORDER BY d.date DESC';
 
-    return sqlite.prepare(query).all(...params) as any[];
+    return await queryAll(query, params);
   }
 
-  public getAttendanceHistoryByDateForFaculty(facultyId: string, date: string): any {
+  public async getAttendanceHistoryByDateForFaculty(facultyId: string, date: string): Promise<any> {
     const query = `
       SELECT d.status, s.id, s.register_no, s.name, s.year, s.section
       FROM daily_attendance_records d
       JOIN students s ON d.student_id = s.id
       WHERE d.date = ? AND (s.created_by_faculty_id = ? OR s.faculty_workspace_id = ?)
     `;
-    const rows = sqlite.prepare(query).all(date, facultyId, facultyId) as any[];
+    const rows = await queryAll(query, [date, facultyId, facultyId]);
     return {
       date,
       presentStudents: rows.filter((r) => r.status === 'PRESENT'),
@@ -2372,7 +2364,7 @@ export class SQLiteDB {
     };
   }
 
-  public getAttendanceHistoryByDate(date: string, year?: string, section?: string): any {
+  public async getAttendanceHistoryByDate(date: string, year?: string, section?: string): Promise<any> {
     let query = `
       SELECT d.status, s.id, s.register_no, s.name, s.year, s.section
       FROM daily_attendance_records d
@@ -2383,7 +2375,7 @@ export class SQLiteDB {
     if (year) { query += ' AND s.year = ?'; params.push(year); }
     if (section) { query += ' AND s.section = ?'; params.push(section); }
 
-    const rows = sqlite.prepare(query).all(...params) as any[];
+    const rows = await queryAll(query, params);
     return {
       date,
       presentStudents: rows.filter((r) => r.status === 'PRESENT'),
@@ -2394,24 +2386,26 @@ export class SQLiteDB {
     };
   }
 
-  public getTeamsForFaculty(facultyId: string): any[] {
+  public async getTeamsForFaculty(facultyId: string): Promise<any[]> {
     const query = `
       SELECT t.* FROM teams t
       JOIN students s ON t.team_head_student_id = s.id
       WHERE (s.created_by_faculty_id = ? OR s.faculty_workspace_id = ?)
       ORDER BY t.created_date DESC
     `;
-    const teams = sqlite.prepare(query).all(facultyId, facultyId) as any[];
-    return teams.map((t) => {
-      const members = sqlite.prepare('SELECT student_id, role_in_team FROM team_members WHERE team_id = ?').all(t.id);
-      return { ...t, members };
-    });
+    const teams = await queryAll(query, [facultyId, facultyId]);
+    const result: any[] = [];
+    for (const t of teams) {
+      const members = await queryAll('SELECT student_id, role_in_team FROM team_members WHERE team_id = ?', [t.id]);
+      result.push({ ...t, members });
+    }
+    return result;
   }
 
-  public recalculateStudentAttendancePercentage(studentId: string): void {
-    const stu = this.getStudentById(studentId);
+  public async recalculateStudentAttendancePercentage(studentId: string): Promise<void> {
+    const stu = await this.getStudentById(studentId);
     const startDate = (stu && (stu.entry_type === 'Lateral Entry' || (stu as any).entryType === 'Lateral Entry')) ? '2026-08-11' : '2026-07-13';
-    const rows = sqlite.prepare("SELECT status FROM daily_attendance_records WHERE student_id = ? AND date >= ?").all(studentId, startDate) as any[];
+    const rows = await queryAll("SELECT status FROM daily_attendance_records WHERE student_id = ? AND date >= ?", [studentId, startDate]);
     const totalWorkingDays = rows.length;
     const presentDays = rows.filter((r) => r.status === 'PRESENT').length;
     const absentDays = rows.filter((r) => r.status === 'ABSENT').length;
@@ -2421,28 +2415,28 @@ export class SQLiteDB {
     const percentage = totalWorkingDays > 0 ? parseFloat(((attendedCount / totalWorkingDays) * 100).toFixed(2)) : 0.0;
     const now = new Date().toISOString();
 
-    const existing = sqlite.prepare('SELECT id FROM attendance_records WHERE student_id = ?').get(studentId) as any;
+    const existing = await queryOne('SELECT id FROM attendance_records WHERE student_id = ?', [studentId]);
     if (existing) {
-      sqlite.prepare(`
+      await executeRun(`
         UPDATE attendance_records
         SET total_working_days = ?, present_days = ?, absent_days = ?, od_days = ?, ml_days = ?, percentage = ?, last_updated = ?
         WHERE id = ?
-      `).run(totalWorkingDays, presentDays, absentDays, odDays, mlDays, percentage, now, existing.id);
+      `, [totalWorkingDays, presentDays, absentDays, odDays, mlDays, percentage, now, existing.id]);
     } else {
       const id = `att-rec-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-      sqlite.prepare(`
+      await executeRun(`
         INSERT INTO attendance_records (id, student_id, total_working_days, present_days, absent_days, od_days, ml_days, percentage, last_updated)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, studentId, totalWorkingDays, presentDays, absentDays, odDays, mlDays, percentage, now);
+      `, [id, studentId, totalWorkingDays, presentDays, absentDays, odDays, mlDays, percentage, now]);
     }
   }
 
   // FACULTY STUDENT CREATION
-  public createStudentForFaculty(facultyUserId: string, studentData: any, defaultPassword = 'student123'): any {
-    const assignment = this.getFacultyAssignment(facultyUserId);
+  public async createStudentForFaculty(facultyUserId: string, studentData: any, defaultPassword = 'student123'): Promise<any> {
+    const assignment = await this.getFacultyAssignment(facultyUserId);
     const year = studentData.year || (assignment ? assignment.year : '2nd Year');
     const section = studentData.section || (assignment ? assignment.section : 'A');
-    const facultyUser = this.getUserById(facultyUserId);
+    const facultyUser = await this.getUserById(facultyUserId);
     const coordinatorName = facultyUser ? facultyUser.name : 'Assigned Faculty';
 
     const cleanEmail = (studentData.email || studentData.collegeEmail || '').trim().toLowerCase();
@@ -2455,7 +2449,7 @@ export class SQLiteDB {
       throw new Error('Student College Email ID is required.');
     }
 
-    const existingUser = sqlite.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?) OR LOWER(identifier) = LOWER(?)').get(cleanEmail, cleanRegNo);
+    const existingUser = await queryOne('SELECT id FROM users WHERE LOWER(email) = LOWER(?) OR LOWER(identifier) = LOWER(?)', [cleanEmail, cleanRegNo]);
     if (existingUser) {
       throw new Error(`Student account with email ${cleanEmail} or register number ${cleanRegNo} already exists.`);
     }
@@ -2471,15 +2465,15 @@ export class SQLiteDB {
     const studentId = `stu-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const entryType = studentData.entryType || studentData.entry_type || 'Regular';
 
-    sqlite.prepare(`
+    await executeRun(`
       INSERT INTO users (id, name, email, password_hash, role, identifier, year, section, is_active, created_at)
       VALUES (?, ?, ?, ?, 'STUDENT', ?, ?, ?, 1, ?)
-    `).run(userId, studentData.name, cleanEmail, passwordHash, cleanRegNo, year, section, new Date().toISOString());
+    `, [userId, studentData.name, cleanEmail, passwordHash, cleanRegNo, year, section, new Date().toISOString()]);
 
-    sqlite.prepare(`
+    await executeRun(`
       INSERT INTO students (id, register_no, name, email, personal_email, department, year, section, batch, class_coordinator_name, cgpa, overall_score, current_rank, entry_type, created_by_faculty_id, faculty_workspace_id)
       VALUES (?, ?, ?, ?, ?, 'AI & DS', ?, ?, ?, ?, ?, 0.0, 1, ?, ?, ?)
-    `).run(
+    `, [
       studentId,
       cleanRegNo,
       studentData.name,
@@ -2493,14 +2487,14 @@ export class SQLiteDB {
       entryType,
       facultyUserId,
       facultyUserId
-    );
+    ]);
 
-    this.logAudit(facultyUserId, facultyUser ? facultyUser.email : 'faculty@aids.edu', 'FACULTY', 'CREATE_STUDENT', `REG:${cleanRegNo}`);
-    return this.getStudentById(studentId);
+    await this.logAudit(facultyUserId, facultyUser ? facultyUser.email : 'faculty@aids.edu', 'FACULTY', 'CREATE_STUDENT', `REG:${cleanRegNo}`);
+    return await this.getStudentById(studentId);
   }
 
   // DELETION ENGINE (ROLE-BASED & AUDITED)
-  public deletePerformanceRecord(category: string, recordId: string, studentId: string): void {
+  public async deletePerformanceRecord(category: string, recordId: string, studentId: string): Promise<void> {
     const tableMap: Record<string, string> = {
       academics: 'academic_records',
       arrears: 'arrear_history',
@@ -2520,19 +2514,19 @@ export class SQLiteDB {
       throw new Error(`Invalid performance category: ${category}`);
     }
 
-    sqlite.prepare(`DELETE FROM ${tableName} WHERE id = ? AND student_id = ?`).run(recordId, studentId);
+    await executeRun(`DELETE FROM ${tableName} WHERE id = ? AND student_id = ?`, [recordId, studentId]);
   }
 
-  public deleteFinalizedAward(awardId: string): void {
-    sqlite.prepare('DELETE FROM finalized_awards WHERE id = ?').run(awardId);
+  public async deleteFinalizedAward(awardId: string): Promise<void> {
+    await executeRun('DELETE FROM finalized_awards WHERE id = ?', [awardId]);
   }
 
   // ATTACHMENT / PROOF FILE ENGINE
-  public createAttachment(att: AttachmentRecord): void {
-    sqlite.prepare(`
+  public async createAttachment(att: AttachmentRecord): Promise<void> {
+    await executeRun(`
       INSERT INTO attachments (id, student_id, record_type, record_id, original_file_name, stored_file_name, mime_type, file_size, uploaded_by_user_id, uploaded_by_role, uploaded_at, is_deleted)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-    `).run(
+    `, [
       att.id,
       att.student_id,
       att.record_type,
@@ -2544,95 +2538,135 @@ export class SQLiteDB {
       att.uploaded_by_user_id,
       att.uploaded_by_role,
       att.uploaded_at
-    );
+    ]);
   }
 
-  public getAttachmentById(id: string): AttachmentRecord | undefined {
-    return sqlite.prepare('SELECT * FROM attachments WHERE id = ? AND is_deleted = 0').get(id) as AttachmentRecord | undefined;
+  public async getAttachmentById(id: string): Promise<AttachmentRecord | undefined> {
+    return (await queryOne<AttachmentRecord>('SELECT * FROM attachments WHERE id = ? AND is_deleted = 0', [id])) || undefined;
   }
 
-  public getAttachmentForRecord(studentId: string, recordType: string, recordId: string): AttachmentRecord | undefined {
-    return sqlite.prepare(`
+  public async getAttachmentForRecord(studentId: string, recordType: string, recordId: string): Promise<AttachmentRecord | undefined> {
+    return (await queryOne<AttachmentRecord>(`
       SELECT * FROM attachments
       WHERE student_id = ? AND record_type = ? AND record_id = ? AND is_deleted = 0
       ORDER BY uploaded_at DESC LIMIT 1
-    `).get(studentId, recordType, recordId) as AttachmentRecord | undefined;
+    `, [studentId, recordType, recordId])) || undefined;
   }
 
-  public getAttachmentsForStudent(studentId: string): AttachmentRecord[] {
-    return sqlite.prepare(`
+  public async getAttachmentsForStudent(studentId: string): Promise<AttachmentRecord[]> {
+    return await queryAll<AttachmentRecord>(`
       SELECT * FROM attachments
       WHERE student_id = ? AND is_deleted = 0
       ORDER BY uploaded_at DESC
-    `).all(studentId) as AttachmentRecord[];
+    `, [studentId]);
   }
 
-  public softDeleteAttachment(id: string, deletedBy: string): void {
-    sqlite.prepare(`
+  public async softDeleteAttachment(id: string, deletedBy: string): Promise<void> {
+    await executeRun(`
       UPDATE attachments
       SET is_deleted = 1, deleted_at = ?, deleted_by = ?
       WHERE id = ?
-    `).run(new Date().toISOString(), deletedBy, id);
+    `, [new Date().toISOString(), deletedBy, id]);
   }
 
-  public deleteFacultyUser(userId: string): void {
-    sqlite.prepare('DELETE FROM users WHERE id = ? AND role = \'FACULTY\'').run(userId);
-    sqlite.prepare('DELETE FROM faculty_assignments WHERE faculty_id = ?').run(userId);
+  public async deleteFacultyUser(userId: string): Promise<void> {
+    await executeRun('DELETE FROM users WHERE id = ? AND role = \'FACULTY\'', [userId]);
+    await executeRun('DELETE FROM faculty_assignments WHERE faculty_id = ?', [userId]);
   }
 
-  public deleteHODUser(userId: string): void {
-    sqlite.prepare('DELETE FROM users WHERE id = ? AND role = \'HOD\'').run(userId);
+  public async deleteHODUser(userId: string): Promise<void> {
+    await executeRun('DELETE FROM users WHERE id = ? AND role = \'HOD\'', [userId]);
   }
 
-  public deleteStudentUser(studentId: string): void {
-    const student = this.getStudentById(studentId);
+  public async deleteStudentUser(studentId: string): Promise<void> {
+    const student = await this.getStudentById(studentId);
     const stuEmail = student ? (student.email || '') : '';
-    const stuReg = student ? (student.registerNo || '') : '';
-
-    sqlite.prepare('DELETE FROM students WHERE id = ?').run(studentId);
-    if (student) {
-      sqlite.prepare("DELETE FROM users WHERE id = ? OR (role = 'STUDENT' AND (LOWER(email) = LOWER(?) OR LOWER(identifier) = LOWER(?)))").run(studentId, stuEmail, stuReg);
-    } else {
-      sqlite.prepare("DELETE FROM users WHERE id = ? AND role = 'STUDENT'").run(studentId);
-    }
+    const stuReg = student ? (student.registerNo || student.register_no || '') : '';
 
     const tables = [
-      'academic_records', 'arrear_history', 'nptel_records', 'nptel_courses',
-      'discipline_records', 'certificate_records', 'participation_records',
-      'project_records', 'achievement_records', 'skilledge_records',
-      'skilledge_history', 'attendance_records', 'leetcode_stats',
-      'connected_accounts', 'external_metrics', 'attachments'
+      { name: 'academic_records', col: 'student_id' },
+      { name: 'arrear_history', col: 'student_id' },
+      { name: 'skilledge_records', col: 'student_id' },
+      { name: 'nptel_records', col: 'student_id' },
+      { name: 'attendance_records', col: 'student_id' },
+      { name: 'discipline_records', col: 'student_id' },
+      { name: 'certificate_records', col: 'student_id' },
+      { name: 'participation_records', col: 'student_id' },
+      { name: 'leetcode_stats', col: 'student_id' },
+      { name: 'project_records', col: 'student_id' },
+      { name: 'achievement_records', col: 'student_id' },
+      { name: 'finalized_awards', col: 'winner_student_id' },
+      { name: 'attachments', col: 'student_id' },
+      { name: 'connected_accounts', col: 'student_id' },
+      { name: 'external_metrics', col: 'student_id' },
+      { name: 'teams', col: 'team_head_student_id' },
+      { name: 'team_members', col: 'student_id' },
+      { name: 'representative_evaluations', col: 'student_id' },
+      { name: 'daily_attendance_records', col: 'student_id' },
+      { name: 'nptel_proofs', col: 'student_id' },
+      { name: 'leetcode_proofs', col: 'student_id' },
+      { name: 'team_heads', col: 'head_student_id' },
+      { name: 'team_head_members', col: 'student_id' },
+      { name: 'skilledge_sync_history', col: 'student_id' }
     ];
-    for (const t of tables) {
-      try {
-        sqlite.prepare(`DELETE FROM ${t} WHERE student_id = ?`).run(studentId);
-      } catch (_err) {
-        // Safe fallback if table or column doesn't exist
-      }
+
+    if (sqlite) {
+      const deleteTx = sqlite.transaction(() => {
+        for (const t of tables) {
+          try {
+            sqlite.prepare(`DELETE FROM ${t.name} WHERE ${t.col} = ?`).run(studentId);
+          } catch (_err) {
+            // Safe fallback if table or column doesn't exist
+          }
+        }
+        sqlite.prepare('DELETE FROM students WHERE id = ?').run(studentId);
+        if (student) {
+          sqlite.prepare("DELETE FROM users WHERE id = ? OR (role = 'STUDENT' AND (LOWER(email) = LOWER(?) OR LOWER(identifier) = LOWER(?)))").run(studentId, stuEmail, stuReg);
+        } else {
+          sqlite.prepare("DELETE FROM users WHERE id = ? AND role = 'STUDENT'").run(studentId);
+        }
+      });
+      deleteTx();
+    } else {
+      await executeTransaction(async () => {
+        for (const t of tables) {
+          try {
+            await executeRun(`DELETE FROM ${t.name} WHERE ${t.col} = ?`, [studentId]);
+          } catch (_err) {
+            // Safe fallback if table or column doesn't exist
+          }
+        }
+        await executeRun('DELETE FROM students WHERE id = ?', [studentId]);
+        if (student) {
+          await executeRun("DELETE FROM users WHERE id = ? OR (role = 'STUDENT' AND (LOWER(email) = LOWER(?) OR LOWER(identifier) = LOWER(?)))", [studentId, stuEmail, stuReg]);
+        } else {
+          await executeRun("DELETE FROM users WHERE id = ? AND role = 'STUDENT'", [studentId]);
+        }
+      });
     }
   }
 
   // SCORING CONFIG
-  public getScoringConfig(): ScoringConfig {
-    const cfg = sqlite.prepare('SELECT * FROM scoring_configuration WHERE id = \'default\'').get() as any;
+  public async getScoringConfig(): Promise<ScoringConfig> {
+    const cfg = await queryOne('SELECT * FROM scoring_configuration WHERE id = \'default\'');
     return {
-      academicWeight: cfg.academic_weight,
-      skillEdgeWeight: cfg.skilledge_weight,
-      nptelWeight: cfg.nptel_weight,
-      participationWeight: cfg.participation_weight,
-      certificatesWeight: cfg.certificates_weight,
-      attendanceWeight: cfg.attendance_weight,
-      disciplineWeight: cfg.discipline_weight,
-      leetcodeWeight: cfg.leetcode_weight,
-      projectsWeight: cfg.projects_weight
+      academicWeight: cfg?.academic_weight ?? 25,
+      skillEdgeWeight: cfg?.skilledge_weight ?? 15,
+      nptelWeight: cfg?.nptel_weight ?? 10,
+      participationWeight: cfg?.participation_weight ?? 10,
+      certificatesWeight: cfg?.certificates_weight ?? 10,
+      attendanceWeight: cfg?.attendance_weight ?? 10,
+      disciplineWeight: cfg?.discipline_weight ?? 5,
+      leetcodeWeight: cfg?.leetcode_weight ?? 10,
+      projectsWeight: cfg?.projects_weight ?? 5
     };
   }
 
-  public saveScoringConfig(c: ScoringConfig): void {
-    sqlite.prepare(`
+  public async saveScoringConfig(c: ScoringConfig): Promise<void> {
+    await executeRun(`
       UPDATE scoring_configuration SET academic_weight = ?, skilledge_weight = ?, nptel_weight = ?, participation_weight = ?, certificates_weight = ?, attendance_weight = ?, discipline_weight = ?, leetcode_weight = ?, projects_weight = ?
       WHERE id = 'default'
-    `).run(
+    `, [
       c.academicWeight,
       c.skillEdgeWeight,
       c.nptelWeight,
@@ -2642,19 +2676,19 @@ export class SQLiteDB {
       c.disciplineWeight,
       c.leetcodeWeight,
       c.projectsWeight
-    );
+    ]);
   }
 
   // FINALIZED AWARDS
-  public getFinalizedAwards(): any[] {
-    return sqlite.prepare('SELECT * FROM finalized_awards ORDER BY finalized_at DESC').all();
+  public async getFinalizedAwards(): Promise<any[]> {
+    return await queryAll('SELECT * FROM finalized_awards ORDER BY finalized_at DESC');
   }
 
-  public finalizeAward(awd: any): void {
-    sqlite.prepare(`
+  public async finalizeAward(awd: any): Promise<void> {
+    await executeRun(`
       INSERT INTO finalized_awards (id, award_key, award_title, winner_student_id, winner_student_name, register_no, year, section, overall_score, finalized_at, finalized_by_hod_name, ai_explanation)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    `, [
       awd.id || `awd-${Date.now()}`,
       awd.awardKey || awd.award_key || 'BEST_STUDENT',
       awd.awardTitle || awd.award_title || awd.awardName || 'Best Student of Department',
@@ -2667,22 +2701,22 @@ export class SQLiteDB {
       awd.finalizedAt || awd.finalized_at || new Date().toISOString().split('T')[0],
       awd.finalizedByHODName || awd.finalized_by_hod_name || 'HOD AI & DS',
       awd.aiExplanation || awd.ai_explanation || ''
-    );
+    ]);
   }
 
   // TEAM HEADS REPOSITORY
-  public createTeamHead(facultyId: string, headStudentId: string, memberLimit: number): any {
+  public async createTeamHead(facultyId: string, headStudentId: string, memberLimit: number): Promise<any> {
     const id = `th-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const now = new Date().toISOString();
-    sqlite.prepare(`
+    await executeRun(`
       INSERT INTO team_heads (id, faculty_id, head_student_id, member_limit, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, facultyId, headStudentId, memberLimit, now, now);
-    return this.getTeamHeadById(id);
+    `, [id, facultyId, headStudentId, memberLimit, now, now]);
+    return await this.getTeamHeadById(id);
   }
 
-  public getTeamHeadsForFaculty(facultyId: string): any[] {
-    const heads = sqlite.prepare(`
+  public async getTeamHeadsForFaculty(facultyId: string): Promise<any[]> {
+    const heads = await queryAll(`
       SELECT th.*,
              s.name as head_name,
              s.register_no as head_register_no,
@@ -2692,23 +2726,24 @@ export class SQLiteDB {
       JOIN students s ON th.head_student_id = s.id
       WHERE th.faculty_id = ?
       ORDER BY th.created_at DESC
-    `).all(facultyId) as any[];
+    `, [facultyId]);
 
-    return heads.map((h) => {
-      const members = sqlite.prepare(`
+    const result: any[] = [];
+    for (const h of heads) {
+      const members = await queryAll(`
         SELECT thm.id as member_rel_id,
                s.id, s.register_no, s.name, s.year, s.section, s.department, s.email, s.personal_email
         FROM team_head_members thm
         JOIN students s ON thm.student_id = s.id
         WHERE thm.team_head_id = ?
         ORDER BY thm.created_at ASC
-      `).all(h.id) as any[];
+      `, [h.id]);
 
       const addedCount = members.length;
       const remainingSlots = Math.max(0, h.member_limit - addedCount);
       const isFull = addedCount >= h.member_limit;
 
-      return {
+      result.push({
         id: h.id,
         facultyId: h.faculty_id,
         headStudentId: h.head_student_id,
@@ -2732,12 +2767,13 @@ export class SQLiteDB {
         })),
         createdAt: h.created_at,
         updatedAt: h.updated_at
-      };
-    });
+      });
+    }
+    return result;
   }
 
-  public getTeamHeadById(id: string): any | null {
-    const h = sqlite.prepare(`
+  public async getTeamHeadById(id: string): Promise<any | null> {
+    const h = await queryOne(`
       SELECT th.*,
              s.name as head_name,
              s.register_no as head_register_no,
@@ -2746,18 +2782,18 @@ export class SQLiteDB {
       FROM team_heads th
       JOIN students s ON th.head_student_id = s.id
       WHERE th.id = ?
-    `).get(id) as any;
+    `, [id]);
 
     if (!h) return null;
 
-    const members = sqlite.prepare(`
+    const members = await queryAll(`
       SELECT thm.id as member_rel_id,
              s.id, s.register_no, s.name, s.year, s.section, s.department, s.email, s.personal_email
       FROM team_head_members thm
       JOIN students s ON thm.student_id = s.id
       WHERE thm.team_head_id = ?
       ORDER BY thm.created_at ASC
-    `).all(h.id) as any[];
+    `, [h.id]);
 
     const addedCount = members.length;
     const remainingSlots = Math.max(0, h.member_limit - addedCount);
@@ -2790,49 +2826,47 @@ export class SQLiteDB {
     };
   }
 
-  public updateTeamHeadLimit(id: string, newLimit: number): any {
+  public async updateTeamHeadLimit(id: string, newLimit: number): Promise<any> {
     const now = new Date().toISOString();
-    sqlite.prepare(`
+    await executeRun(`
       UPDATE team_heads
       SET member_limit = ?, updated_at = ?
       WHERE id = ?
-    `).run(newLimit, now, id);
-    return this.getTeamHeadById(id);
+    `, [newLimit, now, id]);
+    return await this.getTeamHeadById(id);
   }
 
-  public deleteTeamHead(id: string): void {
-    sqlite.prepare('DELETE FROM team_heads WHERE id = ?').run(id);
+  public async deleteTeamHead(id: string): Promise<void> {
+    await executeRun('DELETE FROM team_heads WHERE id = ?', [id]);
   }
 
-  public setTeamHeadMembers(teamHeadId: string, studentIds: string[]): any {
+  public async setTeamHeadMembers(teamHeadId: string, studentIds: string[]): Promise<any> {
     const now = new Date().toISOString();
-    sqlite.prepare('DELETE FROM team_head_members WHERE team_head_id = ?').run(teamHeadId);
-
-    const insertStmt = sqlite.prepare(`
-      INSERT INTO team_head_members (id, team_head_id, student_id, created_at)
-      VALUES (?, ?, ?, ?)
-    `);
+    await executeRun('DELETE FROM team_head_members WHERE team_head_id = ?', [teamHeadId]);
 
     for (const sId of studentIds) {
       const relId = `thm-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-      insertStmt.run(relId, teamHeadId, sId, now);
+      await executeRun(`
+        INSERT INTO team_head_members (id, team_head_id, student_id, created_at)
+        VALUES (?, ?, ?, ?)
+      `, [relId, teamHeadId, sId, now]);
     }
 
-    return this.getTeamHeadById(teamHeadId);
+    return await this.getTeamHeadById(teamHeadId);
   }
 
-  public removeTeamHeadMember(teamHeadId: string, studentId: string): any {
-    sqlite.prepare('DELETE FROM team_head_members WHERE team_head_id = ? AND student_id = ?').run(teamHeadId, studentId);
-    return this.getTeamHeadById(teamHeadId);
+  public async removeTeamHeadMember(teamHeadId: string, studentId: string): Promise<any> {
+    await executeRun('DELETE FROM team_head_members WHERE team_head_id = ? AND student_id = ?', [teamHeadId, studentId]);
+    return await this.getTeamHeadById(teamHeadId);
   }
 
   // SUBJECT MANAGEMENT METHODS
-  public getSubjects(
+  public async getSubjects(
     filtersOrYear?: { year?: string; semester?: number; section?: string; search?: string } | string,
     semester?: number,
     section?: string,
     search?: string
-  ): SubjectRecord[] {
+  ): Promise<SubjectRecord[]> {
     let yearFilter: string | undefined;
     let semesterFilter: number | undefined;
     let sectionFilter: string | undefined;
@@ -2872,7 +2906,7 @@ export class SQLiteDB {
     }
 
     query += ' ORDER BY year ASC, semester ASC, subject_code ASC';
-    const rows = sqlite.prepare(query).all(...params) as any[];
+    const rows = await queryAll(query, params);
 
     return rows.map((r) => ({
       id: r.id,
@@ -2898,8 +2932,8 @@ export class SQLiteDB {
     }));
   }
 
-  public getSubjectById(id: string): SubjectRecord | undefined {
-    const r = sqlite.prepare('SELECT * FROM subjects WHERE id = ?').get(id) as any;
+  public async getSubjectById(id: string): Promise<SubjectRecord | undefined> {
+    const r = await queryOne('SELECT * FROM subjects WHERE id = ?', [id]);
     if (!r) return undefined;
     return {
       id: r.id,
@@ -2925,7 +2959,7 @@ export class SQLiteDB {
     };
   }
 
-  public addSubject(sub: Partial<SubjectRecord>): SubjectRecord {
+  public async addSubject(sub: Partial<SubjectRecord>): Promise<SubjectRecord> {
     const code = sub.subjectCode || (sub as any).subject_code || '';
     const name = sub.subjectName || (sub as any).subject_name || '';
     const dept = sub.department || 'AI & Data Science';
@@ -2948,10 +2982,10 @@ export class SQLiteDB {
     const cleanHandler = String(handler).trim();
 
     // Duplicate prevention check
-    const existing = sqlite.prepare(`
+    const existing = await queryOne(`
       SELECT id FROM subjects
       WHERE UPPER(subject_code) = ? AND year = ? AND semester = ? AND (section = ? OR section = 'ALL' OR ? = 'ALL')
-    `).get(cleanCode, cleanYear, sem, cleanSec, cleanSec) as any;
+    `, [cleanCode, cleanYear, sem, cleanSec, cleanSec]);
 
     if (existing) {
       throw new Error(`Subject Code "${cleanCode}" already exists for ${cleanYear} Semester ${sem} Section ${cleanSec}. Duplicate subject codes are not allowed.`);
@@ -2960,16 +2994,16 @@ export class SQLiteDB {
     const id = `sub-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const now = new Date().toISOString();
 
-    sqlite.prepare(`
+    await executeRun(`
       INSERT INTO subjects (id, subject_code, subject_name, department, academic_year, year, semester, section, subject_type, credits, faculty_handler, created_by_user_id, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, cleanCode, cleanName, cleanDept, cleanAcadYear, cleanYear, sem, cleanSec, cleanType, creditsNum, cleanHandler, userId, now);
+    `, [id, cleanCode, cleanName, cleanDept, cleanAcadYear, cleanYear, sem, cleanSec, cleanType, creditsNum, cleanHandler, userId, now]);
 
-    return this.getSubjectById(id)!;
+    return (await this.getSubjectById(id))!;
   }
 
-  public updateSubject(id: string, sub: Partial<SubjectRecord>): SubjectRecord {
-    const existing = this.getSubjectById(id);
+  public async updateSubject(id: string, sub: Partial<SubjectRecord>): Promise<SubjectRecord> {
+    const existing = await this.getSubjectById(id);
     if (!existing) {
       throw new Error('Subject record not found.');
     }
@@ -2996,38 +3030,38 @@ export class SQLiteDB {
 
     // Check duplicate code if code/year/sem/sec is changing
     if (cleanCode !== existing.subjectCode || cleanYear !== existing.year || sem !== existing.semester || cleanSec !== existing.section) {
-      const dup = sqlite.prepare(`
+      const dup = await queryOne(`
         SELECT id FROM subjects
         WHERE UPPER(subject_code) = ? AND year = ? AND semester = ? AND (section = ? OR section = 'ALL' OR ? = 'ALL') AND id != ?
-      `).get(cleanCode, cleanYear, sem, cleanSec, cleanSec, id) as any;
+      `, [cleanCode, cleanYear, sem, cleanSec, cleanSec, id]);
 
       if (dup) {
         throw new Error(`Subject Code "${cleanCode}" already exists for ${cleanYear} Semester ${sem} Section ${cleanSec}.`);
       }
     }
 
-    sqlite.prepare(`
+    await executeRun(`
       UPDATE subjects
       SET subject_code = ?, subject_name = ?, department = ?, academic_year = ?, year = ?, semester = ?, section = ?, subject_type = ?, credits = ?, faculty_handler = ?
       WHERE id = ?
-    `).run(cleanCode, cleanName, cleanDept, cleanAcadYear, cleanYear, sem, cleanSec, cleanType, creditsNum, cleanHandler, id);
+    `, [cleanCode, cleanName, cleanDept, cleanAcadYear, cleanYear, sem, cleanSec, cleanType, creditsNum, cleanHandler, id]);
 
-    return this.getSubjectById(id)!;
+    return (await this.getSubjectById(id))!;
   }
 
-  public deleteSubject(id: string): boolean {
-    const res = sqlite.prepare('DELETE FROM subjects WHERE id = ?').run(id);
+  public async deleteSubject(id: string): Promise<boolean> {
+    const res = await executeRun('DELETE FROM subjects WHERE id = ?', [id]);
     return res.changes > 0;
   }
 
   // AUDIT LOGS
-  public logAudit(userId: string, email: string, role: string, action: string, resource: string): void {
-    sqlite.prepare(`
+  public async logAudit(userId: string, email: string, role: string, action: string, resource: string): Promise<void> {
+    await executeRun(`
       INSERT INTO audit_logs (id, user_id, user_email, role, action, target_resource, timestamp)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(`aud-${Date.now()}`, userId, email, role, action, resource, new Date().toISOString());
+    `, [`aud-${Date.now()}`, userId, email, role, action, resource, new Date().toISOString()]);
   }
 }
 
 export const db = new SQLiteDB();
-SQLiteDB.initSystemAccounts();
+SQLiteDB.initSystemAccounts().catch((err) => console.error('Error initializing system accounts:', err));

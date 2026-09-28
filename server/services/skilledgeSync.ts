@@ -22,7 +22,7 @@ let globalLastDailySyncAt: string | null = null;
  */
 export function generateSkillEdgeTracksForStudent(student: any, existingTracks?: any[]) {
   const isLateral = (student.entryType === 'Lateral Entry' || student.entry_type === 'Lateral Entry');
-  
+
   // Track configurations
   const defaultTracks = [
     {
@@ -105,7 +105,7 @@ export async function syncStudentSkillEdge(
   studentId: string,
   syncSource: 'DAILY_AUTO' | 'MANUAL_FACULTY' | 'MANUAL_HOD' = 'DAILY_AUTO'
 ): Promise<SkillEdgeSyncResult> {
-  const student = db.getStudentById(studentId);
+  const student = await db.getStudentById(studentId);
   if (!student) {
     throw new Error(`Student record not found for ID "${studentId}".`);
   }
@@ -115,7 +115,7 @@ export async function syncStudentSkillEdge(
   const now = new Date().toISOString();
 
   // Get existing record to track previous points
-  const existingRecord = db.getSkillEdgeRecord(studentId);
+  const existingRecord = await db.getSkillEdgeRecord(studentId);
   const previousPoints = existingRecord?.totalRewardPoints || 0;
 
   // Determine handle / mapping
@@ -142,10 +142,10 @@ export async function syncStudentSkillEdge(
     };
 
     // Save to main table
-    db.saveSkillEdgeRecord(studentId, skilledgeData);
+    await db.saveSkillEdgeRecord(studentId, skilledgeData);
 
     // Save snapshot in history table
-    db.saveSkillEdgeSyncHistory({
+    await db.saveSkillEdgeSyncHistory({
       student_id: studentId,
       previousPoints,
       currentPoints,
@@ -158,9 +158,9 @@ export async function syncStudentSkillEdge(
     });
 
     // Recalculate student rank and scores
-    const full360 = db.getStudent360(studentId);
+    const full360 = await db.getStudent360(studentId);
     if (full360) {
-      const scoringConfig = db.getScoringConfig();
+      const scoringConfig = await db.getScoringConfig();
       const categoryScores = calculateCategoryScores(
         full360.student as any,
         full360.academics,
@@ -173,7 +173,7 @@ export async function syncStudentSkillEdge(
         full360.projects
       );
       const newScore = computeOverallScore(categoryScores, scoringConfig) || 0;
-      db.updateStudentScoreAndRank(studentId, newScore, student.current_rank || 1);
+      await db.updateStudentScoreAndRank(studentId, newScore, student.current_rank || 1);
     }
 
     return {
@@ -189,9 +189,9 @@ export async function syncStudentSkillEdge(
     };
   } catch (err: any) {
     const errorMsg = err.message || 'SkillEdge sync failed.';
-    
+
     // Save failure snapshot to history
-    db.saveSkillEdgeSyncHistory({
+    await db.saveSkillEdgeSyncHistory({
       student_id: studentId,
       previousPoints,
       currentPoints: previousPoints,
@@ -236,7 +236,7 @@ export async function syncDepartmentSkillEdge(
 
   isDepartmentSyncRunning = true;
   const now = new Date().toISOString();
-  const students = db.getStudents('ALL', 'ALL');
+  const students = await db.getStudents('ALL', 'ALL');
   const results: SkillEdgeSyncResult[] = [];
   let totalPointsEarned = 0;
 
@@ -279,7 +279,7 @@ export async function syncDepartmentSkillEdge(
  */
 export function initSkillEdgeScheduler() {
   console.log('⚡ [SkillEdge Scheduler] Initializing automated daily SkillEdge synchronization job...');
-  
+
   // Run initial sync on startup
   syncDepartmentSkillEdge('DAILY_AUTO')
     .then((summary) => {

@@ -156,17 +156,18 @@ export async function getTopRecognitionRankings(
   sectionFilter?: string,
   includeTest = false
 ): Promise<TopRecognitionResponse> {
-  const allStudents = db.getStudents(yearFilter, sectionFilter);
-  const scoringConfig = db.getScoringConfig();
+  const allStudents = await db.getStudents(yearFilter, sectionFilter);
+  const scoringConfig = await db.getScoringConfig();
+  const allTeams = await db.getTeams();
 
   // Filter test/demo data if includeTest is false
   const pool = includeTest ? allStudents : allStudents.filter((s) => !isTestOrDemoRecord(s));
   const activePool = pool.length > 0 ? pool : allStudents; // Fallback to allStudents if real roster is empty
 
   // 1. Evaluate all students for the 4 categories using existing DB records and scoringEngine formulas
-  const evaluatedPool = activePool
-    .map((stu) => {
-      const full360 = db.getStudent360(stu.id);
+  const evaluatedPoolRaw = await Promise.all(
+    activePool.map(async (stu) => {
+      const full360 = await db.getStudent360(stu.id);
       if (!full360 || !full360.student) {
         return null;
       }
@@ -200,7 +201,8 @@ export async function getTopRecognitionRankings(
         teamHeadScore
       };
     })
-    .filter(Boolean) as any[];
+  );
+  const evaluatedPool = evaluatedPoolRaw.filter(Boolean) as any[];
 
   // --- CATEGORY A: BEST STUDENT ---
   // Formula: computeOverallScore(breakdown, scoringConfig)
@@ -213,7 +215,7 @@ export async function getTopRecognitionRankings(
   // --- CATEGORY B: BEST TEAM HEAD ---
   // Formula: computeTeamHeadScore(student, projects)
   const teamHeadCandidates = evaluatedPool.filter((item) => {
-    const teams = db.getTeams().filter((t) => t.team_head_student_id === item.student.id);
+    const teams = allTeams.filter((t) => t.team_head_student_id === item.student.id);
     const leadPrjs = (item.full360.projects || []).filter(
       (p: any) => p.isTeam && (p.studentRole || '').toLowerCase().includes('lead')
     );
@@ -222,8 +224,8 @@ export async function getTopRecognitionRankings(
 
   const bestTeamHeadSorted = [...teamHeadCandidates].sort((a, b) => {
     if (b.teamHeadScore !== a.teamHeadScore) return b.teamHeadScore - a.teamHeadScore;
-    const aTeams = db.getTeams().filter((t) => t.team_head_student_id === a.student.id).length;
-    const bTeams = db.getTeams().filter((t) => t.team_head_student_id === b.student.id).length;
+    const aTeams = allTeams.filter((t) => t.team_head_student_id === a.student.id).length;
+    const bTeams = allTeams.filter((t) => t.team_head_student_id === b.student.id).length;
     if (bTeams !== aTeams) return bTeams - aTeams;
     return (b.student.cgpa || 0) - (a.student.cgpa || 0);
   });
@@ -434,7 +436,8 @@ async function generateGeminiExplanation(categoryKey: string, rank: 1 | 2, item:
   const student = item.student;
   const breakdown = item.breakdown || {};
   const leetcode = item.full360?.leetcode;
-  const teams = db.getTeams().filter((t) => t.team_head_student_id === student.id);
+  const allTeams = await db.getTeams();
+  const teams = allTeams.filter((t) => t.team_head_student_id === student.id);
 
   // 1. Live Gemini REST API call if GEMINI_API_KEY is present and connection test succeeded
   if (isApiActive && apiKey && apiKey.trim().length > 0) {
@@ -535,13 +538,14 @@ export async function getAllCategoryRankings(
 }> {
   const topRec = await getTopRecognitionRankings(yearFilter, sectionFilter, includeTest);
 
-  const allStudents = db.getStudents(yearFilter, sectionFilter);
+  const allStudents = await db.getStudents(yearFilter, sectionFilter);
+  const scoringConfig = await db.getScoringConfig();
   const pool = includeTest ? allStudents : allStudents.filter((s) => !isTestOrDemoRecord(s));
   const activePool = pool.length > 0 ? pool : allStudents;
 
-  const evaluatedPool = activePool
-    .map((stu) => {
-      const full360 = db.getStudent360(stu.id);
+  const evaluatedPoolRaw = await Promise.all(
+    activePool.map(async (stu) => {
+      const full360 = await db.getStudent360(stu.id);
       if (!full360 || !full360.student) return null;
 
       const breakdown = calculateCategoryScores(
@@ -580,7 +584,7 @@ export async function getAllCategoryRankings(
       const disciplineScore = breakdown.discipline || 0;
       const teamHeadScore = computeTeamHeadScore(stu as any, full360.projects || []);
       const eliteScore = computeEliteStudentScore(breakdown);
-      const overallScore = computeOverallScore(breakdown, db.getScoringConfig());
+      const overallScore = computeOverallScore(breakdown, scoringConfig);
 
       return {
         student: full360.student,
@@ -761,7 +765,7 @@ export async function getLeetCodeFullAnalytics(
   const topRec = await getTopRecognitionRankings(yearFilter, sectionFilter, includeTest);
   const bestLcCat = topRec.bestLeetCodePerformer;
 
-  const allStudents = db.getStudents(yearFilter, sectionFilter);
+  const allStudents = await db.getStudents(yearFilter, sectionFilter);
   const pool = includeTest ? allStudents : allStudents.filter((s) => !isTestOrDemoRecord(s));
   const activePool = pool.length > 0 ? pool : allStudents;
 
@@ -771,8 +775,8 @@ export async function getLeetCodeFullAnalytics(
   let ratingSum = 0;
   let activeCoders = 0;
 
-  activePool.forEach((stu) => {
-    const full360 = db.getStudent360(stu.id);
+  for (const stu of activePool) {
+    const full360 = await db.getStudent360(stu.id);
     const lc = full360?.leetcode;
     if (lc && lc.totalSolved > 0) {
       easyTotal += lc.easySolved || 0;
@@ -781,15 +785,15 @@ export async function getLeetCodeFullAnalytics(
       ratingSum += lc.contestRating || 1200;
       activeCoders += 1;
     }
-  });
+  }
 
   const grandTotal = easyTotal + medTotal + hardTotal;
   const easyPct = grandTotal > 0 ? Math.round((easyTotal / grandTotal) * 100) : 0;
   const medPct = grandTotal > 0 ? Math.round((medTotal / grandTotal) * 100) : 0;
   const hardPct = grandTotal > 0 ? Math.round((hardTotal / grandTotal) * 100) : 0;
 
-  const firstStu = bestLcCat.firstPlace.studentId ? db.getStudent360(bestLcCat.firstPlace.studentId) : null;
-  const secondStu = bestLcCat.secondPlace.studentId ? db.getStudent360(bestLcCat.secondPlace.studentId) : null;
+  const firstStu = bestLcCat.firstPlace.studentId ? await db.getStudent360(bestLcCat.firstPlace.studentId) : null;
+  const secondStu = bestLcCat.secondPlace.studentId ? await db.getStudent360(bestLcCat.secondPlace.studentId) : null;
 
   const firstPlaceWithStats = {
     ...bestLcCat.firstPlace,

@@ -5,6 +5,7 @@ import fs from 'fs';
 import { db } from '../db';
 import { authenticateToken, requireRole, verifyFacultySectionAccess, AuthRequest } from '../middleware/auth';
 import { calculateCategoryScores, computeOverallScore } from '../scoringEngine';
+import { generateSecureRandomPassword } from '../services/security';
 
 const router = Router();
 
@@ -69,12 +70,12 @@ const certUpload = multer({
 router.use(authenticateToken, requireRole('FACULTY'));
 
 // GET assigned roster ONLY based on authenticated backend identity derived from faculty_assignments table
-router.get('/students', (req: AuthRequest, res: Response) => {
-  const assignment = db.getFacultyAssignment(req.user!.id);
+router.get('/students', async (req: AuthRequest, res: Response) => {
+  const assignment = await db.getFacultyAssignment(req.user!.id);
   const assignedYear = assignment ? assignment.year : req.user!.assignedYear || '2nd Year';
   const assignedSection = assignment ? assignment.section : req.user!.assignedSection || 'A';
 
-  const assignedRoster = db.getStudentsForFaculty(req.user!.id, assignedYear, assignedSection);
+  const assignedRoster = await db.getStudentsForFaculty(req.user!.id, assignedYear, assignedSection);
 
   return res.json({
     assignedYear,
@@ -85,23 +86,23 @@ router.get('/students', (req: AuthRequest, res: Response) => {
 });
 
 // GET workspace Elite Students
-router.get('/elite-students', (req: AuthRequest, res: Response) => {
-  const assignment = db.getFacultyAssignment(req.user!.id);
+router.get('/elite-students', async (req: AuthRequest, res: Response) => {
+  const assignment = await db.getFacultyAssignment(req.user!.id);
   const assignedYear = assignment ? assignment.year : req.user!.assignedYear || '2nd Year';
   const assignedSection = assignment ? assignment.section : req.user!.assignedSection || 'A';
 
-  const students = db.getEliteStudents(assignedYear, assignedSection, req.user!.id);
+  const students = await db.getEliteStudents(assignedYear, assignedSection, req.user!.id);
   return res.json({ count: students.length, students });
 });
 
 // POST toggle student Elite designation
-router.post('/students/:studentId/elite-status', verifyFacultySectionAccess, (req: AuthRequest, res: Response) => {
+router.post('/students/:studentId/elite-status', verifyFacultySectionAccess, async (req: AuthRequest, res: Response) => {
   const studentId = req.params.studentId || req.body?.studentId;
   if (!studentId) {
     return res.status(400).json({ error: 'Bad Request: Student ID parameter is required.' });
   }
 
-  const student = db.getStudentById(studentId);
+  const student = await db.getStudentById(studentId);
   if (!student) {
     return res.status(404).json({ error: 'Student record not found.' });
   }
@@ -113,7 +114,7 @@ router.post('/students/:studentId/elite-status', verifyFacultySectionAccess, (re
 
   const isElite = Boolean(isEliteRaw === true || isEliteRaw === 'true' || isEliteRaw === 1 || isEliteRaw === '1');
 
-  db.updateStudentEliteStatus(studentId, isElite);
+  await db.updateStudentEliteStatus(studentId, isElite);
   return res.json({
     message: isElite ? `Marked ${student.name} as an Elite Student.` : `Removed ${student.name} from Elite Students list.`,
     studentId,
@@ -122,13 +123,13 @@ router.post('/students/:studentId/elite-status', verifyFacultySectionAccess, (re
 });
 
 // POST update student profile (LinkedIn, GitHub, LeetCode, CGPA, Points)
-router.post('/students/:studentId/update-profile', verifyFacultySectionAccess, (req: AuthRequest, res: Response) => {
+router.post('/students/:studentId/update-profile', verifyFacultySectionAccess, async (req: AuthRequest, res: Response) => {
   const studentId = req.params.studentId || req.body?.studentId;
   if (!studentId) {
     return res.status(400).json({ error: 'Bad Request: Student ID parameter is required.' });
   }
 
-  const student = db.getStudentById(studentId);
+  const student = await db.getStudentById(studentId);
   if (!student) {
     return res.status(404).json({ error: 'Student record not found.' });
   }
@@ -138,7 +139,7 @@ router.post('/students/:studentId/update-profile', verifyFacultySectionAccess, (
   const parsedCgpa = cgpa !== undefined && cgpa !== null && !isNaN(parseFloat(cgpa)) ? parseFloat(cgpa) : undefined;
   const parsedPoints = skillEdgePoints !== undefined && skillEdgePoints !== null && !isNaN(parseInt(skillEdgePoints, 10)) ? parseInt(skillEdgePoints, 10) : undefined;
 
-  db.updateStudentProfile(studentId, {
+  await db.updateStudentProfile(studentId, {
     linkedinUrl: typeof linkedinUrl === 'string' ? linkedinUrl.trim() : undefined,
     githubUrl: typeof githubUrl === 'string' ? githubUrl.trim() : undefined,
     leetcodeUsername: typeof leetcodeUsername === 'string' ? leetcodeUsername.trim() : undefined,
@@ -146,7 +147,7 @@ router.post('/students/:studentId/update-profile', verifyFacultySectionAccess, (
     skillEdgePoints: parsedPoints
   });
 
-  const updated360 = db.getStudent360(studentId);
+  const updated360 = await db.getStudent360(studentId);
   return res.json({
     message: `Updated profile details for ${student.name}.`,
     profile: updated360
@@ -154,15 +155,15 @@ router.post('/students/:studentId/update-profile', verifyFacultySectionAccess, (
 });
 
 // GET single student 360 profile (verifies section access on server!)
-router.get('/students/:studentId/360', verifyFacultySectionAccess, (req: AuthRequest, res: Response) => {
+router.get('/students/:studentId/360', verifyFacultySectionAccess, async (req: AuthRequest, res: Response) => {
   const { studentId } = req.params;
-  const full360 = db.getStudent360(studentId);
+  const full360 = await db.getStudent360(studentId);
 
   if (!full360) {
     return res.status(404).json({ error: 'Student profile not found.' });
   }
 
-  const scoringConfig = db.getScoringConfig();
+  const scoringConfig = await db.getScoringConfig();
   const categoryScores = calculateCategoryScores(
     full360.student as any,
     full360.academics,
@@ -187,12 +188,12 @@ router.get('/students/:studentId/360', verifyFacultySectionAccess, (req: AuthReq
 });
 
 // Helper function to recalculate ONLY the affected student's score and update rank
-function recalculateAffectedStudentScore(studentId: string) {
-  const targetStudent = db.getStudentById(studentId);
+async function recalculateAffectedStudentScore(studentId: string) {
+  const targetStudent = await db.getStudentById(studentId);
   if (!targetStudent) return 0;
 
-  const full360 = db.getStudent360(studentId)!;
-  const scoringConfig = db.getScoringConfig();
+  const full360 = (await db.getStudent360(studentId))!;
+  const scoringConfig = await db.getScoringConfig();
   const breakdown = calculateCategoryScores(
     full360.student as any,
     full360.academics,
@@ -208,17 +209,18 @@ function recalculateAffectedStudentScore(studentId: string) {
   const newOverallScore = computeOverallScore(breakdown, scoringConfig) || 0;
 
   // Update ONLY section ranking
-  const sectionStudents = db.getStudents(targetStudent.year, targetStudent.section);
-  sectionStudents.forEach((s, idx) => {
+  const sectionStudents = await db.getStudents(targetStudent.year, targetStudent.section);
+  for (let idx = 0; idx < sectionStudents.length; idx++) {
+    const s = sectionStudents[idx];
     const sScore = s.id === studentId ? newOverallScore : (s.overall_score || 0);
-    db.updateStudentScoreAndRank(s.id, sScore, idx + 1);
-  });
+    await db.updateStudentScoreAndRank(s.id, sScore, idx + 1);
+  }
 
   return newOverallScore;
 }
 
 // PUT update student 360 performance details (verifies section access on server!)
-router.put('/students/:studentId/360', verifyFacultySectionAccess, (req: AuthRequest, res: Response) => {
+router.put('/students/:studentId/360', verifyFacultySectionAccess, async (req: AuthRequest, res: Response) => {
   const { studentId } = req.params;
   const {
     cgpa, presentDays, totalDays,
@@ -227,18 +229,18 @@ router.put('/students/:studentId/360', verifyFacultySectionAccess, (req: AuthReq
     academics, skilledge, discipline, certificates, participation, projects
   } = req.body;
 
-  const targetStudent = db.getStudentById(studentId);
+  const targetStudent = await db.getStudentById(studentId);
   if (!targetStudent) {
     return res.status(404).json({ error: 'Student not found.' });
   }
 
   // Numeric scalar fields
   if (cgpa !== undefined) {
-    db.updateStudentCGPA(studentId, parseFloat(cgpa) || 0);
+    await db.updateStudentCGPA(studentId, parseFloat(cgpa) || 0);
   }
 
   if (presentDays !== undefined && totalDays !== undefined) {
-    db.updateAttendance(studentId, parseInt(presentDays) || 0, parseInt(totalDays) || 1);
+    await db.updateAttendance(studentId, parseInt(presentDays) || 0, parseInt(totalDays) || 1);
   }
 
   // Persist LeetCode stats if sent as object or scalar numbers
@@ -248,7 +250,7 @@ router.put('/students/:studentId/360', verifyFacultySectionAccess, (req: AuthReq
       : undefined;
 
     if (handleToSave) {
-      db.updateLeetCode(
+      await db.updateLeetCode(
         studentId,
         handleToSave,
         leetcode.easySolved !== undefined ? leetcode.easySolved : parseInt(easySolved) || 0,
@@ -260,7 +262,7 @@ router.put('/students/:studentId/360', verifyFacultySectionAccess, (req: AuthReq
         leetcode.totalSolved
       );
     } else {
-      db.updateLeetCode(
+      await db.updateLeetCode(
         studentId,
         leetcode.easySolved !== undefined ? leetcode.easySolved : parseInt(easySolved) || 0,
         leetcode.mediumSolved !== undefined ? leetcode.mediumSolved : parseInt(mediumSolved) || 0,
@@ -272,7 +274,7 @@ router.put('/students/:studentId/360', verifyFacultySectionAccess, (req: AuthReq
       );
     }
   } else if (easySolved !== undefined || mediumSolved !== undefined || hardSolved !== undefined) {
-    db.updateLeetCode(
+    await db.updateLeetCode(
       studentId,
       parseInt(easySolved) || 0,
       parseInt(mediumSolved) || 0,
@@ -282,19 +284,19 @@ router.put('/students/:studentId/360', verifyFacultySectionAccess, (req: AuthReq
   }
 
   // Persist module record arrays
-  if (Array.isArray(academics)) db.saveAcademicRecords(studentId, academics);
-  if (skilledge && typeof skilledge === 'object') db.saveSkillEdgeRecord(studentId, skilledge);
-  if (Array.isArray(discipline)) db.saveDisciplineRecords(studentId, discipline);
-  if (Array.isArray(certificates)) db.saveCertificateRecords(studentId, certificates);
-  if (Array.isArray(participation)) db.saveParticipationRecords(studentId, participation);
-  if (Array.isArray(projects)) db.saveProjectRecords(studentId, projects);
+  if (Array.isArray(academics)) await db.saveAcademicRecords(studentId, academics);
+  if (skilledge && typeof skilledge === 'object') await db.saveSkillEdgeRecord(studentId, skilledge);
+  if (Array.isArray(discipline)) await db.saveDisciplineRecords(studentId, discipline);
+  if (Array.isArray(certificates)) await db.saveCertificateRecords(studentId, certificates);
+  if (Array.isArray(participation)) await db.saveParticipationRecords(studentId, participation);
+  if (Array.isArray(projects)) await db.saveProjectRecords(studentId, projects);
 
-  const updatedOverallScore = recalculateAffectedStudentScore(studentId);
+  const updatedOverallScore = await recalculateAffectedStudentScore(studentId);
 
-  db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'UPDATE_STUDENT_360', `STUDENT:${studentId}`);
+  await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'UPDATE_STUDENT_360', `STUDENT:${studentId}`);
 
   // Return updated 360 profile so UI can immediately re-render history
-  const updatedProfile = db.getStudent360(studentId);
+  const updatedProfile = await db.getStudent360(studentId);
 
   return res.json({
     message: 'Student 360 profile updated and score recalculated successfully.',
@@ -304,9 +306,9 @@ router.put('/students/:studentId/360', verifyFacultySectionAccess, (req: AuthReq
 });
 
 // POST Add new category record item to student 360 profile (verifies section access on server!)
-router.post('/students/:studentId/records/:recordType', verifyFacultySectionAccess, (req: AuthRequest, res: Response) => {
+router.post('/students/:studentId/records/:recordType', verifyFacultySectionAccess, async (req: AuthRequest, res: Response) => {
   const { studentId, recordType } = req.params;
-  const targetStudent = db.getStudentById(studentId);
+  const targetStudent = await db.getStudentById(studentId);
   if (!targetStudent) {
     return res.status(404).json({ error: 'Student profile not found.' });
   }
@@ -315,25 +317,25 @@ router.post('/students/:studentId/records/:recordType', verifyFacultySectionAcce
   const type = recordType.toLowerCase();
 
   if (type === 'arrears') {
-    createdId = db.addArrearRecord({ studentId, subjectCode: req.body.subjectCode || 'CS301', subjectName: req.body.subjectName || 'Data Structures' });
+    createdId = await db.addArrearRecord({ studentId, subjectCode: req.body.subjectCode || 'CS301', subjectName: req.body.subjectName || 'Data Structures' });
   } else if (type === 'nptel') {
-    createdId = db.addNPTELRecord({ studentId, courseName: req.body.courseName || 'NPTEL Course', examScore: req.body.examScore || 75 });
+    createdId = await db.addNPTELRecord({ studentId, courseName: req.body.courseName || 'NPTEL Course', examScore: req.body.examScore || 75 });
   } else if (type === 'discipline') {
-    createdId = db.addDisciplineRecord({ studentId, remark: req.body.remark || 'Discipline remark logged', recordedBy: req.user!.email });
+    createdId = await db.addDisciplineRecord({ studentId, remark: req.body.remark || 'Discipline remark logged', recordedBy: req.user!.email });
   } else if (type === 'certificates') {
-    createdId = db.addCertificateRecord({ studentId, courseName: req.body.courseName || 'Certificate Course', platform: req.body.platform });
+    createdId = await db.addCertificateRecord({ studentId, courseName: req.body.courseName || 'Certificate Course', platform: req.body.platform });
   } else if (type === 'participation') {
-    createdId = db.addParticipationRecord({ studentId, eventName: req.body.eventName || 'Symposium Event', organizer: req.body.organizer });
+    createdId = await db.addParticipationRecord({ studentId, eventName: req.body.eventName || 'Symposium Event', organizer: req.body.organizer });
   } else if (type === 'projects') {
-    createdId = db.addProjectRecord({ studentId, title: req.body.title || 'Technical Project', description: req.body.description });
+    createdId = await db.addProjectRecord({ studentId, title: req.body.title || 'Technical Project', description: req.body.description });
   } else if (type === 'achievements') {
-    createdId = db.addAchievementRecord({ studentId, title: req.body.title || 'Achievement Award', eventName: req.body.eventName });
+    createdId = await db.addAchievementRecord({ studentId, title: req.body.title || 'Achievement Award', eventName: req.body.eventName });
   } else {
     return res.status(400).json({ error: `Unsupported record type: ${recordType}` });
   }
 
-  const updatedOverallScore = recalculateAffectedStudentScore(studentId);
-  db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'CREATE_PERFORMANCE_RECORD', `TYPE:${recordType}:ID:${createdId}:STUDENT:${studentId}`);
+  const updatedOverallScore = await recalculateAffectedStudentScore(studentId);
+  await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'CREATE_PERFORMANCE_RECORD', `TYPE:${recordType}:ID:${createdId}:STUDENT:${studentId}`);
 
   return res.status(201).json({
     message: `Record added successfully to ${recordType}.`,
@@ -343,8 +345,8 @@ router.post('/students/:studentId/records/:recordType', verifyFacultySectionAcce
 });
 
 // Class Coordinator Role Guard Middleware
-function requireClassCoordinator(req: AuthRequest, res: Response, next: any) {
-  const assign = db.getFacultyAssignment(req.user!.id);
+async function requireClassCoordinator(req: AuthRequest, res: Response, next: any) {
+  const assign = await db.getFacultyAssignment(req.user!.id);
   if (assign && assign.role === 'Subject Faculty') {
     return res.status(403).json({ error: 'Forbidden: Only Class Coordinators can create or import student accounts.' });
   }
@@ -364,7 +366,7 @@ router.post('/students', requireClassCoordinator, async (req: AuthRequest, res: 
   }
 
   try {
-    const newStudent = db.createStudentForFaculty(req.user!.id, {
+    const newStudent = await db.createStudentForFaculty(req.user!.id, {
       registerNo: targetRegNo,
       name,
       email: targetEmail,
@@ -398,14 +400,24 @@ router.post('/students/import', requireClassCoordinator, async (req: AuthRequest
 
   const createdList: any[] = [];
   const errorsList: string[] = [];
+  const generatedCredentials: any[] = [];
 
   for (const s of students) {
     try {
       const reg = s.registerNo || s.regNo || s['Register Number'] || s['Register No'];
       const mail = s.email || s.collegeEmail || s['College Email ID'] || s['College Mail ID'] || `${String(reg).toLowerCase()}@aids.edu`;
-      const pass = s.password || s.portalPassword || s.collegePortalPassword || s['College Portal Password'] || s['Portal Password'] || defaultPassword || 'student123';
+      let isTemp = false;
+      let pass = s.password || s.portalPassword || s.collegePortalPassword || s['College Portal Password'] || s['Portal Password'];
+      if (!pass || typeof pass !== 'string' || pass.trim().length < 6) {
+        if (defaultPassword && typeof defaultPassword === 'string' && defaultPassword.trim().length >= 6) {
+          pass = defaultPassword.trim();
+        } else {
+          pass = generateSecureRandomPassword(12);
+          isTemp = true;
+        }
+      }
 
-      const created = db.createStudentForFaculty(req.user!.id, {
+      const created = await db.createStudentForFaculty(req.user!.id, {
         registerNo: reg,
         name: s.name || s['Student Name'] || s['Name'],
         email: mail,
@@ -419,6 +431,9 @@ router.post('/students/import', requireClassCoordinator, async (req: AuthRequest
         cgpa: parseFloat(s.cgpa) || 0
       });
       createdList.push(created);
+      if (isTemp) {
+        generatedCredentials.push({ registerNo: reg, name: s.name || '', tempPassword: pass });
+      }
     } catch (err: any) {
       errorsList.push(`Skipped ${s.registerNo || s.name || 'row'}: ${err.message}`);
     }
@@ -427,6 +442,7 @@ router.post('/students/import', requireClassCoordinator, async (req: AuthRequest
   return res.status(200).json({
     message: `Successfully imported ${createdList.length} students to your section.`,
     count: createdList.length,
+    generatedCredentials: generatedCredentials.length > 0 ? generatedCredentials : undefined,
     errors: errorsList
   });
 });
@@ -441,7 +457,7 @@ router.post('/students/:studentId/reset-password', requireClassCoordinator, veri
   }
 
   try {
-    db.resetStudentPasswordByFaculty(req.user!.id, studentId, password);
+    await db.resetStudentPasswordByFaculty(req.user!.id, studentId, password);
     return res.json({ message: 'Student portal password reset successfully.' });
   } catch (err: any) {
     return res.status(400).json({ error: err.message || 'Failed to reset student password.' });
@@ -453,13 +469,13 @@ router.delete('/students/:studentId', requireClassCoordinator, async (req: AuthR
   const { studentId } = req.params;
 
   // 1. Inspect student in database
-  const student = db.getStudentById(studentId);
+  const student = await db.getStudentById(studentId);
   if (!student) {
     return res.status(404).json({ error: 'Student record not found.' });
   }
 
   // 2. Strict Staff Isolation Check: Verify that student is assigned to this faculty member's workspace/section
-  const facultyAssignment = db.getFacultyAssignment(req.user!.id);
+  const facultyAssignment = await db.getFacultyAssignment(req.user!.id);
   const isAssignedToFaculty = (student.created_by_faculty_id === req.user!.id || student.faculty_workspace_id === req.user!.id) ||
     (facultyAssignment && student.year === facultyAssignment.year && student.section === facultyAssignment.section);
 
@@ -469,8 +485,8 @@ router.delete('/students/:studentId', requireClassCoordinator, async (req: AuthR
 
   try {
     // 3. Delete student account & associated records safely
-    db.deleteStudentUser(studentId);
-    db.logAudit(req.user!.id, req.user!.email, 'FACULTY', 'DELETE_STUDENT', `STUDENT_ID:${studentId},REG:${student.register_no}`);
+    await db.deleteStudentUser(studentId);
+    await db.logAudit(req.user!.id, req.user!.email, 'FACULTY', 'DELETE_STUDENT', `STUDENT_ID:${studentId},REG:${student.register_no}`);
 
     return res.json({
       message: `Student ${student.name} (${student.register_no}) deleted successfully from your section.`,
@@ -487,7 +503,7 @@ router.patch('/students/:studentId/status', requireClassCoordinator, verifyFacul
   const { isActive } = req.body;
 
   try {
-    db.setStudentStatusByFaculty(req.user!.id, studentId, Boolean(isActive));
+    await db.setStudentStatusByFaculty(req.user!.id, studentId, Boolean(isActive));
     return res.json({ message: `Student status updated to ${isActive ? 'Active' : 'Disabled'}.` });
   } catch (err: any) {
     return res.status(400).json({ error: err.message || 'Failed to update student status.' });
@@ -495,41 +511,44 @@ router.patch('/students/:studentId/status', requireClassCoordinator, verifyFacul
 });
 
 // NPTEL GOOGLE OAUTH CONNECTION MANAGEMENT ENDPOINTS
-router.get('/students/:studentId/nptel-connection', verifyFacultySectionAccess, (req: AuthRequest, res: Response) => {
+router.get('/students/:studentId/nptel-connection', verifyFacultySectionAccess, async (req: AuthRequest, res: Response) => {
   const { studentId } = req.params;
-  const conn = db.getNptelGoogleConnection(studentId);
+  const conn = await db.getNptelGoogleConnection(studentId);
   return res.json({ connection: conn });
 });
 
-router.post('/students/:studentId/nptel-connection/sync', verifyFacultySectionAccess, (req: AuthRequest, res: Response) => {
+// POST NPTEL Connection Sync
+router.post('/students/:studentId/nptel-connection/sync', verifyFacultySectionAccess, async (req: AuthRequest, res: Response) => {
   const { studentId } = req.params;
-  const conn = db.getNptelGoogleConnection(studentId);
+  const conn = await db.getNptelGoogleConnection(studentId);
   if (!conn) {
     return res.status(404).json({ error: 'No active Google OAuth connection found for student.' });
   }
   const now = new Date().toISOString();
-  db.saveNptelGoogleConnection(studentId, {
+  await db.saveNptelGoogleConnection(studentId, {
     connectedEmail: conn.connectedEmail,
     lastSynced: now,
     status: 'CONNECTED'
   });
-  return res.json({ message: 'NPTEL records synchronized via Google OAuth connection.', connection: db.getNptelGoogleConnection(studentId) });
+  return res.json({ message: 'NPTEL records synchronized via Google OAuth connection.', connection: await db.getNptelGoogleConnection(studentId) });
 });
 
-router.delete('/students/:studentId/nptel-connection', verifyFacultySectionAccess, (req: AuthRequest, res: Response) => {
+// DELETE NPTEL Connection
+router.delete('/students/:studentId/nptel-connection', verifyFacultySectionAccess, async (req: AuthRequest, res: Response) => {
   const { studentId } = req.params;
-  db.disconnectNptelGoogleConnection(studentId);
-  db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'DISCONNECT_NPTEL_GOOGLE', `STU:${studentId}`);
+  await db.disconnectNptelGoogleConnection(studentId);
+  await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'DISCONNECT_NPTEL_GOOGLE', `STU:${studentId}`);
   return res.json({ message: 'NPTEL Google OAuth connection disconnected successfully.' });
 });
 
 // NPTEL WEEKLY PROOFS MODULE ENDPOINTS
-router.get('/students/:studentId/nptel-proofs', verifyFacultySectionAccess, (req: AuthRequest, res: Response) => {
+router.get('/students/:studentId/nptel-proofs', verifyFacultySectionAccess, async (req: AuthRequest, res: Response) => {
   const { studentId } = req.params;
-  const proofs = db.getNptelProofs(studentId);
+  const proofs = await db.getNptelProofs(studentId);
   return res.json({ proofs });
 });
 
+// POST NPTEL Proofs Upload
 router.post('/students/:studentId/nptel-proofs', verifyFacultySectionAccess, (req: AuthRequest, res: Response) => {
   nptelProofUpload.single('file')(req, res, async (err: any) => {
     if (err) {
@@ -550,8 +569,8 @@ router.post('/students/:studentId/nptel-proofs', verifyFacultySectionAccess, (re
     }
 
     try {
-      const proofRecord = db.addNptelProof(studentId, weekNo, req.file.filename, req.file.originalname);
-      db.logAudit(
+      const proofRecord = await db.addNptelProof(studentId, weekNo, req.file.filename, req.file.originalname);
+      await db.logAudit(
         req.user!.id,
         req.user!.email,
         req.user!.role,
@@ -574,9 +593,10 @@ router.post('/students/:studentId/nptel-proofs', verifyFacultySectionAccess, (re
   });
 });
 
-router.delete('/students/:studentId/nptel-proofs/:proofId', verifyFacultySectionAccess, (req: AuthRequest, res: Response) => {
+// DELETE NPTEL Proof
+router.delete('/students/:studentId/nptel-proofs/:proofId', verifyFacultySectionAccess, async (req: AuthRequest, res: Response) => {
   const { studentId, proofId } = req.params;
-  const proof = db.getNptelProofById(proofId);
+  const proof = await db.getNptelProofById(proofId);
 
   if (!proof) {
     return res.status(404).json({ error: 'NPTEL proof record not found.' });
@@ -587,13 +607,13 @@ router.delete('/students/:studentId/nptel-proofs/:proofId', verifyFacultySection
   }
 
   try {
-    db.deleteNptelProof(proofId, studentId);
+    await db.deleteNptelProof(proofId, studentId);
     if (proof.proof_file_path) {
       const fullPath = path.join(UPLOADS_DIR, proof.proof_file_path);
       if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
     }
 
-    db.logAudit(
+    await db.logAudit(
       req.user!.id,
       req.user!.email,
       req.user!.role,
@@ -607,12 +627,49 @@ router.delete('/students/:studentId/nptel-proofs/:proofId', verifyFacultySection
   }
 });
 
-router.get('/nptel-proofs/:proofId/view', (req: AuthRequest, res: Response) => {
+async function checkFacultyStudentFileAccess(req: AuthRequest, student: any): Promise<boolean> {
+  if (!req.user || !student) return false;
+
+  if (req.user.role === 'HOD' || req.user.role === 'ADMIN') {
+    return true;
+  }
+
+  if (req.user.role !== 'FACULTY') {
+    return false;
+  }
+
+  const isCreatedByStaff = student.created_by_faculty_id === req.user.id;
+  const isWorkspaceStaff = student.faculty_workspace_id === req.user.id;
+
+  const isOwnedByAnotherStaff =
+    (student.created_by_faculty_id && student.created_by_faculty_id !== req.user.id) ||
+    (student.faculty_workspace_id && student.faculty_workspace_id !== req.user.id);
+
+  if (isOwnedByAnotherStaff && !isCreatedByStaff && !isWorkspaceStaff) {
+    return false;
+  }
+
+  const facultyAssignment = await db.getFacultyAssignment(req.user.id);
+  const assignedYear = facultyAssignment ? facultyAssignment.year : req.user.assignedYear;
+  const assignedSection = facultyAssignment ? facultyAssignment.section : req.user.assignedSection;
+
+  const isYearMatch = !assignedYear || assignedYear === 'ALL' || student.year === assignedYear;
+  const isSectionMatch = !assignedSection || assignedSection === 'ALL' || student.section === assignedSection;
+
+  return (isYearMatch && isSectionMatch) || isCreatedByStaff || isWorkspaceStaff;
+}
+
+router.get('/nptel-proofs/:proofId/view', async (req: AuthRequest, res: Response) => {
   const { proofId } = req.params;
-  const proof = db.getNptelProofById(proofId);
+  const proof = await db.getNptelProofById(proofId);
 
   if (!proof) {
     return res.status(404).json({ error: 'NPTEL proof record not found.' });
+  }
+
+  const student = await db.getStudentById(proof.student_id);
+  if (!student || !(await checkFacultyStudentFileAccess(req, student))) {
+    return res.status(403).json({ error: 'Forbidden: You do not have permission to view files for this student.' });
   }
 
   const filePath = path.join(UPLOADS_DIR, proof.proof_file_path);
@@ -633,12 +690,17 @@ router.get('/nptel-proofs/:proofId/view', (req: AuthRequest, res: Response) => {
   return res.sendFile(filePath);
 });
 
-router.get('/nptel-proofs/:proofId/download', (req: AuthRequest, res: Response) => {
+router.get('/nptel-proofs/:proofId/download', async (req: AuthRequest, res: Response) => {
   const { proofId } = req.params;
-  const proof = db.getNptelProofById(proofId);
+  const proof = await db.getNptelProofById(proofId);
 
   if (!proof) {
     return res.status(404).json({ error: 'NPTEL proof record not found.' });
+  }
+
+  const student = await db.getStudentById(proof.student_id);
+  if (!student || !(await checkFacultyStudentFileAccess(req, student))) {
+    return res.status(403).json({ error: 'Forbidden: You do not have permission to download files for this student.' });
   }
 
   const filePath = path.join(UPLOADS_DIR, proof.proof_file_path);
@@ -667,7 +729,7 @@ router.post('/students/:studentId/certificates/upload', verifyFacultySectionAcce
     const originalFileName = req.file ? req.file.originalname : '';
 
     try {
-      const certId = db.saveCertificateUpload({
+      const certId = await db.saveCertificateUpload({
         studentId,
         courseName: courseName.trim(),
         platform: platform.trim(),
@@ -677,10 +739,10 @@ router.post('/students/:studentId/certificates/upload', verifyFacultySectionAcce
         originalFileName
       });
 
-      const updatedScore = recalculateAffectedStudentScore(studentId);
-      db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'UPLOAD_CERTIFICATE', `STUDENT:${studentId}:CERT:${certId}`);
+      const updatedScore = await recalculateAffectedStudentScore(studentId);
+      await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'UPLOAD_CERTIFICATE', `STUDENT:${studentId}:CERT:${certId}`);
 
-      const full360 = db.getStudent360(studentId);
+      const full360 = await db.getStudent360(studentId);
 
       return res.status(201).json({
         message: 'Certificate uploaded and verified successfully.',
@@ -707,7 +769,7 @@ router.put('/students/:studentId/certificates/:certId', verifyFacultySectionAcce
       return res.status(400).json({ error: 'Certificate Course Name and Issuing Organization/Platform are required.' });
     }
 
-    const existingCert = db.getCertificateById(certId);
+    const existingCert = await db.getCertificateById(certId);
     if (!existingCert || existingCert.student_id !== studentId) {
       return res.status(404).json({ error: 'Certificate record not found.' });
     }
@@ -716,7 +778,7 @@ router.put('/students/:studentId/certificates/:certId', verifyFacultySectionAcce
     const originalFileName = req.file ? req.file.originalname : undefined;
 
     try {
-      db.updateCertificateUpload(certId, studentId, {
+      await db.updateCertificateUpload(certId, studentId, {
         courseName: courseName.trim(),
         platform: platform.trim(),
         category: (category || 'Technical Certification').trim(),
@@ -731,10 +793,10 @@ router.put('/students/:studentId/certificates/:certId', verifyFacultySectionAcce
         if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
       }
 
-      const updatedScore = recalculateAffectedStudentScore(studentId);
-      db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'UPDATE_CERTIFICATE', `STUDENT:${studentId}:CERT:${certId}`);
+      const updatedScore = await recalculateAffectedStudentScore(studentId);
+      await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'UPDATE_CERTIFICATE', `STUDENT:${studentId}:CERT:${certId}`);
 
-      const full360 = db.getStudent360(studentId);
+      const full360 = await db.getStudent360(studentId);
 
       return res.json({
         message: 'Certificate record updated successfully.',
@@ -747,9 +809,9 @@ router.put('/students/:studentId/certificates/:certId', verifyFacultySectionAcce
   });
 });
 
-router.delete('/students/:studentId/certificates/:certId', verifyFacultySectionAccess, (req: AuthRequest, res: Response) => {
+router.delete('/students/:studentId/certificates/:certId', verifyFacultySectionAccess, async (req: AuthRequest, res: Response) => {
   const { studentId, certId } = req.params;
-  const existingCert = db.getCertificateById(certId);
+  const existingCert = await db.getCertificateById(certId);
 
   if (!existingCert) {
     return res.status(404).json({ error: 'Certificate record not found.' });
@@ -760,17 +822,17 @@ router.delete('/students/:studentId/certificates/:certId', verifyFacultySectionA
   }
 
   try {
-    db.deleteStudent360Record(studentId, 'certificates', certId);
+    await db.deleteStudent360Record(studentId, 'certificates', certId);
 
     if (existingCert.file_path) {
       const fullPath = path.join(UPLOADS_DIR, existingCert.file_path);
       if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
     }
 
-    const updatedScore = recalculateAffectedStudentScore(studentId);
-    db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'DELETE_CERTIFICATE', `STUDENT:${studentId}:CERT:${certId}`);
+    const updatedScore = await recalculateAffectedStudentScore(studentId);
+    await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'DELETE_CERTIFICATE', `STUDENT:${studentId}:CERT:${certId}`);
 
-    const full360 = db.getStudent360(studentId);
+    const full360 = await db.getStudent360(studentId);
 
     return res.json({
       message: 'Certificate record deleted successfully.',
@@ -782,12 +844,17 @@ router.delete('/students/:studentId/certificates/:certId', verifyFacultySectionA
   }
 });
 
-router.get('/certificates/:certId/view', (req: AuthRequest, res: Response) => {
+router.get('/certificates/:certId/view', async (req: AuthRequest, res: Response) => {
   const { certId } = req.params;
-  const cert = db.getCertificateById(certId);
+  const cert = await db.getCertificateById(certId);
 
   if (!cert || !cert.file_path) {
     return res.status(404).json({ error: 'Certificate file document not found.' });
+  }
+
+  const student = await db.getStudentById(cert.student_id);
+  if (!student || !(await checkFacultyStudentFileAccess(req, student))) {
+    return res.status(403).json({ error: 'Forbidden: You do not have permission to view files for this student.' });
   }
 
   const filePath = path.join(UPLOADS_DIR, cert.file_path);
@@ -808,12 +875,17 @@ router.get('/certificates/:certId/view', (req: AuthRequest, res: Response) => {
   return res.sendFile(filePath);
 });
 
-router.get('/certificates/:certId/download', (req: AuthRequest, res: Response) => {
+router.get('/certificates/:certId/download', async (req: AuthRequest, res: Response) => {
   const { certId } = req.params;
-  const cert = db.getCertificateById(certId);
+  const cert = await db.getCertificateById(certId);
 
   if (!cert || !cert.file_path) {
     return res.status(404).json({ error: 'Certificate file document not found.' });
+  }
+
+  const student = await db.getStudentById(cert.student_id);
+  if (!student || !(await checkFacultyStudentFileAccess(req, student))) {
+    return res.status(403).json({ error: 'Forbidden: You do not have permission to download files for this student.' });
   }
 
   const filePath = path.join(UPLOADS_DIR, cert.file_path);
@@ -844,7 +916,7 @@ router.post('/students/:studentId/participation/upload', verifyFacultySectionAcc
     const originalFileName = req.file ? req.file.originalname : '';
 
     try {
-      const partId = db.saveParticipationUpload({
+      const partId = await db.saveParticipationUpload({
         studentId,
         eventName: eventName.trim(),
         category: (category || 'Symposium').trim(),
@@ -857,10 +929,10 @@ router.post('/students/:studentId/participation/upload', verifyFacultySectionAcc
         originalFileName
       });
 
-      const updatedScore = recalculateAffectedStudentScore(studentId);
-      const full360 = db.getStudent360(studentId);
+      const updatedScore = await recalculateAffectedStudentScore(studentId);
+      const full360 = await db.getStudent360(studentId);
 
-      db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'UPLOAD_PARTICIPATION', `STUDENT:${studentId}:EVENT:${eventName}`);
+      await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'UPLOAD_PARTICIPATION', `STUDENT:${studentId}:EVENT:${eventName}`);
 
       return res.status(201).json({
         message: 'Participation record saved successfully.',
@@ -889,7 +961,7 @@ router.put('/students/:studentId/participation/:partId', verifyFacultySectionAcc
       return res.status(400).json({ error: 'Event Name and Organizer/Host Institution are required.' });
     }
 
-    const existingPart = db.getParticipationById(partId);
+    const existingPart = await db.getParticipationById(partId);
     if (!existingPart || existingPart.student_id !== studentId) {
       if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
       return res.status(404).json({ error: 'Participation record not found.' });
@@ -899,7 +971,7 @@ router.put('/students/:studentId/participation/:partId', verifyFacultySectionAcc
     const originalFileName = req.file ? req.file.originalname : undefined;
 
     try {
-      db.updateParticipationUpload(partId, studentId, {
+      await db.updateParticipationUpload(partId, studentId, {
         eventName: eventName.trim(),
         category: (category || 'Symposium').trim(),
         eventLevel: (eventLevel || 'College').trim(),
@@ -918,10 +990,10 @@ router.put('/students/:studentId/participation/:partId', verifyFacultySectionAcc
         if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
       }
 
-      const updatedScore = recalculateAffectedStudentScore(studentId);
-      const full360 = db.getStudent360(studentId);
+      const updatedScore = await recalculateAffectedStudentScore(studentId);
+      const full360 = await db.getStudent360(studentId);
 
-      db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'UPDATE_PARTICIPATION', `STUDENT:${studentId}:PART:${partId}`);
+      await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'UPDATE_PARTICIPATION', `STUDENT:${studentId}:PART:${partId}`);
 
       return res.json({
         message: 'Participation record updated successfully.',
@@ -935,9 +1007,9 @@ router.put('/students/:studentId/participation/:partId', verifyFacultySectionAcc
   });
 });
 
-router.delete('/students/:studentId/participation/:partId', verifyFacultySectionAccess, (req: AuthRequest, res: Response) => {
+router.delete('/students/:studentId/participation/:partId', verifyFacultySectionAccess, async (req: AuthRequest, res: Response) => {
   const { studentId, partId } = req.params;
-  const existingPart = db.getParticipationById(partId);
+  const existingPart = await db.getParticipationById(partId);
 
   if (!existingPart) {
     return res.status(404).json({ error: 'Participation record not found.' });
@@ -948,7 +1020,7 @@ router.delete('/students/:studentId/participation/:partId', verifyFacultySection
   }
 
   try {
-    db.deletePerformanceRecord('participation', partId, studentId);
+    await db.deletePerformanceRecord('participation', partId, studentId);
 
     const oldFile = existingPart.proof_file_path || existingPart.file_path;
     if (oldFile) {
@@ -956,10 +1028,10 @@ router.delete('/students/:studentId/participation/:partId', verifyFacultySection
       if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
     }
 
-    const updatedScore = recalculateAffectedStudentScore(studentId);
-    const full360 = db.getStudent360(studentId);
+    const updatedScore = await recalculateAffectedStudentScore(studentId);
+    const full360 = await db.getStudent360(studentId);
 
-    db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'DELETE_PARTICIPATION', `STUDENT:${studentId}:PART:${partId}`);
+    await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'DELETE_PARTICIPATION', `STUDENT:${studentId}:PART:${partId}`);
 
     return res.json({
       message: 'Participation record deleted successfully.',
@@ -971,13 +1043,18 @@ router.delete('/students/:studentId/participation/:partId', verifyFacultySection
   }
 });
 
-router.get('/participation/:partId/view', (req: AuthRequest, res: Response) => {
+router.get('/participation/:partId/view', async (req: AuthRequest, res: Response) => {
   const { partId } = req.params;
-  const part = db.getParticipationById(partId);
+  const part = await db.getParticipationById(partId);
 
   const proofFile = part?.proof_file_path || part?.file_path;
   if (!part || !proofFile) {
     return res.status(404).json({ error: 'Participation proof file not found.' });
+  }
+
+  const student = await db.getStudentById(part.student_id);
+  if (!student || !(await checkFacultyStudentFileAccess(req, student))) {
+    return res.status(403).json({ error: 'Forbidden: You do not have permission to view files for this student.' });
   }
 
   const filePath = path.join(UPLOADS_DIR, proofFile);
@@ -999,13 +1076,18 @@ router.get('/participation/:partId/view', (req: AuthRequest, res: Response) => {
   return res.sendFile(filePath);
 });
 
-router.get('/participation/:partId/download', (req: AuthRequest, res: Response) => {
+router.get('/participation/:partId/download', async (req: AuthRequest, res: Response) => {
   const { partId } = req.params;
-  const part = db.getParticipationById(partId);
+  const part = await db.getParticipationById(partId);
 
   const proofFile = part?.proof_file_path || part?.file_path;
   if (!part || !proofFile) {
     return res.status(404).json({ error: 'Participation proof file not found.' });
+  }
+
+  const student = await db.getStudentById(part.student_id);
+  if (!student || !(await checkFacultyStudentFileAccess(req, student))) {
+    return res.status(403).json({ error: 'Forbidden: You do not have permission to download files for this student.' });
   }
 
   const filePath = path.join(UPLOADS_DIR, proofFile);
@@ -1019,16 +1101,16 @@ router.get('/participation/:partId/download', (req: AuthRequest, res: Response) 
 });
 
 // CR ATTENDANCE STYLE ENDPOINTS
-router.get('/attendance', (req: AuthRequest, res: Response) => {
+router.get('/attendance', async (req: AuthRequest, res: Response) => {
   const date = (req.query.date as string) || '2026-07-13';
   if (date < '2026-07-13') {
     return res.status(400).json({ error: 'Attendance dates before 13 July 2026 are not valid or selectable.' });
   }
-  const records = db.getDailyAttendanceByDateForFaculty(req.user!.id, date);
+  const records = await db.getDailyAttendanceByDateForFaculty(req.user!.id, date);
   return res.json({ date, records });
 });
 
-router.post('/attendance', (req: AuthRequest, res: Response) => {
+router.post('/attendance', async (req: AuthRequest, res: Response) => {
   const { date, records } = req.body;
   if (!date || !Array.isArray(records)) {
     return res.status(400).json({ error: 'Date and records array are required.' });
@@ -1039,29 +1121,29 @@ router.post('/attendance', (req: AuthRequest, res: Response) => {
 
   // Verify workspace ownership for every student record
   for (const r of records) {
-    const stu = db.getStudentById(r.studentId);
+    const stu = await db.getStudentById(r.studentId);
     if (stu && stu.created_by_faculty_id && stu.created_by_faculty_id !== req.user!.id && stu.faculty_workspace_id !== req.user!.id) {
       return res.status(403).json({ error: 'Forbidden: Attendance record contains student outside your private workspace.' });
     }
   }
 
   try {
-    db.saveDailyAttendance(date, records, req.user!.email);
-    db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'SAVE_DAILY_ATTENDANCE', `DATE:${date}:COUNT:${records.length}`);
-    return res.json({ message: 'Daily attendance saved successfully.', date, records: db.getDailyAttendanceByDateForFaculty(req.user!.id, date) });
+    await db.saveDailyAttendance(date, records, req.user!.email);
+    await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'SAVE_DAILY_ATTENDANCE', `DATE:${date}:COUNT:${records.length}`);
+    return res.json({ message: 'Daily attendance saved successfully.', date, records: await db.getDailyAttendanceByDateForFaculty(req.user!.id, date) });
   } catch (err: any) {
     return res.status(400).json({ error: err.message || 'Failed to save attendance.' });
   }
 });
 
-router.get('/attendance/history', (req: AuthRequest, res: Response) => {
-  const history = db.getAttendanceHistoryForFaculty(req.user!.id);
+router.get('/attendance/history', async (req: AuthRequest, res: Response) => {
+  const history = await db.getAttendanceHistoryForFaculty(req.user!.id);
   return res.json({ history });
 });
 
-router.get('/attendance/history/:date', (req: AuthRequest, res: Response) => {
+router.get('/attendance/history/:date', async (req: AuthRequest, res: Response) => {
   const { date } = req.params;
-  const historyDetails = db.getAttendanceHistoryByDateForFaculty(req.user!.id, date);
+  const historyDetails = await db.getAttendanceHistoryByDateForFaculty(req.user!.id, date);
   return res.json({ details: historyDetails });
 });
 
@@ -1072,7 +1154,7 @@ router.post('/teams', async (req: AuthRequest, res: Response) => {
     return res.status(400).json({ error: 'Team Name, Event Name, and Team Head Student ID are required.' });
   }
 
-  const headStu = db.getStudentById(teamHeadStudentId);
+  const headStu = await db.getStudentById(teamHeadStudentId);
   if (!headStu) return res.status(404).json({ error: 'Team head student record not found.' });
 
   if (headStu.created_by_faculty_id && headStu.created_by_faculty_id !== req.user!.id && headStu.faculty_workspace_id !== req.user!.id) {
@@ -1080,16 +1162,16 @@ router.post('/teams', async (req: AuthRequest, res: Response) => {
   }
 
   try {
-    const team = db.createTeam({ teamName, eventName, teamHeadStudentId, category, projectName, resultPosition, prize, proofFile, members });
-    db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'CREATE_TEAM', `TEAM:${teamName}:HEAD:${teamHeadStudentId}`);
+    const team = await db.createTeam({ teamName, eventName, teamHeadStudentId, category, projectName, resultPosition, prize, proofFile, members });
+    await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'CREATE_TEAM', `TEAM:${teamName}:HEAD:${teamHeadStudentId}`);
     return res.status(201).json({ message: 'Team created successfully.', team });
   } catch (err: any) {
     return res.status(400).json({ error: err.message || 'Failed to create team.' });
   }
 });
 
-router.get('/teams', (req: AuthRequest, res: Response) => {
-  const teams = db.getTeamsForFaculty(req.user!.id);
+router.get('/teams', async (req: AuthRequest, res: Response) => {
+  const teams = await db.getTeamsForFaculty(req.user!.id);
   return res.json({ count: teams.length, teams });
 });
 
@@ -1101,7 +1183,7 @@ router.post('/representative', async (req: AuthRequest, res: Response) => {
     return res.status(400).json({ error: 'Student ID is required.' });
   }
 
-  const stu = db.getStudentById(studentId);
+  const stu = await db.getStudentById(studentId);
   if (!stu) return res.status(404).json({ error: 'Student not found.' });
 
   if (stu.created_by_faculty_id && stu.created_by_faculty_id !== req.user!.id && stu.faculty_workspace_id !== req.user!.id) {
@@ -1109,7 +1191,7 @@ router.post('/representative', async (req: AuthRequest, res: Response) => {
   }
 
   try {
-    db.upsertRepresentativeEvaluation({
+    await db.upsertRepresentativeEvaluation({
       studentId,
       year: stu.year,
       section: stu.section,
@@ -1129,7 +1211,7 @@ router.post('/representative', async (req: AuthRequest, res: Response) => {
       evaluatedBy: req.user!.email
     });
 
-    db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'EVALUATE_REPRESENTATIVE', `STUDENT:${studentId}`);
+    await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'EVALUATE_REPRESENTATIVE', `STUDENT:${studentId}`);
     return res.status(201).json({ message: 'Representative evaluation recorded successfully.' });
   } catch (err: any) {
     return res.status(400).json({ error: err.message || 'Failed to record representative evaluation.' });
@@ -1150,7 +1232,7 @@ router.post('/students/:studentId/connect-account', verifyFacultySectionAccess, 
     return res.status(400).json({ error: 'Please enter a valid student LeetCode handle.' });
   }
 
-  const targetStudent = db.getStudentById(studentId);
+  const targetStudent = await db.getStudentById(studentId);
   if (!targetStudent) {
     return res.status(404).json({ error: 'Student record not found.' });
   }
@@ -1165,7 +1247,7 @@ router.post('/students/:studentId/connect-account', verifyFacultySectionAccess, 
       });
     }
 
-    db.upsertConnectedAccount(studentId, provider, cleanHandle, 'Connected', 'VERIFIED');
+    await db.upsertConnectedAccount(studentId, provider, cleanHandle, 'Connected', 'VERIFIED');
     return res.status(201).json({
       message: `${provider} handle set for ${targetStudent.name} successfully.`
     });
@@ -1179,12 +1261,12 @@ router.post('/students/:studentId/sync-leetcode', verifyFacultySectionAccess, as
   const { studentId } = req.params;
   const { username } = req.body;
 
-  const targetStudent = db.getStudentById(studentId);
+  const targetStudent = await db.getStudentById(studentId);
   if (!targetStudent) {
     return res.status(404).json({ error: 'Student record not found.' });
   }
 
-  const current360 = db.getStudent360(studentId);
+  const current360 = await db.getStudent360(studentId);
   const targetUsername = (username && String(username).trim() && !['student', 'leetcode_user'].includes(String(username).trim().toLowerCase()))
     ? String(username).trim()
     : current360?.leetcode?.username;
@@ -1209,7 +1291,7 @@ router.post('/students/:studentId/sync-leetcode', verifyFacultySectionAccess, as
 // POST Trigger SkillEdge Sync for a Single Student by Faculty
 router.post('/students/:studentId/sync-skilledge', verifyFacultySectionAccess, async (req: AuthRequest, res: Response) => {
   const { studentId } = req.params;
-  const targetStudent = db.getStudentById(studentId);
+  const targetStudent = await db.getStudentById(studentId);
   if (!targetStudent) {
     return res.status(404).json({ error: 'Student record not found.' });
   }
@@ -1241,7 +1323,7 @@ router.post('/sync-skilledge-all', async (req: AuthRequest, res: Response) => {
 });
 
 // POST Link / Match a Student's SkillEdge Handle / Email
-router.post('/students/:studentId/link-skilledge', verifyFacultySectionAccess, (req: AuthRequest, res: Response) => {
+router.post('/students/:studentId/link-skilledge', verifyFacultySectionAccess, async (req: AuthRequest, res: Response) => {
   const { studentId } = req.params;
   const { skilledgeHandle } = req.body;
 
@@ -1249,15 +1331,15 @@ router.post('/students/:studentId/link-skilledge', verifyFacultySectionAccess, (
     return res.status(400).json({ error: 'Please enter a valid SkillEdge handle or registered email.' });
   }
 
-  const targetStudent = db.getStudentById(studentId);
+  const targetStudent = await db.getStudentById(studentId);
   if (!targetStudent) {
     return res.status(404).json({ error: 'Student record not found.' });
   }
 
-  const existing = db.getSkillEdgeRecord(studentId);
+  const existing = await db.getSkillEdgeRecord(studentId);
   const handleStr = String(skilledgeHandle).trim();
 
-  db.saveSkillEdgeRecord(studentId, {
+  await db.saveSkillEdgeRecord(studentId, {
     ...(existing || {}),
     overallCompletionPct: existing?.overallCompletionPct || 0,
     totalRewardPoints: existing?.totalRewardPoints || 0,
@@ -1272,19 +1354,19 @@ router.post('/students/:studentId/link-skilledge', verifyFacultySectionAccess, (
 });
 
 // DELETE student performance record (verifies section access on server!)
-router.delete('/students/:studentId/records/:recordType/:recordId', verifyFacultySectionAccess, (req: AuthRequest, res: Response) => {
+router.delete('/students/:studentId/records/:recordType/:recordId', verifyFacultySectionAccess, async (req: AuthRequest, res: Response) => {
   const { studentId, recordType, recordId } = req.params;
 
-  const targetStudent = db.getStudentById(studentId);
+  const targetStudent = await db.getStudentById(studentId);
   if (!targetStudent) {
     return res.status(404).json({ error: 'Student profile not found.' });
   }
 
   try {
-    db.deletePerformanceRecord(recordType, recordId, studentId);
-    const updatedOverallScore = recalculateAffectedStudentScore(studentId);
+    await db.deletePerformanceRecord(recordType, recordId, studentId);
+    const updatedOverallScore = await recalculateAffectedStudentScore(studentId);
 
-    db.logAudit(
+    await db.logAudit(
       req.user!.id,
       req.user!.email,
       req.user!.role,
@@ -1304,14 +1386,14 @@ router.delete('/students/:studentId/records/:recordType/:recordId', verifyFacult
 // --- BEST TEAM HEAD ENDPOINTS ---
 
 // GET all team heads created by authenticated faculty
-router.get('/team-heads', (req: AuthRequest, res: Response) => {
-  const teamHeads = db.getTeamHeadsForFaculty(req.user!.id);
+router.get('/team-heads', async (req: AuthRequest, res: Response) => {
+  const teamHeads = await db.getTeamHeadsForFaculty(req.user!.id);
   return res.json({ teamHeads });
 });
 
 // GET single team head details
-router.get('/team-heads/:id', (req: AuthRequest, res: Response) => {
-  const teamHead = db.getTeamHeadById(req.params.id);
+router.get('/team-heads/:id', async (req: AuthRequest, res: Response) => {
+  const teamHead = await db.getTeamHeadById(req.params.id);
   if (!teamHead) {
     return res.status(404).json({ error: 'Team Head not found.' });
   }
@@ -1322,7 +1404,7 @@ router.get('/team-heads/:id', (req: AuthRequest, res: Response) => {
 });
 
 // POST create Team Head
-router.post('/team-heads', (req: AuthRequest, res: Response) => {
+router.post('/team-heads', async (req: AuthRequest, res: Response) => {
   const { headStudentId, memberLimit } = req.body;
   if (!headStudentId) {
     return res.status(400).json({ error: 'Head student ID is required.' });
@@ -1334,15 +1416,15 @@ router.post('/team-heads', (req: AuthRequest, res: Response) => {
   }
 
   // Verify student exists and belongs to this faculty's workspace
-  const targetStudent = db.getStudentById(headStudentId);
+  const targetStudent = await db.getStudentById(headStudentId);
   if (!targetStudent) {
     return res.status(404).json({ error: 'Student not found.' });
   }
 
-  const assignment = db.getFacultyAssignment(req.user!.id);
+  const assignment = await db.getFacultyAssignment(req.user!.id);
   const assignedYear = assignment ? assignment.year : req.user!.assignedYear || '2nd Year';
   const assignedSection = assignment ? assignment.section : req.user!.assignedSection || 'A';
-  const roster = db.getStudentsForFaculty(req.user!.id, assignedYear, assignedSection);
+  const roster = await db.getStudentsForFaculty(req.user!.id, assignedYear, assignedSection);
   const belongsToFaculty = roster.some((s) => s.id === headStudentId);
 
   if (!belongsToFaculty) {
@@ -1350,7 +1432,7 @@ router.post('/team-heads', (req: AuthRequest, res: Response) => {
   }
 
   try {
-    const teamHead = db.createTeamHead(req.user!.id, headStudentId, limitNum);
+    const teamHead = await db.createTeamHead(req.user!.id, headStudentId, limitNum);
     return res.status(201).json({ teamHead, message: 'Team Head created successfully.' });
   } catch (err: any) {
     if (err.message && err.message.includes('UNIQUE')) {
@@ -1361,7 +1443,7 @@ router.post('/team-heads', (req: AuthRequest, res: Response) => {
 });
 
 // PUT update Team Head member limit
-router.put('/team-heads/:id', (req: AuthRequest, res: Response) => {
+router.put('/team-heads/:id', async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const { memberLimit } = req.body;
   const limitNum = parseInt(memberLimit, 10);
@@ -1370,7 +1452,7 @@ router.put('/team-heads/:id', (req: AuthRequest, res: Response) => {
     return res.status(400).json({ error: 'Member limit must be a positive integer.' });
   }
 
-  const existingHead = db.getTeamHeadById(id);
+  const existingHead = await db.getTeamHeadById(id);
   if (!existingHead) {
     return res.status(404).json({ error: 'Team Head not found.' });
   }
@@ -1384,14 +1466,14 @@ router.put('/team-heads/:id', (req: AuthRequest, res: Response) => {
     });
   }
 
-  const updatedHead = db.updateTeamHeadLimit(id, limitNum);
+  const updatedHead = await db.updateTeamHeadLimit(id, limitNum);
   return res.json({ teamHead: updatedHead, message: 'Team Head member limit updated successfully.' });
 });
 
 // DELETE Team Head (removes team relationship only, student records preserved)
-router.delete('/team-heads/:id', (req: AuthRequest, res: Response) => {
+router.delete('/team-heads/:id', async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
-  const existingHead = db.getTeamHeadById(id);
+  const existingHead = await db.getTeamHeadById(id);
 
   if (!existingHead) {
     return res.status(404).json({ error: 'Team Head not found.' });
@@ -1400,12 +1482,12 @@ router.delete('/team-heads/:id', (req: AuthRequest, res: Response) => {
     return res.status(403).json({ error: 'Forbidden: Access denied to this Team Head workspace.' });
   }
 
-  db.deleteTeamHead(id);
+  await db.deleteTeamHead(id);
   return res.json({ message: 'Team Head deleted successfully. Student records were preserved.' });
 });
 
 // POST assign/update Team Members for a Team Head
-router.post('/team-heads/:id/members', (req: AuthRequest, res: Response) => {
+router.post('/team-heads/:id/members', async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const { studentIds } = req.body;
 
@@ -1413,7 +1495,7 @@ router.post('/team-heads/:id/members', (req: AuthRequest, res: Response) => {
     return res.status(400).json({ error: 'studentIds must be an array.' });
   }
 
-  const existingHead = db.getTeamHeadById(id);
+  const existingHead = await db.getTeamHeadById(id);
   if (!existingHead) {
     return res.status(404).json({ error: 'Team Head not found.' });
   }
@@ -1440,10 +1522,10 @@ router.post('/team-heads/:id/members', (req: AuthRequest, res: Response) => {
   }
 
   // 4. Verify all students belong to faculty roster
-  const assignment = db.getFacultyAssignment(req.user!.id);
+  const assignment = await db.getFacultyAssignment(req.user!.id);
   const assignedYear = assignment ? assignment.year : req.user!.assignedYear || '2nd Year';
   const assignedSection = assignment ? assignment.section : req.user!.assignedSection || 'A';
-  const roster = db.getStudentsForFaculty(req.user!.id, assignedYear, assignedSection);
+  const roster = await db.getStudentsForFaculty(req.user!.id, assignedYear, assignedSection);
   const rosterIdSet = new Set(roster.map((s) => s.id));
 
   for (const sId of studentIds) {
@@ -1452,15 +1534,15 @@ router.post('/team-heads/:id/members', (req: AuthRequest, res: Response) => {
     }
   }
 
-  const updatedHead = db.setTeamHeadMembers(id, studentIds);
+  const updatedHead = await db.setTeamHeadMembers(id, studentIds);
   return res.json({ teamHead: updatedHead, message: 'Team members updated successfully.' });
 });
 
 // DELETE single member from Team Head
-router.delete('/team-heads/:id/members/:studentId', (req: AuthRequest, res: Response) => {
+router.delete('/team-heads/:id/members/:studentId', async (req: AuthRequest, res: Response) => {
   const { id, studentId } = req.params;
 
-  const existingHead = db.getTeamHeadById(id);
+  const existingHead = await db.getTeamHeadById(id);
   if (!existingHead) {
     return res.status(404).json({ error: 'Team Head not found.' });
   }
@@ -1468,7 +1550,7 @@ router.delete('/team-heads/:id/members/:studentId', (req: AuthRequest, res: Resp
     return res.status(403).json({ error: 'Forbidden: Access denied to this Team Head workspace.' });
   }
 
-  const updatedHead = db.removeTeamHeadMember(id, studentId);
+  const updatedHead = await db.removeTeamHeadMember(id, studentId);
   return res.json({ teamHead: updatedHead, message: 'Member removed from team successfully.' });
 });
 

@@ -17,27 +17,27 @@ const router = Router();
 router.use(authenticateToken, requireRole('HOD'));
 
 // GET department students with hierarchy filters
-router.get('/students', (req: AuthRequest, res: Response) => {
+router.get('/students', async (req: AuthRequest, res: Response) => {
   const { year, section } = req.query;
-  const students = db.getStudents(year as string, section as string);
+  const students = await db.getStudents(year as string, section as string);
   return res.json({ count: students.length, students });
 });
 
 // GET department Elite Students
-router.get('/elite-students', (req: AuthRequest, res: Response) => {
+router.get('/elite-students', async (req: AuthRequest, res: Response) => {
   const { year, section } = req.query;
-  const students = db.getEliteStudents(year as string, section as string);
+  const students = await db.getEliteStudents(year as string, section as string);
   return res.json({ count: students.length, students });
 });
 
 // POST toggle student Elite designation
-router.post('/students/:studentId/elite-status', (req: AuthRequest, res: Response) => {
+router.post('/students/:studentId/elite-status', async (req: AuthRequest, res: Response) => {
   const studentId = req.params.studentId || req.body?.studentId;
   if (!studentId) {
     return res.status(400).json({ error: 'Bad Request: Student ID parameter is required.' });
   }
 
-  const student = db.getStudentById(studentId);
+  const student = await db.getStudentById(studentId);
   if (!student) {
     return res.status(404).json({ error: 'Student record not found.' });
   }
@@ -49,7 +49,7 @@ router.post('/students/:studentId/elite-status', (req: AuthRequest, res: Respons
 
   const isElite = Boolean(isEliteRaw === true || isEliteRaw === 'true' || isEliteRaw === 1 || isEliteRaw === '1');
 
-  db.updateStudentEliteStatus(studentId, isElite);
+  await db.updateStudentEliteStatus(studentId, isElite);
   return res.json({
     message: isElite ? `Marked ${student.name} as an Elite Student.` : `Removed ${student.name} from Elite Students list.`,
     studentId,
@@ -58,13 +58,13 @@ router.post('/students/:studentId/elite-status', (req: AuthRequest, res: Respons
 });
 
 // POST update student profile (LinkedIn, GitHub, LeetCode, CGPA, Points)
-router.post('/students/:studentId/update-profile', (req: AuthRequest, res: Response) => {
+router.post('/students/:studentId/update-profile', async (req: AuthRequest, res: Response) => {
   const studentId = req.params.studentId || req.body?.studentId;
   if (!studentId) {
     return res.status(400).json({ error: 'Bad Request: Student ID parameter is required.' });
   }
 
-  const student = db.getStudentById(studentId);
+  const student = await db.getStudentById(studentId);
   if (!student) {
     return res.status(404).json({ error: 'Student record not found.' });
   }
@@ -74,7 +74,7 @@ router.post('/students/:studentId/update-profile', (req: AuthRequest, res: Respo
   const parsedCgpa = cgpa !== undefined && cgpa !== null && !isNaN(parseFloat(cgpa)) ? parseFloat(cgpa) : undefined;
   const parsedPoints = skillEdgePoints !== undefined && skillEdgePoints !== null && !isNaN(parseInt(skillEdgePoints, 10)) ? parseInt(skillEdgePoints, 10) : undefined;
 
-  db.updateStudentProfile(studentId, {
+  await db.updateStudentProfile(studentId, {
     linkedinUrl: typeof linkedinUrl === 'string' ? linkedinUrl.trim() : undefined,
     githubUrl: typeof githubUrl === 'string' ? githubUrl.trim() : undefined,
     leetcodeUsername: typeof leetcodeUsername === 'string' ? leetcodeUsername.trim() : undefined,
@@ -82,7 +82,7 @@ router.post('/students/:studentId/update-profile', (req: AuthRequest, res: Respo
     skillEdgePoints: parsedPoints
   });
 
-  const updated360 = db.getStudent360(studentId);
+  const updated360 = await db.getStudent360(studentId);
   return res.json({
     message: `Updated profile details for ${student.name}.`,
     profile: updated360
@@ -90,15 +90,15 @@ router.post('/students/:studentId/update-profile', (req: AuthRequest, res: Respo
 });
 
 // GET single student 360 profile for HOD (department wide)
-router.get('/students/:studentId/360', (req: AuthRequest, res: Response) => {
+router.get('/students/:studentId/360', async (req: AuthRequest, res: Response) => {
   const { studentId } = req.params;
-  const full360 = db.getStudent360(studentId);
+  const full360 = await db.getStudent360(studentId);
 
   if (!full360) {
     return res.status(404).json({ error: 'Student profile not found.' });
   }
 
-  const scoringConfig = db.getScoringConfig();
+  const scoringConfig = await db.getScoringConfig();
   const categoryScores = calculateCategoryScores(
     full360.student as any,
     full360.academics,
@@ -123,52 +123,55 @@ router.get('/students/:studentId/360', (req: AuthRequest, res: Response) => {
 });
 
 // GET HOD AI Recognition Award Candidates for ALL 5 AWARDS
-router.get('/awards/candidates', (req: AuthRequest, res: Response) => {
+router.get('/awards/candidates', async (req: AuthRequest, res: Response) => {
   try {
     const { year } = req.query;
-    const pool = db.getStudents(year as string, 'ALL');
+    const pool = await db.getStudents(year as string, 'ALL');
 
     if (pool.length === 0) {
       return res.json({ candidates: null });
     }
 
     // Calculate detailed performance candidates for pool
-    const candidatesData: any[] = pool.map((stu) => {
-      const full360 = db.getStudent360(stu.id);
-      if (!full360 || !full360.student) return null;
+    const candidatesDataRaw = await Promise.all(
+      pool.map(async (stu) => {
+        const full360 = await db.getStudent360(stu.id);
+        if (!full360 || !full360.student) return null;
 
-      const config = db.getScoringConfig();
-      const breakdown = calculateCategoryScores(
-        full360.student as any,
-        full360.academics,
-        full360.arrears,
-        full360.skillEdge,
-        full360.nptel,
-        full360.attendance,
-        full360.discipline,
-        full360.leetcode,
-        full360.projects || [],
-        full360.certificates || [],
-        full360.participation || []
-      );
+        const config = await db.getScoringConfig();
+        const breakdown = calculateCategoryScores(
+          full360.student as any,
+          full360.academics,
+          full360.arrears,
+          full360.skillEdge,
+          full360.nptel,
+          full360.attendance,
+          full360.discipline,
+          full360.leetcode,
+          full360.projects || [],
+          full360.certificates || [],
+          full360.participation || []
+        );
 
-      const overallScore = computeOverallScore(breakdown, config);
-      const leetCodeAwardScore = computeLeetCodeAwardScore(full360.leetcode);
-      const eliteAwardScore = computeEliteStudentScore(breakdown);
-      const teamHeadAwardScore = computeTeamHeadScore(stu as any, full360.projects || []);
-      const representativeAwardScore = computeRepresentativeScore(stu as any, breakdown.attendance);
+        const overallScore = computeOverallScore(breakdown, config);
+        const leetCodeAwardScore = computeLeetCodeAwardScore(full360.leetcode);
+        const eliteAwardScore = computeEliteStudentScore(breakdown);
+        const teamHeadAwardScore = computeTeamHeadScore(stu as any, full360.projects || []);
+        const representativeAwardScore = computeRepresentativeScore(stu as any, breakdown.attendance);
 
-      return {
-        student: full360.student,
-        full360,
-        breakdown,
-        overallScore,
-        leetCodeAwardScore,
-        eliteAwardScore,
-        teamHeadAwardScore,
-        representativeAwardScore
-      };
-    }).filter(Boolean);
+        return {
+          student: full360.student,
+          full360,
+          breakdown,
+          overallScore,
+          leetCodeAwardScore,
+          eliteAwardScore,
+          teamHeadAwardScore,
+          representativeAwardScore
+        };
+      })
+    );
+    const candidatesData = candidatesDataRaw.filter(Boolean) as any[];
 
     if (candidatesData.length === 0) {
       return res.json({ candidates: null, shortlist: [], finalCandidate: null });
@@ -232,42 +235,42 @@ router.get('/awards/candidates', (req: AuthRequest, res: Response) => {
 });
 
 // GET Scoring Configuration
-router.get('/scoring-config', (req: AuthRequest, res: Response) => {
-  const config = db.getScoringConfig();
+router.get('/scoring-config', async (req: AuthRequest, res: Response) => {
+  const config = await db.getScoringConfig();
   return res.json({ config });
 });
 
 // PUT Save / Update Scoring Configuration
-router.put('/scoring-config', (req: AuthRequest, res: Response) => {
+router.put('/scoring-config', async (req: AuthRequest, res: Response) => {
   const { config } = req.body;
   if (!config) {
     return res.status(400).json({ error: 'Config payload is required.' });
   }
 
-  db.saveScoringConfig(config);
-  db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'UPDATE_SCORING_CONFIG', 'SCORING_CONFIGURATION');
+  await db.saveScoringConfig(config);
+  await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'UPDATE_SCORING_CONFIG', 'SCORING_CONFIGURATION');
 
   return res.json({ message: 'Scoring configuration updated successfully.', config });
 });
 
 // PUT HOD Correct / Update Any Student 360 Record
-router.put('/students/:studentId/360', (req: AuthRequest, res: Response) => {
+router.put('/students/:studentId/360', async (req: AuthRequest, res: Response) => {
   const { studentId } = req.params;
   const { cgpa, presentDays, totalDays, easySolved, mediumSolved, hardSolved, contestRating } = req.body;
 
-  const targetStudent = db.getStudentById(studentId);
+  const targetStudent = await db.getStudentById(studentId);
   if (!targetStudent) {
     return res.status(404).json({ error: 'Student record not found.' });
   }
 
-  if (cgpa !== undefined) db.updateStudentCGPA(studentId, parseFloat(cgpa) || 0);
-  if (presentDays !== undefined && totalDays !== undefined) db.updateAttendance(studentId, parseInt(presentDays) || 0, parseInt(totalDays) || 1);
+  if (cgpa !== undefined) await db.updateStudentCGPA(studentId, parseFloat(cgpa) || 0);
+  if (presentDays !== undefined && totalDays !== undefined) await db.updateAttendance(studentId, parseInt(presentDays) || 0, parseInt(totalDays) || 1);
   if (easySolved !== undefined || mediumSolved !== undefined || hardSolved !== undefined) {
-    db.updateLeetCode(studentId, parseInt(easySolved) || 0, parseInt(mediumSolved) || 0, parseInt(hardSolved) || 0, parseInt(contestRating) || 1200);
+    await db.updateLeetCode(studentId, parseInt(easySolved) || 0, parseInt(mediumSolved) || 0, parseInt(hardSolved) || 0, parseInt(contestRating) || 1200);
   }
 
-  const full360 = db.getStudent360(studentId)!;
-  const scoringConfig = db.getScoringConfig();
+  const full360 = (await db.getStudent360(studentId))!;
+  const scoringConfig = await db.getScoringConfig();
   const breakdown = calculateCategoryScores(
     full360.student as any,
     full360.academics,
@@ -282,13 +285,14 @@ router.put('/students/:studentId/360', (req: AuthRequest, res: Response) => {
 
   const newOverallScore = computeOverallScore(breakdown, scoringConfig) || 0;
 
-  const sectionStudents = db.getStudents(targetStudent.year, targetStudent.section);
-  sectionStudents.forEach((s, idx) => {
+  const sectionStudents = await db.getStudents(targetStudent.year, targetStudent.section);
+  for (let idx = 0; idx < sectionStudents.length; idx++) {
+    const s = sectionStudents[idx];
     const sScore = s.id === studentId ? newOverallScore : (s.overall_score || 0);
-    db.updateStudentScoreAndRank(s.id, sScore, idx + 1);
-  });
+    await db.updateStudentScoreAndRank(s.id, sScore, idx + 1);
+  }
 
-  db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'HOD_CORRECT_STUDENT_360', `STUDENT:${studentId}`);
+  await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'HOD_CORRECT_STUDENT_360', `STUDENT:${studentId}`);
   return res.json({ message: 'Student record corrected by HOD successfully.', overallScore: newOverallScore });
 });
 
@@ -297,7 +301,7 @@ router.post('/sync-skilledge-all', async (req: AuthRequest, res: Response) => {
   try {
     const { syncDepartmentSkillEdge } = await import('../services/skilledgeSync');
     const summary = await syncDepartmentSkillEdge('MANUAL_HOD');
-    db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'HOD_SYNC_SKILLEDGE_DEPARTMENT', 'DEPARTMENT');
+    await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'HOD_SYNC_SKILLEDGE_DEPARTMENT', 'DEPARTMENT');
     return res.json({
       message: `Department-wide SkillEdge synchronization completed for all ${summary.totalStudents} students. Total points earned across department: +${summary.totalPointsEarned}.`,
       summary
@@ -308,19 +312,19 @@ router.post('/sync-skilledge-all', async (req: AuthRequest, res: Response) => {
 });
 
 // DELETE Any Student Performance Record by HOD
-router.delete('/students/:studentId/records/:recordType/:recordId', (req: AuthRequest, res: Response) => {
+router.delete('/students/:studentId/records/:recordType/:recordId', async (req: AuthRequest, res: Response) => {
   const { studentId, recordType, recordId } = req.params;
 
-  const targetStudent = db.getStudentById(studentId);
+  const targetStudent = await db.getStudentById(studentId);
   if (!targetStudent) {
     return res.status(404).json({ error: 'Student record not found.' });
   }
 
   try {
-    db.deletePerformanceRecord(recordType, recordId, studentId);
+    await db.deletePerformanceRecord(recordType, recordId, studentId);
 
-    const full360 = db.getStudent360(studentId)!;
-    const scoringConfig = db.getScoringConfig();
+    const full360 = (await db.getStudent360(studentId))!;
+    const scoringConfig = await db.getScoringConfig();
     const breakdown = calculateCategoryScores(
       full360.student as any,
       full360.academics,
@@ -335,13 +339,14 @@ router.delete('/students/:studentId/records/:recordType/:recordId', (req: AuthRe
 
     const newOverallScore = computeOverallScore(breakdown, scoringConfig) || 0;
 
-    const sectionStudents = db.getStudents(targetStudent.year, targetStudent.section);
-    sectionStudents.forEach((s, idx) => {
+    const sectionStudents = await db.getStudents(targetStudent.year, targetStudent.section);
+    for (let idx = 0; idx < sectionStudents.length; idx++) {
+      const s = sectionStudents[idx];
       const sScore = s.id === studentId ? newOverallScore : (s.overall_score || 0);
-      db.updateStudentScoreAndRank(s.id, sScore, idx + 1);
-    });
+      await db.updateStudentScoreAndRank(s.id, sScore, idx + 1);
+    }
 
-    db.logAudit(
+    await db.logAudit(
       req.user!.id,
       req.user!.email,
       req.user!.role,
@@ -356,14 +361,14 @@ router.delete('/students/:studentId/records/:recordType/:recordId', (req: AuthRe
 });
 
 // POST Finalize Award (Converts Candidate -> Finalized Award in SQLite)
-router.post('/awards/finalize', (req: AuthRequest, res: Response) => {
+router.post('/awards/finalize', async (req: AuthRequest, res: Response) => {
   try {
     const awardKey = req.body.awardKey || 'BEST_STUDENT';
     const awardTitle = req.body.awardTitle || req.body.awardName || 'Best Student of Department';
     const winnerStudentId = req.body.winnerStudentId;
     const aiExplanation = req.body.aiExplanation || req.body.explanation || 'Finalized based on top overall department performance.';
 
-    const winner = db.getStudentById(winnerStudentId);
+    const winner = await db.getStudentById(winnerStudentId);
 
     if (!winner) {
       return res.status(404).json({ error: 'Winner student record not found.' });
@@ -384,8 +389,8 @@ router.post('/awards/finalize', (req: AuthRequest, res: Response) => {
       aiExplanation
     };
 
-    db.finalizeAward(awardObj);
-    db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'FINALIZE_AWARD', `AWARD:${awardKey}:${winner.register_no}`);
+    await db.finalizeAward(awardObj);
+    await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'FINALIZE_AWARD', `AWARD:${awardKey}:${winner.register_no}`);
 
     return res.status(201).json({ message: 'Award finalized successfully.', award: awardObj });
   } catch (err: any) {
@@ -394,18 +399,18 @@ router.post('/awards/finalize', (req: AuthRequest, res: Response) => {
 });
 
 // DELETE Finalized Award by HOD
-router.delete('/awards/:awardId', (req: AuthRequest, res: Response) => {
+router.delete('/awards/:awardId', async (req: AuthRequest, res: Response) => {
   const { awardId } = req.params;
-  db.deleteFinalizedAward(awardId);
-  db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'DELETE_FINALIZED_AWARD', `AWARD:${awardId}`);
+  await db.deleteFinalizedAward(awardId);
+  await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'DELETE_FINALIZED_AWARD', `AWARD:${awardId}`);
   return res.json({ message: 'Finalized award deleted successfully.' });
 });
 
 // POST Add new performance record item by HOD
-router.post('/students/:studentId/records/:recordType', (req: AuthRequest, res: Response) => {
+router.post('/students/:studentId/records/:recordType', async (req: AuthRequest, res: Response) => {
   const studentId = Array.isArray(req.params.studentId) ? req.params.studentId[0] : (req.params.studentId as string);
   const recordType = Array.isArray(req.params.recordType) ? req.params.recordType[0] : (req.params.recordType as string);
-  const targetStudent = db.getStudentById(studentId);
+  const targetStudent = await db.getStudentById(studentId);
   if (!targetStudent) {
     return res.status(404).json({ error: 'Student profile not found.' });
   }
@@ -414,24 +419,24 @@ router.post('/students/:studentId/records/:recordType', (req: AuthRequest, res: 
   const type = recordType.toLowerCase();
 
   if (type === 'arrears') {
-    createdId = db.addArrearRecord({ studentId, subjectCode: req.body.subjectCode || 'CS301', subjectName: req.body.subjectName || 'Data Structures' });
+    createdId = await db.addArrearRecord({ studentId, subjectCode: req.body.subjectCode || 'CS301', subjectName: req.body.subjectName || 'Data Structures' });
   } else if (type === 'nptel') {
-    createdId = db.addNPTELRecord({ studentId, courseName: req.body.courseName || 'NPTEL Course', examScore: req.body.examScore || 75 });
+    createdId = await db.addNPTELRecord({ studentId, courseName: req.body.courseName || 'NPTEL Course', examScore: req.body.examScore || 75 });
   } else if (type === 'discipline') {
-    createdId = db.addDisciplineRecord({ studentId, remark: req.body.remark || 'Discipline remark logged', recordedBy: req.user!.email });
+    createdId = await db.addDisciplineRecord({ studentId, remark: req.body.remark || 'Discipline remark logged', recordedBy: req.user!.email });
   } else if (type === 'certificates') {
-    createdId = db.addCertificateRecord({ studentId, courseName: req.body.courseName || 'Certificate Course', platform: req.body.platform });
+    createdId = await db.addCertificateRecord({ studentId, courseName: req.body.courseName || 'Certificate Course', platform: req.body.platform });
   } else if (type === 'participation') {
-    createdId = db.addParticipationRecord({ studentId, eventName: req.body.eventName || 'Symposium Event', organizer: req.body.organizer });
+    createdId = await db.addParticipationRecord({ studentId, eventName: req.body.eventName || 'Symposium Event', organizer: req.body.organizer });
   } else if (type === 'projects') {
-    createdId = db.addProjectRecord({ studentId, title: req.body.title || 'Technical Project', description: req.body.description });
+    createdId = await db.addProjectRecord({ studentId, title: req.body.title || 'Technical Project', description: req.body.description });
   } else if (type === 'achievements') {
-    createdId = db.addAchievementRecord({ studentId, title: req.body.title || 'Achievement Award', eventName: req.body.eventName });
+    createdId = await db.addAchievementRecord({ studentId, title: req.body.title || 'Achievement Award', eventName: req.body.eventName });
   } else {
     return res.status(400).json({ error: `Unsupported record type: ${recordType}` });
   }
 
-  db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'HOD_CREATE_PERFORMANCE_RECORD', `TYPE:${recordType}:ID:${createdId}:STUDENT:${studentId}`);
+  await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'HOD_CREATE_PERFORMANCE_RECORD', `TYPE:${recordType}:ID:${createdId}:STUDENT:${studentId}`);
 
   return res.status(201).json({
     message: `Record added successfully to ${recordType}.`,
@@ -440,48 +445,50 @@ router.post('/students/:studentId/records/:recordType', (req: AuthRequest, res: 
 });
 
 // GET all faculty list for HOD Panel (single source of truth synchronized with Admin creates)
-router.get('/faculty', (req: AuthRequest, res: Response) => {
-  const facultyUsers = db.getUsers('FACULTY');
-  const enriched = facultyUsers.map((f) => {
-    const assignment = db.getFacultyAssignment(f.id);
-    const assignedYear = assignment ? assignment.year : f.year || '2nd Year';
-    const assignedSection = assignment ? assignment.section : f.section || 'A';
-    const assignedRoster = db.getStudentsForFaculty(f.id, assignedYear, assignedSection);
+router.get('/faculty', async (req: AuthRequest, res: Response) => {
+  const facultyUsers = await db.getUsers('FACULTY');
+  const enriched = await Promise.all(
+    facultyUsers.map(async (f) => {
+      const assignment = await db.getFacultyAssignment(f.id);
+      const assignedYear = assignment ? assignment.year : f.year || '2nd Year';
+      const assignedSection = assignment ? assignment.section : f.section || 'A';
+      const assignedRoster = await db.getStudentsForFaculty(f.id, assignedYear, assignedSection);
 
-    return {
-      id: f.id,
-      email: f.email,
-      identifier: f.identifier,
-      name: f.name,
-      role: f.role,
-      year: assignedYear,
-      section: assignedSection,
-      facultyRole: assignment ? assignment.role : f.faculty_role || 'Class Coordinator',
-      department: assignment ? assignment.department : 'AI & DS',
-      isActive: Boolean(f.is_active),
-      createdAt: f.created_at,
-      assignedStudentsCount: assignedRoster.length
-    };
-  });
+      return {
+        id: f.id,
+        email: f.email,
+        identifier: f.identifier,
+        name: f.name,
+        role: f.role,
+        year: assignedYear,
+        section: assignedSection,
+        facultyRole: assignment ? assignment.role : f.faculty_role || 'Class Coordinator',
+        department: assignment ? assignment.department : 'AI & DS',
+        isActive: Boolean(f.is_active),
+        createdAt: f.created_at,
+        assignedStudentsCount: assignedRoster.length
+      };
+    })
+  );
 
   return res.json({ count: enriched.length, faculty: enriched });
 });
 
 // GET dedicated individual faculty workspace details for HOD inspection
-router.get('/faculty/:facultyId', (req: AuthRequest, res: Response) => {
+router.get('/faculty/:facultyId', async (req: AuthRequest, res: Response) => {
   const { facultyId } = req.params;
-  const facultyUser = db.getUserById(facultyId);
+  const facultyUser = await db.getUserById(facultyId);
 
   if (!facultyUser || facultyUser.role !== 'FACULTY') {
     return res.status(404).json({ error: 'Faculty member not found.' });
   }
 
-  const assignment = db.getFacultyAssignment(facultyId);
+  const assignment = await db.getFacultyAssignment(facultyId);
   const assignedYear = assignment ? assignment.year : facultyUser.year || '2nd Year';
   const assignedSection = assignment ? assignment.section : facultyUser.section || 'A';
 
-  const assignedRoster = db.getStudentsForFaculty(facultyId, assignedYear, assignedSection);
-  const student360List = assignedRoster.map((s) => db.getStudent360(s.id));
+  const assignedRoster = await db.getStudentsForFaculty(facultyId, assignedYear, assignedSection);
+  const student360List = await Promise.all(assignedRoster.map((s) => db.getStudent360(s.id)));
 
   // Compute workspace summary metrics
   const totalStudents = assignedRoster.length;

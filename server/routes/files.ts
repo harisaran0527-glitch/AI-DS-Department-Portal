@@ -106,7 +106,7 @@ router.post('/upload', authenticateToken, (req: AuthRequest, res: Response) => {
       return res.status(403).json({ error: 'Unauthorized: Students are strictly 100% view-only.' });
     }
 
-    const student = db.getStudentById(studentId);
+    const student = await db.getStudentById(studentId);
     if (!student) {
       if (req.file.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
       return res.status(404).json({ error: 'Student record not found.' });
@@ -118,11 +118,11 @@ router.post('/upload', authenticateToken, (req: AuthRequest, res: Response) => {
       return res.status(403).json({ error: 'Unauthorized: Faculty can only upload proof for assigned section students.' });
     }
 
-    const existingAtt = db.getAttachmentForRecord(studentId, recordType, recordId);
+    const existingAtt = await db.getAttachmentForRecord(studentId, recordType, recordId);
     const isReplace = Boolean(existingAtt);
 
     if (existingAtt) {
-      db.softDeleteAttachment(existingAtt.id, req.user!.id);
+      await db.softDeleteAttachment(existingAtt.id, req.user!.id);
     }
 
     const attachmentId = `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
@@ -141,10 +141,10 @@ router.post('/upload', authenticateToken, (req: AuthRequest, res: Response) => {
       is_deleted: 0
     };
 
-    db.createAttachment(newAtt);
+    await db.createAttachment(newAtt);
 
     const action = isReplace ? 'REPLACE_FILE' : 'UPLOAD_FILE';
-    db.logAudit(
+    await db.logAudit(
       req.user!.id,
       req.user!.email,
       req.user!.role,
@@ -171,12 +171,12 @@ router.post('/upload', authenticateToken, (req: AuthRequest, res: Response) => {
 });
 
 // GET Fetch Attachment Info for Record
-router.get('/record/:studentId/:recordType/:recordId', authenticateToken, (req: AuthRequest, res: Response) => {
+router.get('/record/:studentId/:recordType/:recordId', authenticateToken, async (req: AuthRequest, res: Response) => {
   const studentId = req.params.studentId as string;
   const recordType = req.params.recordType as string;
   const recordId = req.params.recordId as string;
 
-  const student = db.getStudentById(studentId);
+  const student = await db.getStudentById(studentId);
   if (!student) {
     return res.status(404).json({ error: 'Student record not found.' });
   }
@@ -185,7 +185,7 @@ router.get('/record/:studentId/:recordType/:recordId', authenticateToken, (req: 
     return res.status(403).json({ error: 'Unauthorized: Access forbidden.' });
   }
 
-  const att = db.getAttachmentForRecord(studentId, recordType, recordId);
+  const att = await db.getAttachmentForRecord(studentId, recordType, recordId);
   if (!att) {
     return res.status(404).json({ error: 'No attachment found for this record.' });
   }
@@ -208,15 +208,15 @@ router.get('/record/:studentId/:recordType/:recordId', authenticateToken, (req: 
 });
 
 // GET View File inline
-router.get('/:fileId', authenticateToken, (req: AuthRequest, res: Response) => {
+router.get('/:fileId', authenticateToken, async (req: AuthRequest, res: Response) => {
   const fileId = req.params.fileId as string;
 
-  const att = db.getAttachmentById(fileId);
+  const att = await db.getAttachmentById(fileId);
   if (!att) {
     return res.status(404).json({ error: 'Attachment not found.' });
   }
 
-  const student = db.getStudentById(att.student_id);
+  const student = await db.getStudentById(att.student_id);
   if (!student || !checkFilePermission(req, student)) {
     return res.status(403).json({ error: 'Unauthorized access to requested file.' });
   }
@@ -232,15 +232,15 @@ router.get('/:fileId', authenticateToken, (req: AuthRequest, res: Response) => {
 });
 
 // GET Download File attachment
-router.get('/:fileId/download', authenticateToken, (req: AuthRequest, res: Response) => {
+router.get('/:fileId/download', authenticateToken, async (req: AuthRequest, res: Response) => {
   const fileId = req.params.fileId as string;
 
-  const att = db.getAttachmentById(fileId);
+  const att = await db.getAttachmentById(fileId);
   if (!att) {
     return res.status(404).json({ error: 'Attachment not found.' });
   }
 
-  const student = db.getStudentById(att.student_id);
+  const student = await db.getStudentById(att.student_id);
   if (!student || !checkFilePermission(req, student)) {
     return res.status(403).json({ error: 'Unauthorized access to requested file.' });
   }
@@ -250,7 +250,7 @@ router.get('/:fileId/download', authenticateToken, (req: AuthRequest, res: Respo
     return res.status(404).json({ error: 'File content missing from server storage.' });
   }
 
-  db.logAudit(
+  await db.logAudit(
     req.user!.id,
     req.user!.email,
     req.user!.role,
@@ -262,25 +262,25 @@ router.get('/:fileId/download', authenticateToken, (req: AuthRequest, res: Respo
 });
 
 // DELETE Attachment
-router.delete('/:fileId', authenticateToken, (req: AuthRequest, res: Response) => {
+router.delete('/:fileId', authenticateToken, async (req: AuthRequest, res: Response) => {
   const fileId = req.params.fileId as string;
 
   if (req.user!.role === 'STUDENT') {
     return res.status(403).json({ error: 'Unauthorized: Students are strictly 100% view-only.' });
   }
 
-  const att = db.getAttachmentById(fileId);
+  const att = await db.getAttachmentById(fileId);
   if (!att) {
     return res.status(404).json({ error: 'Attachment not found.' });
   }
 
-  const student = db.getStudentById(att.student_id);
+  const student = await db.getStudentById(att.student_id);
   if (!student || !checkFilePermission(req, student)) {
     return res.status(403).json({ error: 'Unauthorized access to requested file.' });
   }
 
-  db.softDeleteAttachment(fileId, req.user!.id);
-  db.logAudit(
+  await db.softDeleteAttachment(fileId, req.user!.id);
+  await db.logAudit(
     req.user!.id,
     req.user!.email,
     req.user!.role,

@@ -7,8 +7,9 @@ import { authenticateToken, AuthRequest, JWT_SECRET } from '../middleware/auth';
 
 const router = Router();
 
-// Rate limiting memory map for failed logins
+// Rate limiting memory maps for failed logins (per identifier and per IP)
 const failedAttempts: Record<string, { count: number; lockedUntil?: number }> = {};
+const ipAttempts: Record<string, { count: number; lockedUntil?: number }> = {};
 
 router.post('/login', async (req, res) => {
   const { identifier, password, role } = req.body;
@@ -18,8 +19,20 @@ router.post('/login', async (req, res) => {
   }
 
   const cleanId = identifier.trim().toLowerCase();
+  const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip || req.socket.remoteAddress || 'unknown-ip';
 
-  // Rate limiting check: 5 failed attempts locks account for 5 minutes
+  // 1. IP-level rate limiting check: 15 failed attempts locks IP for 15 minutes
+  const ipRecord = ipAttempts[clientIp];
+  if (ipRecord && ipRecord.lockedUntil) {
+    if (Date.now() < ipRecord.lockedUntil) {
+      const remainingSecs = Math.ceil((ipRecord.lockedUntil - Date.now()) / 1000);
+      return res.status(429).json({ error: `Too many failed login requests from this IP address (${clientIp}). Please try again in ${remainingSecs} seconds.` });
+    } else {
+      delete ipAttempts[clientIp];
+    }
+  }
+
+  // 2. Identifier-level rate limiting check: 5 failed attempts locks account for 5 minutes
   const attemptRecord = failedAttempts[cleanId];
   if (attemptRecord && attemptRecord.lockedUntil) {
     if (Date.now() < attemptRecord.lockedUntil) {
@@ -30,14 +43,22 @@ router.post('/login', async (req, res) => {
     }
   }
 
-  const match = db.findUserByIdentifier(cleanId, role);
+  const recordFailedAttempt = () => {
+    const currId = failedAttempts[cleanId] || { count: 0 };
+    currId.count += 1;
+    if (currId.count >= 5) currId.lockedUntil = Date.now() + 5 * 60 * 1000;
+    failedAttempts[cleanId] = currId;
+
+    const currIp = ipAttempts[clientIp] || { count: 0 };
+    currIp.count += 1;
+    if (currIp.count >= 15) currIp.lockedUntil = Date.now() + 15 * 60 * 1000;
+    ipAttempts[clientIp] = currIp;
+  };
+
+  const match = await db.findUserByIdentifier(cleanId, role);
 
   if (!match) {
-    const curr = failedAttempts[cleanId] || { count: 0 };
-    curr.count += 1;
-    if (curr.count >= 5) curr.lockedUntil = Date.now() + 5 * 60 * 1000;
-    failedAttempts[cleanId] = curr;
-
+    recordFailedAttempt();
     return res.status(401).json({ error: 'Invalid credentials. Please check your identifier or portal password.' });
   }
 
@@ -51,15 +72,12 @@ router.post('/login', async (req, res) => {
   }
 
   if (!isPasswordValid) {
-    const curr = failedAttempts[cleanId] || { count: 0 };
-    curr.count += 1;
-    if (curr.count >= 5) curr.lockedUntil = Date.now() + 5 * 60 * 1000;
-    failedAttempts[cleanId] = curr;
-
+    recordFailedAttempt();
     return res.status(401).json({ error: 'Invalid credentials. Please check your identifier or portal password.' });
   }
 
   delete failedAttempts[cleanId];
+  if (ipAttempts[clientIp]) delete ipAttempts[clientIp];
 
   // Token payload contains ONLY necessary identity claim — ZERO password hash exposed!
   const tokenPayload = {
@@ -75,14 +93,17 @@ router.post('/login', async (req, res) => {
 
   const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '8h' });
 
+  // BUG-02: Dynamic Secure Cookie Configuration
+  const isSecure = process.env.NODE_ENV === 'production' || Boolean(req.secure) || req.headers['x-forwarded-proto'] === 'https';
+
   res.cookie('aids_session_token', token, {
     httpOnly: true,
-    secure: false, // Set to true in HTTPS production
+    secure: Boolean(isSecure),
     sameSite: 'lax',
     maxAge: 8 * 3600 * 1000
   });
 
-  db.logAudit(match.id, match.email, match.role, 'LOGIN_SUCCESS', 'AUTH_PORTAL');
+  await db.logAudit(match.id, match.email, match.role, 'LOGIN_SUCCESS', 'AUTH_PORTAL');
 
   return res.json({
     message: 'Login successful',
@@ -91,9 +112,9 @@ router.post('/login', async (req, res) => {
   });
 });
 
-router.post('/logout', authenticateToken, (req: AuthRequest, res: Response) => {
+router.post('/logout', authenticateToken, async (req: AuthRequest, res: Response) => {
   if (req.user) {
-    db.logAudit(req.user.id, req.user.email, req.user.role, 'LOGOUT', 'AUTH_PORTAL');
+    await db.logAudit(req.user.id, req.user.email, req.user.role, 'LOGOUT', 'AUTH_PORTAL');
   }
   res.clearCookie('aids_session_token');
   return res.json({ message: 'Logout successful' });
@@ -101,6 +122,34 @@ router.post('/logout', authenticateToken, (req: AuthRequest, res: Response) => {
 
 router.get('/me', authenticateToken, (req: AuthRequest, res: Response) => {
   return res.json({ user: req.user });
+});
+
+router.post('/change-password', authenticateToken, async (req: AuthRequest, res: Response) => {
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Both current password and new password are required.' });
+  }
+
+  if (typeof newPassword !== 'string' || newPassword.length < 6) {
+    return res.status(400).json({ error: 'New password must be at least 6 characters long.' });
+  }
+
+  const user = await db.getUserById(req.user!.id);
+  if (!user) {
+    return res.status(404).json({ error: 'User account not found.' });
+  }
+
+  const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+  if (!isMatch) {
+    return res.status(401).json({ error: 'Incorrect current password.' });
+  }
+
+  const newHash = await bcrypt.hash(newPassword, 10);
+  await db.updateUserPassword(req.user!.id, newHash);
+  await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'CHANGE_PASSWORD', `USER:${req.user!.email}`);
+
+  return res.json({ message: 'Password changed successfully.' });
 });
 
 function generateOAuthState(data: { studentId: string; purpose: string; emailType: string; expectedEmail: string }): string {
@@ -135,7 +184,7 @@ function verifyAndDecodeOAuthState(stateStr: string): { studentId: string; purpo
 }
 
 // --- REAL GOOGLE OAUTH AUTHORIZATION FLOW (PASSWORDLESS FOR LARGE SCALE) ---
-router.get('/google/start', (req: Request, res: Response) => {
+router.get('/google/start', async (req: Request, res: Response) => {
   const studentId = (req.query.studentId as string) || '';
   const purpose = (req.query.purpose as string) || 'NPTEL';
   const emailType = ((req.query.emailType as string) || 'COLLEGE').toUpperCase();
@@ -144,7 +193,7 @@ router.get('/google/start', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Student ID is required for Google OAuth authorization.' });
   }
 
-  const student = db.getStudentById(studentId);
+  const student = await db.getStudentById(studentId);
   if (!student) {
     return res.status(404).json({ error: 'Student record not found.' });
   }

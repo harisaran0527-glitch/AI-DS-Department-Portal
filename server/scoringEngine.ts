@@ -48,111 +48,121 @@ export function calculateCategoryScores(
   // NPTEL Score (0-100)
   let nptelScore = 0;
   if (nptelList && nptelList.length > 0) {
-    const sumScores = nptelList.reduce((sum, n) => sum + (n.finalScore || 0), 0);
-    const avgScore = sumScores / nptelList.length;
-    const certifiedCount = nptelList.filter((n) => n.status === 'Certified' || n.status === 'Completed').length;
-    nptelScore = Math.min(100, avgScore + certifiedCount * 5);
+    const totalNptelScore = nptelList.reduce((sum, n) => sum + (n.finalScore || n.assignmentScore || 0), 0);
+    nptelScore = Math.min(100, totalNptelScore / nptelList.length);
+  }
+
+  // Attendance Score (0-100)
+  const attendanceScore = attendance?.percentage || 0;
+
+  // Discipline Score (0-100)
+  let disciplineScore = 100;
+  if (disciplineList && disciplineList.length > 0) {
+    disciplineScore = Math.max(0, 100 - disciplineList.length * 10);
   }
 
   // Participation Score (0-100)
-  const participationScore = Math.min(100, (participationList ? participationList.length : 0) * 25);
+  let participationScore = 0;
+  if (participationList && participationList.length > 0) {
+    const prizeCount = participationList.filter((p) => (p.position || p.achievement || '').toLowerCase().includes('1st') || (p.position || p.achievement || '').toLowerCase().includes('winner')).length;
+    participationScore = Math.min(100, participationList.length * 20 + prizeCount * 15);
+  }
 
-  // Certificate Score (0-100)
-  const certificateScore = Math.min(100, (certificatesList ? certificatesList.length : 0) * 25);
+  // Certificates Score (0-100)
+  let certificatesScore = 0;
+  if (certificatesList && certificatesList.length > 0) {
+    certificatesScore = Math.min(100, certificatesList.length * 25);
+  }
 
-  // Attendance Score (0-100)
-  const attendanceScore = attendance ? Math.min(100, Math.max(0, attendance.percentage)) : 85;
-
-  // Discipline Score (0-100)
-  const totalFines = (disciplineList || []).reduce((sum, d) => sum + ((d as any).fine_amount || (d as any).fineAmount || 0), 0);
-  const disciplineDeductions = (disciplineList || []).length * 5 + totalFines * 0.5;
-  const disciplineScore = Math.max(0, 100 - disciplineDeductions);
-
-  // LeetCode Multi-Metric Score (0-100)
-  let leetcodeScore = 0;
+  // LeetCode Score (0-100)
+  let leetCodeScore = 0;
   if (leetcode) {
-    const easyPts = (leetcode.easySolved || 0) * 0.3;
-    const medPts = (leetcode.mediumSolved || 0) * 1.5;
-    const hardPts = (leetcode.hardSolved || 0) * 3.5;
-    const ratingPts = (leetcode.contestRating || 1200) > 1200 ? ((leetcode.contestRating || 1200) - 1200) * 0.08 : 0;
-    const streakPts = (leetcode.streakDays || 0) * 0.5;
-
-    leetcodeScore = Math.min(100, Math.max(0, easyPts + medPts + hardPts + ratingPts + streakPts));
+    const totalSolved = leetcode.totalSolved || (leetcode.easySolved + leetcode.mediumSolved + leetcode.hardSolved);
+    const solvedPoints = Math.min(60, totalSolved * 1.5);
+    const ratingPoints = Math.min(40, Math.max(0, (leetcode.contestRating - 1200) * 0.1));
+    leetCodeScore = Math.min(100, solvedPoints + ratingPoints);
   }
 
   // Projects Score (0-100)
-  let projectScore = 0;
-  (projects || []).forEach((prj) => {
-    let pts = prj.status === 'Completed' ? 35 : 15;
-    if (prj.prizeAwarded) pts += 20;
-    if (prj.githubUrl || (prj as any).live_url) pts += 10;
-    projectScore += pts;
-  });
-  projectScore = Math.min(100, projectScore);
+  let projectsScore = 0;
+  if (projects && projects.length > 0) {
+    projectsScore = Math.min(100, projects.length * 30);
+  }
 
   return {
     academic: Math.round(academicScore * 10) / 10,
     skillEdge: Math.round(skillEdgeScore * 10) / 10,
     nptel: Math.round(nptelScore * 10) / 10,
-    participation: Math.round(participationScore * 10) / 10,
-    certificates: Math.round(certificateScore * 10) / 10,
     attendance: Math.round(attendanceScore * 10) / 10,
     discipline: Math.round(disciplineScore * 10) / 10,
-    leetCode: Math.round(leetcodeScore * 10) / 10,
-    projects: Math.round(projectScore * 10) / 10
+    participation: Math.round(participationScore * 10) / 10,
+    certificates: Math.round(certificatesScore * 10) / 10,
+    leetCode: Math.round(leetCodeScore * 10) / 10,
+    projects: Math.round(projectsScore * 10) / 10
   };
 }
 
-export function computeOverallScore(breakdown: any, config: ScoringConfig): number {
+// 2. Weighted Overall Score Calculator (0 - 100)
+export function computeOverallScore(breakdown: ReturnType<typeof calculateCategoryScores>, config: ScoringConfig): number {
+  const totalWeight =
+    (config?.academicWeight || 25) +
+    (config?.skillEdgeWeight || 15) +
+    (config?.nptelWeight || 10) +
+    (config?.participationWeight || 10) +
+    (config?.certificatesWeight || 10) +
+    (config?.attendanceWeight || 10) +
+    (config?.disciplineWeight || 5) +
+    (config?.leetcodeWeight || 10) +
+    (config?.projectsWeight || 5);
+
+  if (totalWeight <= 0) return 0;
+
   const weightedSum =
-    breakdown.academic * (config.academicWeight / 100) +
-    breakdown.skillEdge * (config.skillEdgeWeight / 100) +
-    breakdown.nptel * (config.nptelWeight / 100) +
-    breakdown.participation * (config.participationWeight / 100) +
-    breakdown.certificates * (config.certificatesWeight / 100) +
-    breakdown.attendance * (config.attendanceWeight / 100) +
-    breakdown.discipline * (config.disciplineWeight / 100) +
-    breakdown.leetCode * ((config.leetcodeWeight || 10) / 100) +
-    breakdown.projects * (config.projectsWeight / 100);
+    breakdown.academic * (config?.academicWeight || 25) +
+    breakdown.skillEdge * (config?.skillEdgeWeight || 15) +
+    breakdown.nptel * (config?.nptelWeight || 10) +
+    breakdown.participation * (config?.participationWeight || 10) +
+    breakdown.certificates * (config?.certificatesWeight || 10) +
+    breakdown.attendance * (config?.attendanceWeight || 10) +
+    breakdown.discipline * (config?.disciplineWeight || 5) +
+    breakdown.leetCode * (config?.leetcodeWeight || 10) +
+    breakdown.projects * (config?.projectsWeight || 5);
 
-  return Math.round(weightedSum * 10) / 10;
+  const rawScore = weightedSum / totalWeight;
+  return Math.min(100, Math.round(rawScore * 10) / 10);
 }
 
-// Award candidate helper scores
-export function computeLeetCodeAwardScore(leetcode?: LeetCodeRecord): number {
-  if (!leetcode) return 0;
-  const raw =
-    (leetcode.easySolved || 0) * 0.3 +
-    (leetcode.mediumSolved || 0) * 1.5 +
-    (leetcode.hardSolved || 0) * 3.5 +
-    ((leetcode.contestRating || 1200) > 1200 ? ((leetcode.contestRating || 1200) - 1200) * 0.1 : 0) +
-    (leetcode.streakDays || 0) * 0.5;
-
-  return Math.min(100, Math.round(raw * 10) / 10);
-}
-
-export function computeEliteStudentScore(breakdown: any): number {
+export function computeEliteScore(breakdown: ReturnType<typeof calculateCategoryScores>): number {
   const score =
-    breakdown.academic * 0.25 +
-    breakdown.leetCode * 0.2 +
+    breakdown.academic * 0.35 +
+    breakdown.leetCode * 0.25 +
     breakdown.skillEdge * 0.15 +
-    breakdown.projects * 0.15 +
     breakdown.nptel * 0.15 +
     breakdown.certificates * 0.1;
 
   return Math.min(100, Math.round(score * 10) / 10);
 }
 
-export function computeTeamHeadScore(student: StudentRecord, projects: ProjectRecord[]): number {
-  const teams = db.getTeams().filter((t) => t.team_head_student_id === student.id);
+export const computeEliteStudentScore = computeEliteScore;
+
+export function computeLeetCodeAwardScore(leetcode: any): number {
+  if (!leetcode) return 0;
+  const totalSolved = leetcode.totalSolved || ((leetcode.easySolved || 0) + (leetcode.mediumSolved || 0) + (leetcode.hardSolved || 0));
+  const rating = leetcode.contestRating || 1200;
+  return Math.min(100, Math.round((totalSolved * 0.2 + (rating / 3000) * 80) * 10) / 10);
+}
+
+export async function computeTeamHeadScore(student: StudentRecord, projects: ProjectRecord[]): Promise<number> {
+  const allTeams = await db.getTeams();
+  const teams = allTeams.filter((t) => t.team_head_student_id === student.id);
   const teamProjects = projects.filter((p) => p.isTeam && (p.studentRole || '').toLowerCase().includes('lead'));
   const totalHeadProjects = teams.length + teamProjects.length;
   let score = totalHeadProjects * 35 + (student.cgpa / 10) * 30 + (student.overall_score || 0) * 0.35;
   return Math.min(100, Math.round(score * 10) / 10);
 }
 
-export function computeRepresentativeScore(student: StudentRecord, attendanceScore: number): number {
-  const repEval = db.getRepresentativeEvaluation(student.id);
+export async function computeRepresentativeScore(student: StudentRecord, attendanceScore: number): Promise<number> {
+  const repEval = await db.getRepresentativeEvaluation(student.id);
   if (repEval) {
     const avgScore = (
       repEval.communication_score +
@@ -177,15 +187,17 @@ export function computeRepresentativeScore(student: StudentRecord, attendanceSco
 }
 
 // Generate Top Maximum 2 Shortlisted Students for Ranking
-export function generateTop2Shortlist(students: StudentRecord[], scoringConfig: ScoringConfig) {
-  const evaluated = students.map((s) => {
-    const full360 = db.getStudent360(s.id);
+export async function generateTop2Shortlist(students: StudentRecord[], scoringConfig: ScoringConfig) {
+  const evaluated = [];
+  for (const s of students) {
+    const full360 = await db.getStudent360(s.id);
     if (!full360) {
-      return {
+      evaluated.push({
         student: s,
         overallScore: s.overall_score || 0,
         categoryScores: { academic: 0, skillEdge: 0, nptel: 0, participation: 0, certificates: 0, attendance: 0, discipline: 100, leetCode: 0, projects: 0 }
-      };
+      });
+      continue;
     }
     const catScores = calculateCategoryScores(
       full360.student as any,
@@ -201,13 +213,13 @@ export function generateTop2Shortlist(students: StudentRecord[], scoringConfig: 
       full360.participation
     );
     const overall = computeOverallScore(catScores, scoringConfig);
-    return {
+    evaluated.push({
       student: s,
       overallScore: overall,
       categoryScores: catScores,
       full360
-    };
-  });
+    });
+  }
 
   evaluated.sort((a, b) => b.overallScore - a.overallScore);
 

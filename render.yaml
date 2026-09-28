@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: aids-department-backend
+    env: node
+    buildCommand: npm install
+    startCommand: node --import tsx/esm server/index.ts
+    disk:
+      name: aids-sqlite-disk
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: USE_SQLITE
+        value: "true"
+      - key: DATABASE_PATH
+        value: /var/data/aids_system.db
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
