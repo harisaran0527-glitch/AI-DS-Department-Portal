@@ -28,9 +28,8 @@ export function safeStringifyJson(val: any): string {
 
 const sqlite = sqliteDb;
 
-function initSchema() {
-  if (isPostgresActive() || !sqlite) return;
-  sqlite.exec(`
+export async function initDatabaseSchema(): Promise<void> {
+  const ddl = `
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
@@ -421,6 +420,25 @@ function initSchema() {
       FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS nptel_proofs (
+      id TEXT PRIMARY KEY,
+      student_id TEXT NOT NULL,
+      week_no INTEGER NOT NULL,
+      proof_file_path TEXT NOT NULL,
+      original_file_name TEXT,
+      uploaded_at TEXT NOT NULL,
+      FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS leetcode_proofs (
+      id TEXT PRIMARY KEY,
+      student_id TEXT NOT NULL,
+      proof_file_path TEXT NOT NULL,
+      original_file_name TEXT,
+      uploaded_at TEXT NOT NULL,
+      FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+    );
+
     -- INDEXES FOR FAST QUERY EXECUTION
     CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
     CREATE INDEX IF NOT EXISTS idx_users_identifier ON users(identifier);
@@ -438,118 +456,145 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_team_heads_fac ON team_heads(faculty_id);
     CREATE INDEX IF NOT EXISTS idx_team_head_members_th ON team_head_members(team_head_id);
     CREATE INDEX IF NOT EXISTS idx_skilledge_sync_history_stu ON skilledge_sync_history(student_id, synced_at DESC);
-  `);
+    CREATE INDEX IF NOT EXISTS idx_students_created_by ON students(created_by_faculty_id);
+    CREATE INDEX IF NOT EXISTS idx_students_workspace ON students(faculty_workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_conn_acc_stu_prov ON connected_accounts(student_id, provider);
+    CREATE INDEX IF NOT EXISTS idx_nptel_proofs_stu ON nptel_proofs(student_id);
+    CREATE INDEX IF NOT EXISTS idx_leetcode_proofs_stu ON leetcode_proofs(student_id);
+    CREATE INDEX IF NOT EXISTS idx_subjects_code_ctx ON subjects(subject_code, year, semester, section);
+    CREATE INDEX IF NOT EXISTS idx_subjects_year_sem ON subjects(year, semester, section);
+  `;
 
-  try { sqlite.exec(`ALTER TABLE students ADD COLUMN created_by_faculty_id TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE students ADD COLUMN faculty_workspace_id TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE students ADD COLUMN personal_email TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE students ADD COLUMN entry_type TEXT DEFAULT 'Regular';`); } catch {}
-  try { sqlite.exec(`ALTER TABLE students ADD COLUMN linkedin_url TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE students ADD COLUMN github_url TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE students ADD COLUMN is_elite_student INTEGER DEFAULT 0;`); } catch {}
-
-  try { sqlite.exec(`ALTER TABLE academic_records ADD COLUMN exam_type TEXT DEFAULT 'Semester';`); } catch {}
-  try { sqlite.exec(`ALTER TABLE academic_records ADD COLUMN created_at TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE discipline_records ADD COLUMN time TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE discipline_records ADD COLUMN fine_amount REAL DEFAULT 0;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE discipline_records ADD COLUMN action_taken TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE certificate_records ADD COLUMN company_name TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE certificate_records ADD COLUMN proof_file_path TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE certificate_records ADD COLUMN created_at TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE nptel_records ADD COLUMN account_type TEXT DEFAULT 'college';`); } catch {}
-  try { sqlite.exec(`ALTER TABLE nptel_records ADD COLUMN connected_email TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE nptel_records ADD COLUMN connected_at TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE nptel_records ADD COLUMN last_verified TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE certificate_records ADD COLUMN file_path TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE certificate_records ADD COLUMN original_file_name TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE certificate_records ADD COLUMN uploaded_at TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE participation_records ADD COLUMN college_name TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE participation_records ADD COLUMN proof_file_path TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE participation_records ADD COLUMN event_level TEXT DEFAULT 'College';`); } catch {}
-  try { sqlite.exec(`ALTER TABLE participation_records ADD COLUMN achievement TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE participation_records ADD COLUMN description TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE participation_records ADD COLUMN original_file_name TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE participation_records ADD COLUMN uploaded_at TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE project_records ADD COLUMN live_url TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE project_records ADD COLUMN product_photo_path TEXT;`); } catch {}
-
-  try { sqlite.exec(`ALTER TABLE connected_accounts ADD COLUMN purpose TEXT DEFAULT 'NPTEL';`); } catch {}
-  try { sqlite.exec(`ALTER TABLE connected_accounts ADD COLUMN email_type TEXT DEFAULT 'COLLEGE';`); } catch {}
-  try { sqlite.exec(`ALTER TABLE connected_accounts ADD COLUMN connected_email TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE connected_accounts ADD COLUMN provider_account_id TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE connected_accounts ADD COLUMN connected_at TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE leetcode_stats ADD COLUMN total_attempted INTEGER DEFAULT 0;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE leetcode_stats ADD COLUMN acceptance_rate REAL DEFAULT 0.0;`); } catch {}
-
-  try { sqlite.exec(`ALTER TABLE skilledge_records ADD COLUMN skilledge_handle TEXT;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE skilledge_records ADD COLUMN previous_points INTEGER DEFAULT 0;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE skilledge_records ADD COLUMN earned_delta INTEGER DEFAULT 0;`); } catch {}
-  try { sqlite.exec(`ALTER TABLE skilledge_records ADD COLUMN status TEXT DEFAULT 'VERIFIED';`); } catch {}
-  try { sqlite.exec(`ALTER TABLE skilledge_records ADD COLUMN last_synced_at TEXT;`); } catch {}
-
-  try {
-    sqlite.exec(`
-      CREATE TABLE IF NOT EXISTS nptel_proofs (
-        id TEXT PRIMARY KEY,
-        student_id TEXT NOT NULL,
-        week_no INTEGER NOT NULL,
-        proof_file_path TEXT NOT NULL,
-        original_file_name TEXT,
-        uploaded_at TEXT NOT NULL,
-        FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
-      );
-
-      CREATE TABLE IF NOT EXISTS leetcode_proofs (
-        id TEXT PRIMARY KEY,
-        student_id TEXT NOT NULL,
-        proof_file_path TEXT NOT NULL,
-        original_file_name TEXT,
-        uploaded_at TEXT NOT NULL,
-        FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
-      );
-    `);
-  } catch {}
-
-  try {
-    sqlite.exec(`
-      CREATE INDEX IF NOT EXISTS idx_students_created_by ON students(created_by_faculty_id);
-      CREATE INDEX IF NOT EXISTS idx_students_workspace ON students(faculty_workspace_id);
-      CREATE INDEX IF NOT EXISTS idx_conn_acc_stu_prov ON connected_accounts(student_id, provider);
-      CREATE INDEX IF NOT EXISTS idx_nptel_proofs_stu ON nptel_proofs(student_id);
-      CREATE INDEX IF NOT EXISTS idx_leetcode_proofs_stu ON leetcode_proofs(student_id);
-      CREATE INDEX IF NOT EXISTS idx_subjects_code_ctx ON subjects(subject_code, year, semester, section);
-      CREATE INDEX IF NOT EXISTS idx_subjects_year_sem ON subjects(year, semester, section);
-    `);
-  } catch {}
-
-  const hasConfig = sqlite.prepare('SELECT COUNT(*) as cnt FROM scoring_configuration').get() as { cnt: number };
-  if (hasConfig.cnt === 0) {
-    sqlite.prepare(`
-      INSERT INTO scoring_configuration (id, academic_weight, skilledge_weight, nptel_weight, participation_weight, certificates_weight, attendance_weight, discipline_weight, leetcode_weight, projects_weight)
-      VALUES ('default', 25, 15, 10, 10, 10, 10, 5, 10, 5)
-    `).run();
+  if (isPostgresActive()) {
+    const { pgPool } = await import('./postgresAdapter');
+    if (pgPool) {
+      await pgPool.query(ddl);
+      const alterCols = [
+        `ALTER TABLE students ADD COLUMN IF NOT EXISTS created_by_faculty_id TEXT;`,
+        `ALTER TABLE students ADD COLUMN IF NOT EXISTS faculty_workspace_id TEXT;`,
+        `ALTER TABLE students ADD COLUMN IF NOT EXISTS personal_email TEXT;`,
+        `ALTER TABLE students ADD COLUMN IF NOT EXISTS entry_type TEXT DEFAULT 'Regular';`,
+        `ALTER TABLE students ADD COLUMN IF NOT EXISTS linkedin_url TEXT;`,
+        `ALTER TABLE students ADD COLUMN IF NOT EXISTS github_url TEXT;`,
+        `ALTER TABLE students ADD COLUMN IF NOT EXISTS is_elite_student INTEGER DEFAULT 0;`,
+        `ALTER TABLE academic_records ADD COLUMN IF NOT EXISTS exam_type TEXT DEFAULT 'Semester';`,
+        `ALTER TABLE academic_records ADD COLUMN IF NOT EXISTS created_at TEXT;`,
+        `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS time TEXT;`,
+        `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS fine_amount REAL DEFAULT 0;`,
+        `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS action_taken TEXT;`,
+        `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS company_name TEXT;`,
+        `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS proof_file_path TEXT;`,
+        `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS created_at TEXT;`,
+        `ALTER TABLE nptel_records ADD COLUMN IF NOT EXISTS account_type TEXT DEFAULT 'college';`,
+        `ALTER TABLE nptel_records ADD COLUMN IF NOT EXISTS connected_email TEXT;`,
+        `ALTER TABLE nptel_records ADD COLUMN IF NOT EXISTS connected_at TEXT;`,
+        `ALTER TABLE nptel_records ADD COLUMN IF NOT EXISTS last_verified TEXT;`,
+        `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS file_path TEXT;`,
+        `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS original_file_name TEXT;`,
+        `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS uploaded_at TEXT;`,
+        `ALTER TABLE participation_records ADD COLUMN IF NOT EXISTS college_name TEXT;`,
+        `ALTER TABLE participation_records ADD COLUMN IF NOT EXISTS proof_file_path TEXT;`,
+        `ALTER TABLE participation_records ADD COLUMN IF NOT EXISTS event_level TEXT DEFAULT 'College';`,
+        `ALTER TABLE participation_records ADD COLUMN IF NOT EXISTS achievement TEXT;`,
+        `ALTER TABLE participation_records ADD COLUMN IF NOT EXISTS description TEXT;`,
+        `ALTER TABLE participation_records ADD COLUMN IF NOT EXISTS original_file_name TEXT;`,
+        `ALTER TABLE participation_records ADD COLUMN IF NOT EXISTS uploaded_at TEXT;`,
+        `ALTER TABLE project_records ADD COLUMN IF NOT EXISTS live_url TEXT;`,
+        `ALTER TABLE project_records ADD COLUMN IF NOT EXISTS product_photo_path TEXT;`,
+        `ALTER TABLE connected_accounts ADD COLUMN IF NOT EXISTS purpose TEXT DEFAULT 'NPTEL';`,
+        `ALTER TABLE connected_accounts ADD COLUMN IF NOT EXISTS email_type TEXT DEFAULT 'COLLEGE';`,
+        `ALTER TABLE connected_accounts ADD COLUMN IF NOT EXISTS connected_email TEXT;`,
+        `ALTER TABLE connected_accounts ADD COLUMN IF NOT EXISTS provider_account_id TEXT;`,
+        `ALTER TABLE connected_accounts ADD COLUMN IF NOT EXISTS connected_at TEXT;`,
+        `ALTER TABLE leetcode_stats ADD COLUMN IF NOT EXISTS total_attempted INTEGER DEFAULT 0;`,
+        `ALTER TABLE leetcode_stats ADD COLUMN IF NOT EXISTS acceptance_rate REAL DEFAULT 0.0;`,
+        `ALTER TABLE skilledge_records ADD COLUMN IF NOT EXISTS skilledge_handle TEXT;`,
+        `ALTER TABLE skilledge_records ADD COLUMN IF NOT EXISTS previous_points INTEGER DEFAULT 0;`,
+        `ALTER TABLE skilledge_records ADD COLUMN IF NOT EXISTS earned_delta INTEGER DEFAULT 0;`,
+        `ALTER TABLE skilledge_records ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'VERIFIED';`,
+        `ALTER TABLE skilledge_records ADD COLUMN IF NOT EXISTS last_synced_at TEXT;`
+      ];
+      for (const colSql of alterCols) {
+        try { await pgPool.query(colSql); } catch {}
+      }
+    }
+  } else if (sqlite) {
+    sqlite.exec(ddl);
+    const alterCols = [
+      `ALTER TABLE students ADD COLUMN created_by_faculty_id TEXT;`,
+      `ALTER TABLE students ADD COLUMN faculty_workspace_id TEXT;`,
+      `ALTER TABLE students ADD COLUMN personal_email TEXT;`,
+      `ALTER TABLE students ADD COLUMN entry_type TEXT DEFAULT 'Regular';`,
+      `ALTER TABLE students ADD COLUMN linkedin_url TEXT;`,
+      `ALTER TABLE students ADD COLUMN github_url TEXT;`,
+      `ALTER TABLE students ADD COLUMN is_elite_student INTEGER DEFAULT 0;`,
+      `ALTER TABLE academic_records ADD COLUMN exam_type TEXT DEFAULT 'Semester';`,
+      `ALTER TABLE academic_records ADD COLUMN created_at TEXT;`,
+      `ALTER TABLE discipline_records ADD COLUMN time TEXT;`,
+      `ALTER TABLE discipline_records ADD COLUMN fine_amount REAL DEFAULT 0;`,
+      `ALTER TABLE discipline_records ADD COLUMN action_taken TEXT;`,
+      `ALTER TABLE certificate_records ADD COLUMN company_name TEXT;`,
+      `ALTER TABLE certificate_records ADD COLUMN proof_file_path TEXT;`,
+      `ALTER TABLE certificate_records ADD COLUMN created_at TEXT;`,
+      `ALTER TABLE nptel_records ADD COLUMN account_type TEXT DEFAULT 'college';`,
+      `ALTER TABLE nptel_records ADD COLUMN connected_email TEXT;`,
+      `ALTER TABLE nptel_records ADD COLUMN connected_at TEXT;`,
+      `ALTER TABLE nptel_records ADD COLUMN last_verified TEXT;`,
+      `ALTER TABLE certificate_records ADD COLUMN file_path TEXT;`,
+      `ALTER TABLE certificate_records ADD COLUMN original_file_name TEXT;`,
+      `ALTER TABLE certificate_records ADD COLUMN uploaded_at TEXT;`,
+      `ALTER TABLE participation_records ADD COLUMN college_name TEXT;`,
+      `ALTER TABLE participation_records ADD COLUMN proof_file_path TEXT;`,
+      `ALTER TABLE participation_records ADD COLUMN event_level TEXT DEFAULT 'College';`,
+      `ALTER TABLE participation_records ADD COLUMN achievement TEXT;`,
+      `ALTER TABLE participation_records ADD COLUMN description TEXT;`,
+      `ALTER TABLE participation_records ADD COLUMN original_file_name TEXT;`,
+      `ALTER TABLE participation_records ADD COLUMN uploaded_at TEXT;`,
+      `ALTER TABLE project_records ADD COLUMN live_url TEXT;`,
+      `ALTER TABLE project_records ADD COLUMN product_photo_path TEXT;`,
+      `ALTER TABLE connected_accounts ADD COLUMN purpose TEXT DEFAULT 'NPTEL';`,
+      `ALTER TABLE connected_accounts ADD COLUMN email_type TEXT DEFAULT 'COLLEGE';`,
+      `ALTER TABLE connected_accounts ADD COLUMN connected_email TEXT;`,
+      `ALTER TABLE connected_accounts ADD COLUMN provider_account_id TEXT;`,
+      `ALTER TABLE connected_accounts ADD COLUMN connected_at TEXT;`,
+      `ALTER TABLE leetcode_stats ADD COLUMN total_attempted INTEGER DEFAULT 0;`,
+      `ALTER TABLE leetcode_stats ADD COLUMN acceptance_rate REAL DEFAULT 0.0;`,
+      `ALTER TABLE skilledge_records ADD COLUMN skilledge_handle TEXT;`,
+      `ALTER TABLE skilledge_records ADD COLUMN previous_points INTEGER DEFAULT 0;`,
+      `ALTER TABLE skilledge_records ADD COLUMN earned_delta INTEGER DEFAULT 0;`,
+      `ALTER TABLE skilledge_records ADD COLUMN status TEXT DEFAULT 'VERIFIED';`,
+      `ALTER TABLE skilledge_records ADD COLUMN last_synced_at TEXT;`
+    ];
+    for (const colSql of alterCols) {
+      try { sqlite.exec(colSql); } catch {}
+    }
   }
 
-  const hasSubjects = sqlite.prepare('SELECT COUNT(*) as cnt FROM subjects').get() as { cnt: number };
-  if (hasSubjects.cnt === 0) {
+  const hasConfig = await queryOne('SELECT COUNT(*) as cnt FROM scoring_configuration');
+  if (!hasConfig || Number(hasConfig.cnt) === 0) {
+    await executeRun(`
+      INSERT INTO scoring_configuration (id, academic_weight, skilledge_weight, nptel_weight, participation_weight, certificates_weight, attendance_weight, discipline_weight, leetcode_weight, projects_weight)
+      VALUES ('default', 25, 15, 10, 10, 10, 10, 5, 10, 5)
+    `);
+  }
+
+  const hasSubjects = await queryOne('SELECT COUNT(*) as cnt FROM subjects');
+  if (!hasSubjects || Number(hasSubjects.cnt) === 0) {
     const defaultSubs = [
       { id: 'sub-seed-1', code: 'AD3401', name: 'Data Structures and Algorithms', dept: 'AI & Data Science', acadYear: '2023-2027', year: '2nd Year', sem: 3, sec: 'ALL', type: 'Theory', credits: 3, handler: 'Assigned Faculty' },
       { id: 'sub-seed-2', code: 'AD3402', name: 'Artificial Intelligence & Neural Networks', dept: 'AI & Data Science', acadYear: '2023-2027', year: '2nd Year', sem: 4, sec: 'ALL', type: 'Theory', credits: 4, handler: 'Class Coordinator' },
       { id: 'sub-seed-3', code: 'AD3411', name: 'Machine Learning Laboratory', dept: 'AI & Data Science', acadYear: '2023-2027', year: '2nd Year', sem: 4, sec: 'ALL', type: 'Practical', credits: 2, handler: 'Class Coordinator' },
       { id: 'sub-seed-4', code: 'AD3501', name: 'Deep Learning & Computer Vision', dept: 'AI & Data Science', acadYear: '2022-2026', year: '3rd Year', sem: 5, sec: 'ALL', type: 'Elective', credits: 3, handler: 'HOD Faculty' }
     ];
-    const stmt = sqlite.prepare(`
-      INSERT INTO subjects (id, subject_code, subject_name, department, academic_year, year, semester, section, subject_type, credits, faculty_handler, created_by_user_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYSTEM', ?)
-    `);
     const now = new Date().toISOString();
     for (const s of defaultSubs) {
-      stmt.run(s.id, s.code, s.name, s.dept, s.acadYear, s.year, s.sem, s.sec, s.type, s.credits, s.handler, now);
+      await executeRun(`
+        INSERT INTO subjects (id, subject_code, subject_name, department, academic_year, year, semester, section, subject_type, credits, faculty_handler, created_by_user_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYSTEM', ?)
+      `, [s.id, s.code, s.name, s.dept, s.acadYear, s.year, s.sem, s.sec, s.type, s.credits, s.handler, now]);
     }
   }
 }
-
-initSchema();
 
 export interface SubjectRecord {
   id: string;
@@ -856,6 +901,7 @@ export interface ScoringConfig {
 export class SQLiteDB {
   // ONE-TIME SECURE ADMIN BOOTSTRAP FLOW FROM ENVIRONMENT VARIABLES (.env)
   public static async initSystemAccounts(): Promise<void> {
+    await initDatabaseSchema();
     const adminEmail = (process.env.ADMIN_EMAIL || 'departmentai&ds@gmail.com').trim().toLowerCase();
     const adminInitialPassword = process.env.ADMIN_INITIAL_PASSWORD || 'aids@avs';
 

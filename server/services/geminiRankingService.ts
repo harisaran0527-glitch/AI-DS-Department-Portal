@@ -606,8 +606,7 @@ export async function getAllCategoryRankings(
         overallScore
       };
     })
-  );
-  const evaluatedPool = evaluatedPoolRaw.filter(Boolean) as any[];
+    .filter(Boolean) as any[];
 
   // Helper sorting
   const sortByScore = (scoreKey: string) => [...evaluatedPool].sort((a, b) => b[scoreKey] - a[scoreKey]);

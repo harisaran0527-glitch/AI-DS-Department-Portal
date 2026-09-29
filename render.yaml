@@ -4,20 +4,19 @@ services:
     env: node
     buildCommand: npm install
     startCommand: node --import tsx/esm server/index.ts
-    disk:
-      name: aids-sqlite-disk
-      mountPath: /var/data
-      sizeGB: 1
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
       - key: USE_SQLITE
-        value: "true"
-      - key: DATABASE_PATH
-        value: /var/data/aids_system.db
+        value: "false"
+      - key: DATABASE_URL
+        sync: false
       - key: JWT_SECRET
         generateValue: true
+      - key: ADMIN_EMAIL
+        value: "departmentai&ds@gmail.com"
       - key: FRONTEND_URL
-        sync: false
+        value: "https://aids-department-portal.vercel.app"
       - key: GEMINI_API_KEY
         sync: false

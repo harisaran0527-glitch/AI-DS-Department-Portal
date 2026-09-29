@@ -8,13 +8,18 @@ dotenv.config();
 
 const { Pool } = pg;
 
+// Parse BIGINT (oid 20) as integer in PostgreSQL queries
+pg.types.setTypeParser(20, (val: string) => parseInt(val, 10));
+
 // Detect PostgreSQL Configuration
-const connectionString = process.env.DATABASE_URL || process.env.SUPABASE_DB_URL;
+const connectionString = process.env.DATABASE_URL || process.env.SUPABASE_DB_URL || process.env.NEON_DB_URL;
 const isPgConfigured = Boolean(
   process.env.USE_SQLITE !== 'true' &&
   connectionString &&
   !connectionString.includes('[YOUR-PASSWORD]') &&
-  !connectionString.includes('your_supabase')
+  !connectionString.includes('your_supabase') &&
+  !connectionString.includes('your_neon') &&
+  !connectionString.includes('your_database')
 );
 
 export let pgPool: pg.Pool | null = null;

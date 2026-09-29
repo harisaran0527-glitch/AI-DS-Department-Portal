@@ -510,8 +510,14 @@ CREATE POLICY "Service Role Full Access LeetCode" ON leetcode_stats FOR ALL USIN
 CREATE POLICY "Service Role Full Access Projects" ON project_records FOR ALL USING (true);
 
 -- ====================================================================
--- SUPABASE STORAGE BUCKET CONFIGURATION
+-- OPTIONAL STORAGE BUCKET INITIALIZATION (Supabase environments only)
 -- ====================================================================
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('department-proofs', 'department-proofs', true)
-ON CONFLICT (id) DO NOTHING;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'storage') THEN
+    INSERT INTO storage.buckets (id, name, public)
+    VALUES ('department-proofs', 'department-proofs', true)
+    ON CONFLICT (id) DO NOTHING;
+  END IF;
+END $$;
+

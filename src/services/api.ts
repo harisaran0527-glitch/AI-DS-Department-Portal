@@ -407,7 +407,7 @@ export const API = {
     formData.append('weekNo', String(weekNo));
     formData.append('file', file);
 
-    const res = await fetch(`${API_BASE}/faculty/students/${studentId}/nptel-proofs`, {
+    const res = await fetch(`/api/faculty/students/${studentId}/nptel-proofs`, {
       method: 'POST',
       body: formData,
       credentials: 'include'
