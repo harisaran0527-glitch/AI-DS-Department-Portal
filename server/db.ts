@@ -3126,4 +3126,7 @@ export class SQLiteDB {
 }
 
 export const db = new SQLiteDB();
-SQLiteDB.initSystemAccounts().catch((err) => console.error('Error initializing system accounts:', err));
+
+if (!process.env.VERCEL) {
+  SQLiteDB.initSystemAccounts().catch((err) => console.error('Error initializing system accounts:', err));
+}
