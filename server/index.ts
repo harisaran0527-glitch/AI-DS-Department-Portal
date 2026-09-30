@@ -73,7 +73,11 @@ if (process.env.NODE_ENV === 'production' && fs.existsSync(DIST_PATH)) {
 
 import { initSkillEdgeScheduler } from './services/skilledgeSync';
 
-app.listen(PORT, () => {
-  console.log(`🚀 AI & DS Department Server listening on http://127.0.0.1:${PORT}`);
-  initSkillEdgeScheduler();
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`🚀 AI & DS Department Server listening on http://127.0.0.1:${PORT}`);
+    initSkillEdgeScheduler();
+  });
+}
+
+export default app;

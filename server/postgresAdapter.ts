@@ -1,5 +1,4 @@
 import pg from 'pg';
-import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
@@ -23,7 +22,7 @@ const isPgConfigured = Boolean(
 );
 
 export let pgPool: pg.Pool | null = null;
-export let sqliteDb: Database.Database | null = null;
+export let sqliteDb: any = null;
 
 if (isPgConfigured) {
   try {
@@ -41,21 +40,29 @@ if (isPgConfigured) {
 }
 
 if (!pgPool) {
-  const DATA_DIR = path.resolve(process.cwd(), 'server', 'data');
-  const DB_PATH = process.env.DATABASE_PATH
-    ? (path.isAbsolute(process.env.DATABASE_PATH)
-        ? process.env.DATABASE_PATH
-        : path.resolve(process.cwd(), process.env.DATABASE_PATH))
-    : path.join(DATA_DIR, 'aids_system.db');
+  try {
+    const { createRequire } = await import('module');
+    const require = createRequire(import.meta.url);
+    const Database = require('better-sqlite3');
 
-  const dbDir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
+    const DATA_DIR = path.resolve(process.cwd(), 'server', 'data');
+    const DB_PATH = process.env.DATABASE_PATH
+      ? (path.isAbsolute(process.env.DATABASE_PATH)
+          ? process.env.DATABASE_PATH
+          : path.resolve(process.cwd(), process.env.DATABASE_PATH))
+      : path.join(DATA_DIR, 'aids_system.db');
+
+    const dbDir = path.dirname(DB_PATH);
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
+
+    sqliteDb = new Database(DB_PATH);
+    sqliteDb.pragma('journal_mode = WAL');
+    sqliteDb.pragma('foreign_keys = ON');
+  } catch (e: any) {
+    console.warn('⚠️ SQLite driver not loaded:', e.message);
   }
-
-  sqliteDb = new Database(DB_PATH);
-  sqliteDb.pragma('journal_mode = WAL');
-  sqliteDb.pragma('foreign_keys = ON');
 }
 
 export function isPostgresActive(): boolean {
