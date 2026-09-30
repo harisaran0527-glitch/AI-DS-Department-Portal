@@ -64,9 +64,9 @@ app.get('/api/health', (req, res) => {
 
 // Production Static Serving if client dist exists
 const DIST_PATH = path.resolve(process.cwd(), 'dist');
-if (process.env.NODE_ENV === 'production' && fs.existsSync(DIST_PATH)) {
+if (!process.env.VERCEL && process.env.NODE_ENV === 'production' && fs.existsSync(DIST_PATH)) {
   app.use(express.static(DIST_PATH));
-  app.get('*', (req, res) => {
+  app.get('(.*)', (req, res) => {
     res.sendFile(path.join(DIST_PATH, 'index.html'));
   });
 }
