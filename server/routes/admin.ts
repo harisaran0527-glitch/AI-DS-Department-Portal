@@ -50,6 +50,12 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
   return res.json({ count: sanitized.length, users: sanitized });
 });
 
+// GET All Students List for Admin Portal
+router.get('/students', async (req: AuthRequest, res: Response) => {
+  const students = await db.getStudents('ALL', 'ALL');
+  return res.json({ count: students.length, students });
+});
+
 // GET Faculty List with faculty_assignments mapping
 router.get('/faculty', async (req: AuthRequest, res: Response) => {
   const facultyUsers = await db.getUsers('FACULTY');

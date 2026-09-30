@@ -977,12 +977,12 @@ export class SQLiteDB {
     }
     let user = (await queryOne<UserRecord>(sql, params)) || undefined;
 
-    if (!user && role?.toUpperCase() === 'HOD') {
-      user = (await queryOne<UserRecord>("SELECT * FROM users WHERE UPPER(role) = 'HOD' AND is_active = 1 ORDER BY created_at DESC LIMIT 1")) || undefined;
+    if (!user && role?.toUpperCase() === 'HOD' && (lowerId === 'hod' || lowerId === 'hod.aids@avsenggcollege.ac.in')) {
+      user = (await queryOne<UserRecord>("SELECT * FROM users WHERE (LOWER(email) = 'hod.aids@avsenggcollege.ac.in' OR LOWER(identifier) = 'hod') AND UPPER(role) = 'HOD'")) || undefined;
     }
 
-    if (!user && role?.toUpperCase() === 'ADMIN') {
-      user = (await queryOne<UserRecord>("SELECT * FROM users WHERE UPPER(role) = 'ADMIN' AND is_active = 1 ORDER BY created_at DESC LIMIT 1")) || undefined;
+    if (!user && role?.toUpperCase() === 'ADMIN' && (lowerId === 'admin' || lowerId === 'departmentai&ds@gmail.com')) {
+      user = (await queryOne<UserRecord>("SELECT * FROM users WHERE (LOWER(email) = 'departmentai&ds@gmail.com' OR LOWER(identifier) = 'admin') AND UPPER(role) = 'ADMIN'")) || undefined;
     }
 
     if (!user && (role?.toUpperCase() === 'STUDENT' || !role)) {
