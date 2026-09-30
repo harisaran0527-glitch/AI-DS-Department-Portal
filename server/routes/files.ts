@@ -8,9 +8,13 @@ import { authenticateToken, AuthRequest } from '../middleware/auth.js';
 const router = Router();
 
 // PROTECTED SERVER FILE STORAGE DIRECTORY
-const UPLOADS_DIR = path.resolve(process.cwd(), 'server', 'uploads');
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+const UPLOADS_DIR = process.env.VERCEL ? '/tmp' : path.resolve(process.cwd(), 'server', 'uploads');
+try {
+  if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  }
+} catch (_err) {
+  // Ignore filesystem error in read-only environment
 }
 
 // ALLOWED SAFE ACADEMIC MIME TYPES AND EXTENSIONS
