@@ -1,9 +1,9 @@
 import React from 'react';
-import { VideoPortalLogin } from '../../components/auth/VideoPortalLogin';
+import { HolographicBookLogin } from '../../components/auth/HolographicBookLogin';
 
 export const FacultyLogin: React.FC = () => {
   return (
-    <VideoPortalLogin
+    <HolographicBookLogin
       portalRole="FACULTY"
       roleSubtitle="FACULTY PORTAL"
       placeholderIdentifier="Faculty Email / ID"
