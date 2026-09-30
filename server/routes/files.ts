@@ -101,9 +101,9 @@ router.post('/upload', authenticateToken, (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'studentId, recordType, and recordId are required.' });
     }
 
-    if (req.user!.role === 'STUDENT') {
+    if (req.user!.role === 'STUDENT' || req.user!.role === 'HOD') {
       if (req.file.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-      return res.status(403).json({ error: 'Unauthorized: Students are strictly 100% view-only.' });
+      return res.status(403).json({ error: 'Unauthorized: Students and HOD are strictly view-only for proof attachments.' });
     }
 
     const student = await db.getStudentById(studentId);
@@ -125,6 +125,13 @@ router.post('/upload', authenticateToken, (req: AuthRequest, res: Response) => {
       await db.softDeleteAttachment(existingAtt.id, req.user!.id);
     }
 
+    // Read file buffer to Base64 for 100% database persistence on Vercel
+    let fileDataBase64: string | undefined = undefined;
+    if (req.file.path && fs.existsSync(req.file.path)) {
+      const fileBuffer = fs.readFileSync(req.file.path);
+      fileDataBase64 = fileBuffer.toString('base64');
+    }
+
     const attachmentId = `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const newAtt = {
       id: attachmentId,
@@ -138,7 +145,8 @@ router.post('/upload', authenticateToken, (req: AuthRequest, res: Response) => {
       uploaded_by_user_id: req.user!.id,
       uploaded_by_role: req.user!.role,
       uploaded_at: new Date().toISOString(),
-      is_deleted: 0
+      is_deleted: 0,
+      file_data: fileDataBase64
     };
 
     await db.createAttachment(newAtt);
@@ -222,13 +230,21 @@ router.get('/:fileId', authenticateToken, async (req: AuthRequest, res: Response
   }
 
   const filePath = path.join(UPLOADS_DIR, att.stored_file_name);
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).json({ error: 'File content missing from server storage.' });
+  if (fs.existsSync(filePath)) {
+    res.setHeader('Content-Type', att.mime_type);
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(att.original_file_name)}"`);
+    return res.sendFile(filePath);
   }
 
-  res.setHeader('Content-Type', att.mime_type);
-  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(att.original_file_name)}"`);
-  return res.sendFile(filePath);
+  if (att.file_data) {
+    const buffer = Buffer.from(att.file_data, 'base64');
+    res.setHeader('Content-Type', att.mime_type);
+    res.setHeader('Content-Length', buffer.length.toString());
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(att.original_file_name)}"`);
+    return res.send(buffer);
+  }
+
+  return res.status(404).json({ error: 'File content missing from server storage.' });
 });
 
 // GET Download File attachment
@@ -246,19 +262,33 @@ router.get('/:fileId/download', authenticateToken, async (req: AuthRequest, res:
   }
 
   const filePath = path.join(UPLOADS_DIR, att.stored_file_name);
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).json({ error: 'File content missing from server storage.' });
+  if (fs.existsSync(filePath)) {
+    await db.logAudit(
+      req.user!.id,
+      req.user!.email,
+      req.user!.role,
+      'DOWNLOAD_FILE',
+      `FILE:${att.original_file_name} (Attachment:${att.id})`
+    );
+    return res.download(filePath, att.original_file_name);
   }
 
-  await db.logAudit(
-    req.user!.id,
-    req.user!.email,
-    req.user!.role,
-    'DOWNLOAD_FILE',
-    `FILE:${att.original_file_name} (Attachment:${att.id})`
-  );
+  if (att.file_data) {
+    await db.logAudit(
+      req.user!.id,
+      req.user!.email,
+      req.user!.role,
+      'DOWNLOAD_FILE',
+      `FILE:${att.original_file_name} (Attachment:${att.id})`
+    );
+    const buffer = Buffer.from(att.file_data, 'base64');
+    res.setHeader('Content-Type', att.mime_type);
+    res.setHeader('Content-Length', buffer.length.toString());
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(att.original_file_name)}"`);
+    return res.send(buffer);
+  }
 
-  return res.download(filePath, att.original_file_name);
+  return res.status(404).json({ error: 'File content missing from server storage.' });
 });
 
 // DELETE Attachment

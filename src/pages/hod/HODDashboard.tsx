@@ -362,18 +362,12 @@ export const HODDashboard: React.FC = () => {
                       <td className="py-3 px-3 text-center font-bold text-emerald-400">{stu.cgpa ? stu.cgpa.toFixed(2) : '0.00'}</td>
                       <td className="py-3 px-3 text-center font-extrabold text-amber-400">{stu.overallScore ? stu.overallScore.toFixed(1) : '0.0'}</td>
                       <td className="py-3 px-3 text-center font-bold text-indigo-400">#{stu.currentRank || 1}</td>
-                      <td className="py-3 px-3 text-right space-x-2">
+                      <td className="py-3 px-3 text-right">
                         <button
                           onClick={() => handleOpenHOD360(stu)}
                           className="bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/50 text-indigo-300 hover:text-white px-2.5 py-1 rounded-lg text-xs font-semibold"
                         >
-                          360° Proof & Edit
-                        </button>
-                        <button
-                          onClick={() => setDeleteTarget({ id: stu.id, name: `${stu.name} (${stu.registerNo})`, type: 'Student Record' })}
-                          className="bg-red-950/60 hover:bg-red-900 border border-red-800/80 text-red-400 p-1.5 rounded-lg"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          360° Profile (Read-Only)
                         </button>
                       </td>
                     </tr>
@@ -391,8 +385,13 @@ export const HODDashboard: React.FC = () => {
           <div className="bg-slate-900 border border-slate-800 w-full max-w-4xl rounded-2xl p-6 shadow-2xl space-y-6 max-h-[92vh] overflow-y-auto text-xs">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <div>
-                <h3 className="text-lg font-bold text-white">HOD Department Proof & 360° Inspector — {selectedHODStudent.name}</h3>
-                <p className="text-slate-400 font-mono">Reg No: {selectedHODStudent.registerNo} | {selectedHODStudent.year} Section {selectedHODStudent.section}</p>
+                <h3 className="text-lg font-bold text-white flex items-center space-x-2">
+                  <span>HOD Department 360° Student Profile</span>
+                  <span className="bg-amber-950 border border-amber-700 text-amber-300 text-[10px] font-mono px-2.5 py-0.5 rounded-full font-bold">
+                    READ-ONLY VIEW
+                  </span>
+                </h3>
+                <p className="text-slate-400 font-mono">Student: <strong className="text-white">{selectedHODStudent.name}</strong> | Reg No: {selectedHODStudent.registerNo} | {selectedHODStudent.year} Section {selectedHODStudent.section}</p>
               </div>
               <button onClick={() => setSelectedHODStudent(null)} className="bg-slate-800 text-slate-300 p-1 rounded-lg">✕</button>
             </div>
@@ -410,12 +409,12 @@ export const HODDashboard: React.FC = () => {
               ))}
             </div>
 
-            {/* Category Proof Attachment Controls */}
+            {/* Category Proof Attachment Controls (READ-ONLY FOR HOD) */}
             {hodModalTab === 'academics' && (
               <div className="space-y-3">
                 <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
                   <h4 className="font-bold text-emerald-400 mb-2 font-mono uppercase">Academic Marksheet & Result Proof</h4>
-                  <ProofAttachmentControl studentId={selectedHODStudent.id} recordType="academics" recordId="cgpa-record" userRole="HOD" />
+                  <ProofAttachmentControl studentId={selectedHODStudent.id} recordType="academics" recordId="cgpa-record" userRole="HOD" readOnly={true} />
                 </div>
               </div>
             )}
@@ -424,7 +423,7 @@ export const HODDashboard: React.FC = () => {
               <div className="space-y-3">
                 <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
                   <h4 className="font-bold text-cyan-400 mb-2 font-mono uppercase">SkillEdge Completion Screenshot Proof</h4>
-                  <ProofAttachmentControl studentId={selectedHODStudent.id} recordType="skilledge" recordId="skilledge-record" userRole="HOD" />
+                  <ProofAttachmentControl studentId={selectedHODStudent.id} recordType="skilledge" recordId="skilledge-record" userRole="HOD" readOnly={true} />
                 </div>
               </div>
             )}
@@ -433,7 +432,7 @@ export const HODDashboard: React.FC = () => {
               <div className="space-y-3">
                 <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
                   <h4 className="font-bold text-indigo-400 mb-2 font-mono uppercase">Attendance Supporting Document</h4>
-                  <ProofAttachmentControl studentId={selectedHODStudent.id} recordType="attendance" recordId="attendance-record" userRole="HOD" />
+                  <ProofAttachmentControl studentId={selectedHODStudent.id} recordType="attendance" recordId="attendance-record" userRole="HOD" readOnly={true} />
                 </div>
               </div>
             )}
@@ -451,7 +450,7 @@ export const HODDashboard: React.FC = () => {
                   <p className="text-slate-300 font-mono text-[11px]">
                     Total Solved: <strong className="text-white">{hod360Data.leetcode?.totalSolved || 0}</strong> | Contest Rating: <strong className="text-amber-400">{hod360Data.leetcode?.contestRating || 1200}</strong>
                   </p>
-                  <ProofAttachmentControl studentId={selectedHODStudent.id} recordType="leetcode" recordId="leetcode-record" userRole="HOD" />
+                  <ProofAttachmentControl studentId={selectedHODStudent.id} recordType="leetcode" recordId="leetcode-record" userRole="HOD" readOnly={true} />
                 </div>
               </div>
             )}
@@ -462,16 +461,15 @@ export const HODDashboard: React.FC = () => {
                   <div key={rec.id} className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
                     <div className="flex justify-between items-center font-bold text-white">
                       <span>{rec.courseName || rec.subjectCode || rec.title || rec.eventName || rec.remark || 'Record Item'}</span>
-                      <button onClick={() => setDeleteTarget({ id: rec.id, name: rec.courseName || rec.title || 'Record', type: hodModalTab, isRecord: true, studentId: selectedHODStudent.id, recordType: hodModalTab, recordId: rec.id })} className="text-red-400 hover:text-red-300 p-1"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
-                    <ProofAttachmentControl studentId={selectedHODStudent.id} recordType={hodModalTab} recordId={rec.id} userRole="HOD" />
+                    <ProofAttachmentControl studentId={selectedHODStudent.id} recordType={hodModalTab} recordId={rec.id} userRole="HOD" readOnly={true} />
                   </div>
                 ))}
               </div>
             )}
 
             <div className="flex justify-end pt-4 border-t border-slate-800">
-              <button onClick={() => setSelectedHODStudent(null)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl">Close Inspector</button>
+              <button onClick={() => setSelectedHODStudent(null)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl font-bold">Close Profile</button>
             </div>
           </div>
         </div>

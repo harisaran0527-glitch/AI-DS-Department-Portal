@@ -65,7 +65,7 @@ export function isTestOrDemoRecord(stu: { name?: string; email?: string; registe
   return isTestName || isTestEmail || isTestReg;
 }
 
-const PREFERRED_GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-2.5-flash'];
+const PREFERRED_GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-flash-latest'];
 
 let quotaExhaustedUntil = 0;
 let lastQuotaErrorMessage = '';

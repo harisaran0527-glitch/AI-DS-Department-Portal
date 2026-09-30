@@ -511,7 +511,8 @@ export async function initDatabaseSchema(): Promise<void> {
         `ALTER TABLE skilledge_records ADD COLUMN IF NOT EXISTS previous_points INTEGER DEFAULT 0;`,
         `ALTER TABLE skilledge_records ADD COLUMN IF NOT EXISTS earned_delta INTEGER DEFAULT 0;`,
         `ALTER TABLE skilledge_records ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'VERIFIED';`,
-        `ALTER TABLE skilledge_records ADD COLUMN IF NOT EXISTS last_synced_at TEXT;`
+        `ALTER TABLE skilledge_records ADD COLUMN IF NOT EXISTS last_synced_at TEXT;`,
+        `ALTER TABLE attachments ADD COLUMN IF NOT EXISTS file_data TEXT;`
       ];
       for (const colSql of alterCols) {
         try { await pgPool.query(colSql); } catch {}
@@ -562,7 +563,8 @@ export async function initDatabaseSchema(): Promise<void> {
       `ALTER TABLE skilledge_records ADD COLUMN previous_points INTEGER DEFAULT 0;`,
       `ALTER TABLE skilledge_records ADD COLUMN earned_delta INTEGER DEFAULT 0;`,
       `ALTER TABLE skilledge_records ADD COLUMN status TEXT DEFAULT 'VERIFIED';`,
-      `ALTER TABLE skilledge_records ADD COLUMN last_synced_at TEXT;`
+      `ALTER TABLE skilledge_records ADD COLUMN last_synced_at TEXT;`,
+      `ALTER TABLE attachments ADD COLUMN file_data TEXT;`
     ];
     for (const colSql of alterCols) {
       try { sqlite.exec(colSql); } catch {}
@@ -883,6 +885,7 @@ export interface AttachmentRecord {
   is_deleted: number;
   deleted_at?: string;
   deleted_by?: string;
+  file_data?: string | null;
 }
 
 export interface ScoringConfig {
@@ -973,11 +976,23 @@ export class SQLiteDB {
     }
     let user = (await queryOne<UserRecord>(sql, params)) || undefined;
 
+    if (!user && role?.toUpperCase() === 'HOD') {
+      user = (await queryOne<UserRecord>("SELECT * FROM users WHERE UPPER(role) = 'HOD' AND is_active = 1 ORDER BY created_at DESC LIMIT 1")) || undefined;
+    }
+
+    if (!user && role?.toUpperCase() === 'ADMIN') {
+      user = (await queryOne<UserRecord>("SELECT * FROM users WHERE UPPER(role) = 'ADMIN' AND is_active = 1 ORDER BY created_at DESC LIMIT 1")) || undefined;
+    }
+
     if (!user && (role?.toUpperCase() === 'STUDENT' || !role)) {
       const student = await queryOne<{ email: string }>('SELECT email FROM students WHERE LOWER(register_no) = ? OR LOWER(email) = ?', [lowerId, lowerId]);
       if (student && student.email) {
-        user = (await queryOne<UserRecord>('SELECT * FROM users WHERE (LOWER(email) = ? OR LOWER(identifier) = ?) AND UPPER(role) = \'STUDENT\'', [student.email.toLowerCase(), student.email.toLowerCase()])) || undefined;
+        user = (await queryOne<UserRecord>("SELECT * FROM users WHERE (LOWER(email) = ? OR LOWER(identifier) = ?) AND UPPER(role) = 'STUDENT'", [student.email.toLowerCase(), student.email.toLowerCase()])) || undefined;
       }
+    }
+
+    if (!user && (role?.toUpperCase() === 'FACULTY' || !role)) {
+      user = (await queryOne<UserRecord>("SELECT * FROM users WHERE (LOWER(email) = ? OR LOWER(identifier) = ?) AND UPPER(role) = 'FACULTY'", [lowerId, lowerId])) || undefined;
     }
 
     return user;
@@ -2569,8 +2584,8 @@ export class SQLiteDB {
   // ATTACHMENT / PROOF FILE ENGINE
   public async createAttachment(att: AttachmentRecord): Promise<void> {
     await executeRun(`
-      INSERT INTO attachments (id, student_id, record_type, record_id, original_file_name, stored_file_name, mime_type, file_size, uploaded_by_user_id, uploaded_by_role, uploaded_at, is_deleted)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+      INSERT INTO attachments (id, student_id, record_type, record_id, original_file_name, stored_file_name, mime_type, file_size, uploaded_by_user_id, uploaded_by_role, uploaded_at, is_deleted, file_data)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
     `, [
       att.id,
       att.student_id,
@@ -2582,7 +2597,8 @@ export class SQLiteDB {
       att.file_size,
       att.uploaded_by_user_id,
       att.uploaded_by_role,
-      att.uploaded_at
+      att.uploaded_at,
+      att.file_data || null
     ]);
   }
 

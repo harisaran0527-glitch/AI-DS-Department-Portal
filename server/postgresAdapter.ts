@@ -10,8 +10,8 @@ const { Pool } = pg;
 // Parse BIGINT (oid 20) as integer in PostgreSQL queries
 pg.types.setTypeParser(20, (val: string) => parseInt(val, 10));
 
-// Detect PostgreSQL Configuration
-const connectionString = process.env.DATABASE_URL || process.env.SUPABASE_DB_URL || process.env.NEON_DB_URL;
+const rawConn = process.env.DATABASE_URL || process.env.SUPABASE_DB_URL || process.env.NEON_DB_URL;
+const connectionString = rawConn ? rawConn.trim() : undefined;
 const isPgConfigured = Boolean(
   process.env.USE_SQLITE !== 'true' &&
   connectionString &&

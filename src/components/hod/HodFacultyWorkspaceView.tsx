@@ -487,7 +487,7 @@ export const HodFacultyWorkspaceView: React.FC<HodFacultyWorkspaceViewProps> = (
                       <div className="text-sm font-bold text-amber-400 mt-0.5">{inspect360?.arrears?.historyArrears || inspectStudent.historyArrears || 0}</div>
                     </div>
                   </div>
-                  <ProofAttachmentControl studentId={inspectStudent.id} recordType="academics" recordId="cgpa-record" userRole="HOD" />
+                  <ProofAttachmentControl studentId={inspectStudent.id} recordType="academics" recordId="cgpa-record" userRole="HOD" readOnly={true} />
                 </div>
               )}
 
@@ -497,7 +497,7 @@ export const HodFacultyWorkspaceView: React.FC<HodFacultyWorkspaceViewProps> = (
                     <h4 className="font-bold text-indigo-400 uppercase text-sm">Attendance Summary & Verified Proof</h4>
                     <span className="text-indigo-400 font-bold text-base">{inspect360?.attendance?.overallPercentage || inspectStudent.attendancePct || 85}%</span>
                   </div>
-                  <ProofAttachmentControl studentId={inspectStudent.id} recordType="attendance" recordId="attendance-record" userRole="HOD" />
+                  <ProofAttachmentControl studentId={inspectStudent.id} recordType="attendance" recordId="attendance-record" userRole="HOD" readOnly={true} />
                 </div>
               )}
 
@@ -507,7 +507,7 @@ export const HodFacultyWorkspaceView: React.FC<HodFacultyWorkspaceViewProps> = (
                     <h4 className="font-bold text-cyan-400 uppercase text-sm">SkillEdge Points & Achievements</h4>
                     <span className="text-cyan-400 font-bold text-base">{inspect360?.skillEdge?.totalRewardPoints || inspectStudent.skilledgePts || 0} Pts</span>
                   </div>
-                  <ProofAttachmentControl studentId={inspectStudent.id} recordType="skilledge" recordId="skilledge-record" userRole="HOD" />
+                  <ProofAttachmentControl studentId={inspectStudent.id} recordType="skilledge" recordId="skilledge-record" userRole="HOD" readOnly={true} />
                 </div>
               )}
 
@@ -532,7 +532,7 @@ export const HodFacultyWorkspaceView: React.FC<HodFacultyWorkspaceViewProps> = (
                   ) : (
                     <div className="text-slate-500 text-xs">No NPTEL courses recorded for this student yet.</div>
                   )}
-                  <ProofAttachmentControl studentId={inspectStudent.id} recordType="nptel" recordId="nptel-record" userRole="HOD" />
+                  <ProofAttachmentControl studentId={inspectStudent.id} recordType="nptel" recordId="nptel-record" userRole="HOD" readOnly={true} />
                 </div>
               )}
 
@@ -559,7 +559,7 @@ export const HodFacultyWorkspaceView: React.FC<HodFacultyWorkspaceViewProps> = (
                   ) : (
                     <div className="text-slate-500 text-xs">No certificate records submitted yet.</div>
                   )}
-                  <ProofAttachmentControl studentId={inspectStudent.id} recordType="certificates" recordId="certificates-record" userRole="HOD" />
+                  <ProofAttachmentControl studentId={inspectStudent.id} recordType="certificates" recordId="certificates-record" userRole="HOD" readOnly={true} />
                 </div>
               )}
 
@@ -582,7 +582,7 @@ export const HodFacultyWorkspaceView: React.FC<HodFacultyWorkspaceViewProps> = (
                   ) : (
                     <div className="text-slate-500 text-xs">No projects uploaded yet.</div>
                   )}
-                  <ProofAttachmentControl studentId={inspectStudent.id} recordType="projects" recordId="projects-record" userRole="HOD" />
+                  <ProofAttachmentControl studentId={inspectStudent.id} recordType="projects" recordId="projects-record" userRole="HOD" readOnly={true} />
                 </div>
               )}
 
@@ -610,7 +610,7 @@ export const HodFacultyWorkspaceView: React.FC<HodFacultyWorkspaceViewProps> = (
                       <div className="text-base font-bold text-red-400 mt-0.5">{inspect360?.leetcode?.hardSolved || 0}</div>
                     </div>
                   </div>
-                  <ProofAttachmentControl studentId={inspectStudent.id} recordType="leetcode" recordId="leetcode-record" userRole="HOD" />
+                  <ProofAttachmentControl studentId={inspectStudent.id} recordType="leetcode" recordId="leetcode-record" userRole="HOD" readOnly={true} />
                 </div>
               )}
 
@@ -635,7 +635,7 @@ export const HodFacultyWorkspaceView: React.FC<HodFacultyWorkspaceViewProps> = (
                   ) : (
                     <div className="text-slate-500 text-xs">Clean record — No disciplinary actions or fines recorded.</div>
                   )}
-                  <ProofAttachmentControl studentId={inspectStudent.id} recordType="discipline" recordId="discipline-record" userRole="HOD" />
+                  <ProofAttachmentControl studentId={inspectStudent.id} recordType="discipline" recordId="discipline-record" userRole="HOD" readOnly={true} />
                 </div>
               )}
             </div>

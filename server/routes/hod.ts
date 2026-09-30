@@ -30,63 +30,14 @@ router.get('/elite-students', async (req: AuthRequest, res: Response) => {
   return res.json({ count: students.length, students });
 });
 
-// POST toggle student Elite designation
+// POST toggle student Elite designation (Blocked - READ-ONLY FOR HOD)
 router.post('/students/:studentId/elite-status', async (req: AuthRequest, res: Response) => {
-  const studentId = req.params.studentId || req.body?.studentId;
-  if (!studentId) {
-    return res.status(400).json({ error: 'Bad Request: Student ID parameter is required.' });
-  }
-
-  const student = await db.getStudentById(studentId);
-  if (!student) {
-    return res.status(404).json({ error: 'Student record not found.' });
-  }
-
-  const isEliteRaw = req.body?.isElite ?? req.body?.is_elite ?? req.body?.isEliteStudent;
-  if (isEliteRaw === undefined || isEliteRaw === null) {
-    return res.status(400).json({ error: 'Bad Request: isElite boolean field is required in request body.' });
-  }
-
-  const isElite = Boolean(isEliteRaw === true || isEliteRaw === 'true' || isEliteRaw === 1 || isEliteRaw === '1');
-
-  await db.updateStudentEliteStatus(studentId, isElite);
-  return res.json({
-    message: isElite ? `Marked ${student.name} as an Elite Student.` : `Removed ${student.name} from Elite Students list.`,
-    studentId,
-    isElite
-  });
+  return res.status(403).json({ error: 'Forbidden: HOD student profile view is strictly READ-ONLY. Student records must be modified by assigned Class Coordinator or Admin.' });
 });
 
-// POST update student profile (LinkedIn, GitHub, LeetCode, CGPA, Points)
+// POST update student profile (Blocked - READ-ONLY FOR HOD)
 router.post('/students/:studentId/update-profile', async (req: AuthRequest, res: Response) => {
-  const studentId = req.params.studentId || req.body?.studentId;
-  if (!studentId) {
-    return res.status(400).json({ error: 'Bad Request: Student ID parameter is required.' });
-  }
-
-  const student = await db.getStudentById(studentId);
-  if (!student) {
-    return res.status(404).json({ error: 'Student record not found.' });
-  }
-
-  const { linkedinUrl, githubUrl, leetcodeUsername, cgpa, skillEdgePoints } = req.body || {};
-
-  const parsedCgpa = cgpa !== undefined && cgpa !== null && !isNaN(parseFloat(cgpa)) ? parseFloat(cgpa) : undefined;
-  const parsedPoints = skillEdgePoints !== undefined && skillEdgePoints !== null && !isNaN(parseInt(skillEdgePoints, 10)) ? parseInt(skillEdgePoints, 10) : undefined;
-
-  await db.updateStudentProfile(studentId, {
-    linkedinUrl: typeof linkedinUrl === 'string' ? linkedinUrl.trim() : undefined,
-    githubUrl: typeof githubUrl === 'string' ? githubUrl.trim() : undefined,
-    leetcodeUsername: typeof leetcodeUsername === 'string' ? leetcodeUsername.trim() : undefined,
-    cgpa: parsedCgpa,
-    skillEdgePoints: parsedPoints
-  });
-
-  const updated360 = await db.getStudent360(studentId);
-  return res.json({
-    message: `Updated profile details for ${student.name}.`,
-    profile: updated360
-  });
+  return res.status(403).json({ error: 'Forbidden: HOD student profile view is strictly READ-ONLY. Student records must be modified by assigned Class Coordinator or Admin.' });
 });
 
 // GET single student 360 profile for HOD (department wide)
@@ -253,47 +204,9 @@ router.put('/scoring-config', async (req: AuthRequest, res: Response) => {
   return res.json({ message: 'Scoring configuration updated successfully.', config });
 });
 
-// PUT HOD Correct / Update Any Student 360 Record
+// PUT HOD Correct / Update Any Student 360 Record (Blocked - READ-ONLY FOR HOD)
 router.put('/students/:studentId/360', async (req: AuthRequest, res: Response) => {
-  const { studentId } = req.params;
-  const { cgpa, presentDays, totalDays, easySolved, mediumSolved, hardSolved, contestRating } = req.body;
-
-  const targetStudent = await db.getStudentById(studentId);
-  if (!targetStudent) {
-    return res.status(404).json({ error: 'Student record not found.' });
-  }
-
-  if (cgpa !== undefined) await db.updateStudentCGPA(studentId, parseFloat(cgpa) || 0);
-  if (presentDays !== undefined && totalDays !== undefined) await db.updateAttendance(studentId, parseInt(presentDays) || 0, parseInt(totalDays) || 1);
-  if (easySolved !== undefined || mediumSolved !== undefined || hardSolved !== undefined) {
-    await db.updateLeetCode(studentId, parseInt(easySolved) || 0, parseInt(mediumSolved) || 0, parseInt(hardSolved) || 0, parseInt(contestRating) || 1200);
-  }
-
-  const full360 = (await db.getStudent360(studentId))!;
-  const scoringConfig = await db.getScoringConfig();
-  const breakdown = calculateCategoryScores(
-    full360.student as any,
-    full360.academics,
-    full360.arrears,
-    full360.skillEdge,
-    full360.nptel,
-    full360.attendance,
-    full360.discipline,
-    full360.leetcode,
-    full360.projects
-  );
-
-  const newOverallScore = computeOverallScore(breakdown, scoringConfig) || 0;
-
-  const sectionStudents = await db.getStudents(targetStudent.year, targetStudent.section);
-  for (let idx = 0; idx < sectionStudents.length; idx++) {
-    const s = sectionStudents[idx];
-    const sScore = s.id === studentId ? newOverallScore : (s.overall_score || 0);
-    await db.updateStudentScoreAndRank(s.id, sScore, idx + 1);
-  }
-
-  await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'HOD_CORRECT_STUDENT_360', `STUDENT:${studentId}`);
-  return res.json({ message: 'Student record corrected by HOD successfully.', overallScore: newOverallScore });
+  return res.status(403).json({ error: 'Forbidden: HOD student profile view is strictly READ-ONLY. Student records must be modified by assigned Class Coordinator or Admin.' });
 });
 
 // POST Trigger Department-Wide SkillEdge Synchronization by HOD
@@ -311,53 +224,9 @@ router.post('/sync-skilledge-all', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// DELETE Any Student Performance Record by HOD
+// DELETE Any Student Performance Record by HOD (Blocked - READ-ONLY FOR HOD)
 router.delete('/students/:studentId/records/:recordType/:recordId', async (req: AuthRequest, res: Response) => {
-  const { studentId, recordType, recordId } = req.params;
-
-  const targetStudent = await db.getStudentById(studentId);
-  if (!targetStudent) {
-    return res.status(404).json({ error: 'Student record not found.' });
-  }
-
-  try {
-    await db.deletePerformanceRecord(recordType, recordId, studentId);
-
-    const full360 = (await db.getStudent360(studentId))!;
-    const scoringConfig = await db.getScoringConfig();
-    const breakdown = calculateCategoryScores(
-      full360.student as any,
-      full360.academics,
-      full360.arrears,
-      full360.skillEdge,
-      full360.nptel,
-      full360.attendance,
-      full360.discipline,
-      full360.leetcode,
-      full360.projects
-    );
-
-    const newOverallScore = computeOverallScore(breakdown, scoringConfig) || 0;
-
-    const sectionStudents = await db.getStudents(targetStudent.year, targetStudent.section);
-    for (let idx = 0; idx < sectionStudents.length; idx++) {
-      const s = sectionStudents[idx];
-      const sScore = s.id === studentId ? newOverallScore : (s.overall_score || 0);
-      await db.updateStudentScoreAndRank(s.id, sScore, idx + 1);
-    }
-
-    await db.logAudit(
-      req.user!.id,
-      req.user!.email,
-      req.user!.role,
-      'HOD_DELETE_PERFORMANCE_RECORD',
-      `TYPE:${recordType}:ID:${recordId}:STUDENT:${studentId}`
-    );
-
-    return res.json({ message: `Successfully deleted ${recordType} record.`, overallScore: newOverallScore });
-  } catch (err: any) {
-    return res.status(400).json({ error: err.message || 'Failed to delete record.' });
-  }
+  return res.status(403).json({ error: 'Forbidden: HOD student profile view is strictly READ-ONLY. Student records must be modified by assigned Class Coordinator or Admin.' });
 });
 
 // POST Finalize Award (Converts Candidate -> Finalized Award in SQLite)
@@ -406,42 +275,9 @@ router.delete('/awards/:awardId', async (req: AuthRequest, res: Response) => {
   return res.json({ message: 'Finalized award deleted successfully.' });
 });
 
-// POST Add new performance record item by HOD
+// POST Add new performance record item by HOD (Blocked - READ-ONLY FOR HOD)
 router.post('/students/:studentId/records/:recordType', async (req: AuthRequest, res: Response) => {
-  const studentId = Array.isArray(req.params.studentId) ? req.params.studentId[0] : (req.params.studentId as string);
-  const recordType = Array.isArray(req.params.recordType) ? req.params.recordType[0] : (req.params.recordType as string);
-  const targetStudent = await db.getStudentById(studentId);
-  if (!targetStudent) {
-    return res.status(404).json({ error: 'Student profile not found.' });
-  }
-
-  let createdId = '';
-  const type = recordType.toLowerCase();
-
-  if (type === 'arrears') {
-    createdId = await db.addArrearRecord({ studentId, subjectCode: req.body.subjectCode || 'CS301', subjectName: req.body.subjectName || 'Data Structures' });
-  } else if (type === 'nptel') {
-    createdId = await db.addNPTELRecord({ studentId, courseName: req.body.courseName || 'NPTEL Course', examScore: req.body.examScore || 75 });
-  } else if (type === 'discipline') {
-    createdId = await db.addDisciplineRecord({ studentId, remark: req.body.remark || 'Discipline remark logged', recordedBy: req.user!.email });
-  } else if (type === 'certificates') {
-    createdId = await db.addCertificateRecord({ studentId, courseName: req.body.courseName || 'Certificate Course', platform: req.body.platform });
-  } else if (type === 'participation') {
-    createdId = await db.addParticipationRecord({ studentId, eventName: req.body.eventName || 'Symposium Event', organizer: req.body.organizer });
-  } else if (type === 'projects') {
-    createdId = await db.addProjectRecord({ studentId, title: req.body.title || 'Technical Project', description: req.body.description });
-  } else if (type === 'achievements') {
-    createdId = await db.addAchievementRecord({ studentId, title: req.body.title || 'Achievement Award', eventName: req.body.eventName });
-  } else {
-    return res.status(400).json({ error: `Unsupported record type: ${recordType}` });
-  }
-
-  await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'HOD_CREATE_PERFORMANCE_RECORD', `TYPE:${recordType}:ID:${createdId}:STUDENT:${studentId}`);
-
-  return res.status(201).json({
-    message: `Record added successfully to ${recordType}.`,
-    createdId
-  });
+  return res.status(403).json({ error: 'Forbidden: HOD student profile view is strictly READ-ONLY. Student records must be modified by assigned Class Coordinator or Admin.' });
 });
 
 // GET all faculty list for HOD Panel (single source of truth synchronized with Admin creates)
