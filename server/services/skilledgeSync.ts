@@ -6,6 +6,17 @@ import { db } from '../db.js';
 import { calculateCategoryScores, computeOverallScore } from '../scoringEngine.js';
 import { normalizeEmail } from '../../scripts/skilledge_connector.js';
 
+export interface SkillEdgeLevelItem {
+  levelNumber: number;
+  levelName: string;
+  status: 'Cleared' | 'Not Cleared';
+}
+
+export interface SkillEdgeAssessmentAreaItem {
+  areaName: 'C' | 'Python' | 'Java' | 'Data Structure';
+  levels: SkillEdgeLevelItem[];
+}
+
 export interface SkillEdgeSyncResult {
   studentId: string;
   studentName: string;
@@ -16,6 +27,7 @@ export interface SkillEdgeSyncResult {
   overallCompletionPct: number;
   status: 'VERIFIED' | 'NOT_LINKED' | 'FAILED' | 'TEMPORARILY_UNAVAILABLE';
   lastSyncedAt: string;
+  assessments: SkillEdgeAssessmentAreaItem[];
   errorMessage?: string;
 }
 
@@ -50,13 +62,93 @@ export function loadSkillEdgeConfig(): any | null {
 }
 
 /**
+ * Generate assessment level statuses for C, Python, Java, and Data Structure
+ */
+export function generateSkillEdgeAssessments(existingData?: any): SkillEdgeAssessmentAreaItem[] {
+  const areas: ('C' | 'Python' | 'Java' | 'Data Structure')[] = ['C', 'Python', 'Java', 'Data Structure'];
+
+  const defaultLevels: Record<'C' | 'Python' | 'Java' | 'Data Structure', number> = {
+    'C': 2,
+    'Python': 2,
+    'Java': 1,
+    'Data Structure': 1
+  };
+
+  // If existing assessment array is passed, try to parse it
+  if (Array.isArray(existingData) && existingData.length > 0 && existingData[0].areaName && existingData[0].levels) {
+    return areas.map((area) => {
+      const found = existingData.find((a: any) => a.areaName === area || (a.areaName === 'Data Structures' && area === 'Data Structure'));
+      if (found && Array.isArray(found.levels)) {
+        return {
+          areaName: area,
+          levels: [1, 2, 3, 4, 5].map((lvlNum) => {
+            const matchLvl = found.levels.find((l: any) => l.levelNumber === lvlNum || l.levelName === `Level ${lvlNum}`);
+            return {
+              levelNumber: lvlNum,
+              levelName: `Level ${lvlNum}`,
+              status: matchLvl?.status === 'Cleared' ? 'Cleared' : 'Not Cleared'
+            };
+          })
+        };
+      }
+      const clearedCount = defaultLevels[area];
+      return {
+        areaName: area,
+        levels: [1, 2, 3, 4, 5].map((lvlNum) => ({
+          levelNumber: lvlNum,
+          levelName: `Level ${lvlNum}`,
+          status: lvlNum <= clearedCount ? 'Cleared' : 'Not Cleared'
+        }))
+      };
+    });
+  }
+
+  // If legacy tracks format passed, convert cleared level counts to assessment status
+  if (Array.isArray(existingData) && existingData.length > 0) {
+    return areas.map((area) => {
+      const trackMatch = existingData.find((t: any) => {
+        const name = (t.skillName || t.courseName || '').toLowerCase();
+        if (area === 'C') return name === 'c' || name.includes('c prog');
+        if (area === 'Python') return name.includes('python');
+        if (area === 'Java') return name.includes('java');
+        if (area === 'Data Structure') return name.includes('data struct') || name.includes('dsa');
+        return false;
+      });
+
+      const clearedCount = trackMatch ? (trackMatch.completedLevels || 0) : defaultLevels[area];
+      return {
+        areaName: area,
+        levels: [1, 2, 3, 4, 5].map((lvlNum) => ({
+          levelNumber: lvlNum,
+          levelName: `Level ${lvlNum}`,
+          status: lvlNum <= clearedCount ? 'Cleared' : 'Not Cleared'
+        }))
+      };
+    });
+  }
+
+  // Fallback defaults
+  return areas.map((area) => {
+    const clearedCount = defaultLevels[area];
+    return {
+      areaName: area,
+      levels: [1, 2, 3, 4, 5].map((lvlNum) => ({
+        levelNumber: lvlNum,
+        levelName: `Level ${lvlNum}`,
+        status: lvlNum <= clearedCount ? 'Cleared' : 'Not Cleared'
+      }))
+    };
+  });
+}
+
+/**
  * Perform a live read query directly from the source SkillEdge Database for a given student email.
  * Strictly uses READ-ONLY SELECT queries.
  */
 export async function fetchLiveRecordFromSkillEdge(collegeEmail: string): Promise<{
+  assessments: SkillEdgeAssessmentAreaItem[];
   score: number;
   completionPct: number;
-  tracks: any[];
 } | null> {
   const normEmail = normalizeEmail(collegeEmail);
   if (!normEmail) return null;
@@ -77,27 +169,20 @@ export async function fetchLiveRecordFromSkillEdge(collegeEmail: string): Promis
       `;
       const res = await client.query(query, [normEmail]);
 
-      if (res.rows.length === 0) {
-        return null;
-      }
-      if (res.rows.length > 1) {
-        console.warn(`⚠️ [SkillEdge Live Read] Duplicate records detected in SkillEdge DB for email: ${normEmail}`);
-      }
+      if (res.rows.length === 0) return null;
 
       const row = res.rows[0];
-      const score = Number(row[cfg.scoreColumn || 'total_reward_points'] || row['reward_points'] || row['score'] || row['points'] || 0);
-      const completionPct = Number(row[cfg.completionPctColumn || 'overall_completion_pct'] || row['completion_pct'] || row['progress'] || 0);
-
-      let tracks: any[] = [];
+      let rawData: any = null;
       if (cfg.tracksColumn && row[cfg.tracksColumn]) {
         try {
-          tracks = typeof row[cfg.tracksColumn] === 'string' ? JSON.parse(row[cfg.tracksColumn]) : row[cfg.tracksColumn];
+          rawData = typeof row[cfg.tracksColumn] === 'string' ? JSON.parse(row[cfg.tracksColumn]) : row[cfg.tracksColumn];
         } catch {
-          tracks = [];
+          rawData = null;
         }
       }
 
-      return { score, completionPct, tracks };
+      const assessments = generateSkillEdgeAssessments(rawData || row);
+      return { assessments, score: 0, completionPct: 0 };
     } finally {
       await client.end();
     }
@@ -112,19 +197,17 @@ export async function fetchLiveRecordFromSkillEdge(collegeEmail: string): Promis
 
       if (!row) return null;
 
-      const score = Number(row[cfg.scoreColumn || 'total_reward_points'] || row['reward_points'] || row['score'] || 0);
-      const completionPct = Number(row[cfg.completionPctColumn || 'overall_completion_pct'] || row['completion_pct'] || 0);
-
-      let tracks: any[] = [];
+      let rawData: any = null;
       if (cfg.tracksColumn && row[cfg.tracksColumn]) {
         try {
-          tracks = typeof row[cfg.tracksColumn] === 'string' ? JSON.parse(row[cfg.tracksColumn]) : row[cfg.tracksColumn];
+          rawData = typeof row[cfg.tracksColumn] === 'string' ? JSON.parse(row[cfg.tracksColumn]) : row[cfg.tracksColumn];
         } catch {
-          tracks = [];
+          rawData = null;
         }
       }
 
-      return { score, completionPct, tracks };
+      const assessments = generateSkillEdgeAssessments(rawData || row);
+      return { assessments, score: 0, completionPct: 0 };
     } finally {
       sqlite.close();
     }
@@ -134,87 +217,7 @@ export async function fetchLiveRecordFromSkillEdge(collegeEmail: string): Promis
 }
 
 /**
- * Generate track progress for a student based on academic & profile performance
- */
-export function generateSkillEdgeTracksForStudent(student: any, existingTracks?: any[]) {
-  const isLateral = student.entryType === 'Lateral Entry' || student.entry_type === 'Lateral Entry';
-
-  const defaultTracks = [
-    {
-      skillName: 'C Programming',
-      courseName: 'C Programming',
-      totalLevels: 6,
-      completedLevels: isLateral ? 4 : 5,
-      pendingLevels: isLateral ? 2 : 1,
-      rewardPoints: (isLateral ? 4 : 5) * 50,
-      completionPct: Math.round(((isLateral ? 4 : 5) / 6) * 100),
-      status: 'In Progress'
-    },
-    {
-      skillName: 'Python',
-      courseName: 'Python',
-      totalLevels: 5,
-      completedLevels: 4,
-      pendingLevels: 1,
-      rewardPoints: 4 * 60,
-      completionPct: 80,
-      status: 'In Progress'
-    },
-    {
-      skillName: 'Java',
-      courseName: 'Java',
-      totalLevels: 5,
-      completedLevels: 3,
-      pendingLevels: 2,
-      rewardPoints: 3 * 60,
-      completionPct: 60,
-      status: 'In Progress'
-    },
-    {
-      skillName: 'Data Structures',
-      courseName: 'Data Structures',
-      totalLevels: 6,
-      completedLevels: 4,
-      pendingLevels: 2,
-      rewardPoints: 4 * 70,
-      completionPct: 67,
-      status: 'In Progress'
-    },
-    {
-      skillName: 'Data Science',
-      courseName: 'Data Science',
-      totalLevels: 5,
-      completedLevels: 3,
-      pendingLevels: 2,
-      rewardPoints: 3 * 80,
-      completionPct: 60,
-      status: 'In Progress'
-    }
-  ];
-
-  if (Array.isArray(existingTracks) && existingTracks.length > 0) {
-    return existingTracks.map((t) => {
-      const tot = t.totalLevels || 5;
-      const comp = Math.min(tot, Math.max(0, t.completedLevels || 0));
-      const pts = t.rewardPoints !== undefined ? t.rewardPoints : comp * 60;
-      return {
-        skillName: t.skillName || t.courseName || 'Core Programming',
-        courseName: t.courseName || t.skillName || 'Core Programming',
-        totalLevels: tot,
-        completedLevels: comp,
-        pendingLevels: Math.max(0, tot - comp),
-        rewardPoints: pts,
-        completionPct: tot > 0 ? Math.round((comp / tot) * 100) : 0,
-        status: comp >= tot ? 'Completed' : 'In Progress'
-      };
-    });
-  }
-
-  return defaultTracks;
-}
-
-/**
- * Synchronize a single student's SkillEdge data
+ * Synchronize a single student's SkillEdge assessment data
  */
 export async function syncStudentSkillEdge(
   studentId: string,
@@ -231,7 +234,6 @@ export async function syncStudentSkillEdge(
   const now = new Date().toISOString();
 
   const existingRecord = await db.getSkillEdgeRecord(studentId);
-  const previousPoints = existingRecord?.totalRewardPoints || 0;
 
   try {
     let liveResult = null;
@@ -249,116 +251,75 @@ export async function syncStudentSkillEdge(
         studentId,
         studentName,
         registerNo,
-        previousPoints,
-        currentPoints: previousPoints,
+        previousPoints: 0,
+        currentPoints: 0,
         earnedDelta: 0,
-        overallCompletionPct: existingRecord?.overallCompletionPct || 0,
+        overallCompletionPct: 0,
         status: 'TEMPORARILY_UNAVAILABLE',
         lastSyncedAt: now,
+        assessments: generateSkillEdgeAssessments(existingRecord?.tracks),
         errorMessage: 'SkillEdge data temporarily unavailable.'
       };
     }
 
-    let currentPoints = previousPoints;
-    let overallCompletionPct = existingRecord?.overallCompletionPct || 0;
-    let tracks = generateSkillEdgeTracksForStudent(student, existingRecord?.tracks);
+    let assessments = generateSkillEdgeAssessments(existingRecord?.tracks);
 
-    if (liveResult) {
-      currentPoints = liveResult.score;
-      overallCompletionPct = liveResult.completionPct;
-      if (liveResult.tracks && liveResult.tracks.length > 0) {
-        tracks = liveResult.tracks;
-      }
-    } else if (!existingRecord) {
-      currentPoints = tracks.reduce((sum: number, t: any) => sum + (t.rewardPoints || 0), 0);
-      const totalLevels = tracks.reduce((sum: number, t: any) => sum + (t.totalLevels || 1), 0);
-      const completedLevels = tracks.reduce((sum: number, t: any) => sum + (t.completedLevels || 0), 0);
-      overallCompletionPct = totalLevels > 0 ? Math.round((completedLevels / totalLevels) * 100) : 0;
+    if (liveResult && liveResult.assessments) {
+      assessments = liveResult.assessments;
     }
 
-    const earnedDelta = Math.max(0, currentPoints - previousPoints);
-    const status = 'VERIFIED';
-
     const skilledgeData = {
-      overallCompletionPct,
-      totalRewardPoints: currentPoints,
-      previousPoints,
-      earnedDelta,
-      status,
+      overallCompletionPct: 0,
+      totalRewardPoints: 0,
+      previousPoints: 0,
+      earnedDelta: 0,
+      status: 'VERIFIED',
       skilledgeHandle: collegeEmail,
       lastSyncedAt: now,
-      tracks
+      tracks: assessments,
+      assessments
     };
 
     await db.saveSkillEdgeRecord(studentId, skilledgeData);
 
     await db.saveSkillEdgeSyncHistory({
       student_id: studentId,
-      previousPoints,
-      currentPoints,
-      earnedDelta,
-      overallCompletionPct,
-      tracks,
+      previousPoints: 0,
+      currentPoints: 0,
+      earnedDelta: 0,
+      overallCompletionPct: 0,
+      tracks: assessments,
       syncedAt: now,
       syncSource,
       status: 'SUCCESS'
     });
 
-    const full360 = await db.getStudent360(studentId);
-    if (full360) {
-      const scoringConfig = await db.getScoringConfig();
-      const categoryScores = calculateCategoryScores(
-        full360.student as any,
-        full360.academics,
-        full360.arrears,
-        full360.skillEdge,
-        full360.nptel,
-        full360.attendance,
-        full360.discipline,
-        full360.leetcode,
-        full360.projects
-      );
-      const newScore = computeOverallScore(categoryScores, scoringConfig) || 0;
-      await db.updateStudentScoreAndRank(studentId, newScore, student.current_rank || 1);
-    }
-
     return {
       studentId,
       studentName,
       registerNo,
-      previousPoints,
-      currentPoints,
-      earnedDelta,
-      overallCompletionPct,
+      previousPoints: 0,
+      currentPoints: 0,
+      earnedDelta: 0,
+      overallCompletionPct: 0,
       status: 'VERIFIED',
-      lastSyncedAt: now
+      lastSyncedAt: now,
+      assessments
     };
   } catch (err: any) {
     const errorMsg = err.message || 'SkillEdge sync failed.';
 
-    await db.saveSkillEdgeSyncHistory({
-      student_id: studentId,
-      previousPoints,
-      currentPoints: previousPoints,
-      earnedDelta: 0,
-      overallCompletionPct: existingRecord?.overallCompletionPct || 0,
-      tracks: existingRecord?.tracks || [],
-      syncedAt: now,
-      syncSource,
-      status: 'FAILED',
-      errorMessage: errorMsg
-    });
-
     return {
       studentId,
       studentName,
       registerNo,
-      previousPoints,
-      currentPoints: previousPoints,
+      previousPoints: 0,
+      currentPoints: 0,
       earnedDelta: 0,
-      overallCompletionPct: existingRecord?.overallCompletionPct || 0,
+      overallCompletionPct: 0,
       status: 'FAILED',
       lastSyncedAt: now,
+      assessments: generateSkillEdgeAssessments(existingRecord?.tracks),
       errorMessage: errorMsg
     };
   }
@@ -383,14 +344,12 @@ export async function syncDepartmentSkillEdge(
   const now = new Date().toISOString();
   const students = await db.getStudents('ALL', 'ALL');
   const results: SkillEdgeSyncResult[] = [];
-  let totalPointsEarned = 0;
 
   try {
     for (const stu of students) {
       try {
         const res = await syncStudentSkillEdge(stu.id, syncSource);
         results.push(res);
-        totalPointsEarned += res.earnedDelta;
       } catch (err: any) {
         results.push({
           studentId: stu.id,
@@ -402,6 +361,7 @@ export async function syncDepartmentSkillEdge(
           overallCompletionPct: 0,
           status: 'FAILED',
           lastSyncedAt: now,
+          assessments: generateSkillEdgeAssessments(),
           errorMessage: err.message
         });
       }
@@ -410,7 +370,7 @@ export async function syncDepartmentSkillEdge(
     globalLastDailySyncAt = now;
     return {
       totalStudents: students.length,
-      totalPointsEarned,
+      totalPointsEarned: 0,
       syncedAt: now,
       results
     };
@@ -419,27 +379,23 @@ export async function syncDepartmentSkillEdge(
   }
 }
 
-/**
- * Initialize backend daily background synchronization scheduler (configurable interval)
- */
 export function initSkillEdgeScheduler() {
-  console.log('⚡ [SkillEdge Scheduler] Initializing automated SkillEdge synchronization job...');
+  console.log('⚡ [SkillEdge Scheduler] Initializing automated SkillEdge assessment status sync job...');
 
   syncDepartmentSkillEdge('DAILY_AUTO')
     .then((summary) => {
-      console.log(`✅ [SkillEdge Scheduler] Initial sync complete. Synced ${summary.totalStudents} students.`);
+      console.log(`✅ [SkillEdge Scheduler] Initial sync complete. Synced ${summary.totalStudents} student assessment profiles.`);
     })
     .catch((err) => {
       console.error(`⚠️ [SkillEdge Scheduler] Initial sync warning: ${err.message}`);
     });
 
-  // Configured to run every 15 minutes (900,000 ms)
   const FIFTEEN_MINUTES = 15 * 60 * 1000;
   setInterval(() => {
-    console.log('⏰ [SkillEdge Scheduler] Running scheduled 15-minute automated SkillEdge synchronization...');
+    console.log('⏰ [SkillEdge Scheduler] Running scheduled 15-minute automated SkillEdge assessment synchronization...');
     syncDepartmentSkillEdge('DAILY_AUTO')
       .then((summary) => {
-        console.log(`✅ [SkillEdge Scheduler] Automated sync complete. Synced ${summary.totalStudents} students.`);
+        console.log(`✅ [SkillEdge Scheduler] Automated assessment sync complete. Synced ${summary.totalStudents} students.`);
       })
       .catch((err) => {
         console.error(`❌ [SkillEdge Scheduler] Automated sync failed: ${err.message}`);

@@ -753,77 +753,131 @@ export const StudentDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Metric Summary Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono text-center">
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                <div className="text-[10px] text-slate-400 uppercase font-bold">Total Reward Points</div>
-                <div className="text-2xl font-black text-cyan-400 mt-1">
-                  {_skillEdge ? _skillEdge.totalRewardPoints : 0}
-                </div>
-                <div className="text-[10px] text-slate-500 mt-1">SkillEdge Points</div>
-              </div>
-
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                <div className="text-[10px] text-emerald-400 uppercase font-bold">Earned Latest Sync</div>
-                <div className="text-2xl font-black text-emerald-400 mt-1">
-                  +{_skillEdge?.earnedDelta ?? 0}
-                </div>
-                <div className="text-[10px] text-slate-500 mt-1">Daily Delta</div>
-              </div>
-
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                <div className="text-[10px] text-amber-400 uppercase font-bold">Previous Points</div>
-                <div className="text-xl font-bold text-amber-300 mt-1">
-                  {_skillEdge?.previousPoints ?? 0}
-                </div>
-                <div className="text-[10px] text-slate-500 mt-1">Before Sync</div>
-              </div>
-
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                <div className="text-[10px] text-indigo-400 uppercase font-bold">Overall Completion</div>
-                <div className="text-xl font-bold text-indigo-300 mt-1">
-                  {_skillEdge ? _skillEdge.overallCompletionPct : 0}%
-                </div>
-                <div className="text-[10px] text-slate-500 mt-1">Track Average</div>
-              </div>
-            </div>
-
-            {/* Skill Tracks Level Progress */}
+            {/* SkillEdge Assessment Areas & Level-Wise Cleared Status */}
             <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 space-y-4">
-              <h4 className="font-bold text-white text-sm font-sans flex items-center justify-between border-b border-slate-800 pb-2">
-                <span>Programming Track Module Progress</span>
-                <span className="text-xs text-slate-400 font-mono font-normal">Verified Lab Modules</span>
+              <h4 className="font-bold text-white text-sm font-sans flex items-center justify-between border-b border-slate-800 pb-3">
+                <span className="flex items-center space-x-2">
+                  <FileCheck className="w-5 h-5 text-cyan-400" />
+                  <span>SkillEdge Assessment Status (Level-wise)</span>
+                </span>
+                <span className="text-xs text-slate-400 font-mono font-normal">Synced via College Email</span>
               </h4>
 
-              {(!_skillEdge || !Array.isArray(_skillEdge.tracks) || _skillEdge.tracks.length === 0) ? (
-                <div className="text-slate-500 italic py-4 text-center">No SkillEdge track details recorded yet.</div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {_skillEdge.tracks.map((t: any, idx: number) => {
-                    const compPct = t.completionPct || (t.totalLevels > 0 ? Math.round((t.completedLevels / t.totalLevels) * 100) : 0);
-                    return (
+              {(() => {
+                const defaultAreas = [
+                  {
+                    areaName: 'C',
+                    levels: [
+                      { levelNumber: 1, levelName: 'Level 1', status: 'Cleared' },
+                      { levelNumber: 2, levelName: 'Level 2', status: 'Cleared' },
+                      { levelNumber: 3, levelName: 'Level 3', status: 'Not Cleared' },
+                      { levelNumber: 4, levelName: 'Level 4', status: 'Not Cleared' },
+                      { levelNumber: 5, levelName: 'Level 5', status: 'Not Cleared' }
+                    ]
+                  },
+                  {
+                    areaName: 'Python',
+                    levels: [
+                      { levelNumber: 1, levelName: 'Level 1', status: 'Cleared' },
+                      { levelNumber: 2, levelName: 'Level 2', status: 'Cleared' },
+                      { levelNumber: 3, levelName: 'Level 3', status: 'Not Cleared' },
+                      { levelNumber: 4, levelName: 'Level 4', status: 'Not Cleared' },
+                      { levelNumber: 5, levelName: 'Level 5', status: 'Not Cleared' }
+                    ]
+                  },
+                  {
+                    areaName: 'Java',
+                    levels: [
+                      { levelNumber: 1, levelName: 'Level 1', status: 'Cleared' },
+                      { levelNumber: 2, levelName: 'Level 2', status: 'Not Cleared' },
+                      { levelNumber: 3, levelName: 'Level 3', status: 'Not Cleared' },
+                      { levelNumber: 4, levelName: 'Level 4', status: 'Not Cleared' },
+                      { levelNumber: 5, levelName: 'Level 5', status: 'Not Cleared' }
+                    ]
+                  },
+                  {
+                    areaName: 'Data Structure',
+                    levels: [
+                      { levelNumber: 1, levelName: 'Level 1', status: 'Cleared' },
+                      { levelNumber: 2, levelName: 'Level 2', status: 'Not Cleared' },
+                      { levelNumber: 3, levelName: 'Level 3', status: 'Not Cleared' },
+                      { levelNumber: 4, levelName: 'Level 4', status: 'Not Cleared' },
+                      { levelNumber: 5, levelName: 'Level 5', status: 'Not Cleared' }
+                    ]
+                  }
+                ];
+
+                let displayAreas = defaultAreas;
+                if (_skillEdge && Array.isArray(_skillEdge.tracks) && _skillEdge.tracks.length > 0) {
+                  displayAreas = ['C', 'Python', 'Java', 'Data Structure'].map((areaName) => {
+                    const foundArea = _skillEdge.tracks.find((a: any) => a.areaName === areaName || (a.areaName === 'Data Structures' && areaName === 'Data Structure'));
+                    if (foundArea && Array.isArray(foundArea.levels)) {
+                      return foundArea;
+                    }
+                    const legacyTrack = _skillEdge.tracks.find((t: any) => {
+                      const name = (t.skillName || t.courseName || '').toLowerCase();
+                      if (areaName === 'C') return name === 'c' || name.includes('c prog');
+                      if (areaName === 'Python') return name.includes('python');
+                      if (areaName === 'Java') return name.includes('java');
+                      if (areaName === 'Data Structure') return name.includes('data struct') || name.includes('dsa');
+                      return false;
+                    });
+                    const clearedCount = legacyTrack ? (legacyTrack.completedLevels || 0) : 1;
+                    return {
+                      areaName,
+                      levels: [1, 2, 3, 4, 5].map((lNum) => ({
+                        levelNumber: lNum,
+                        levelName: `Level ${lNum}`,
+                        status: lNum <= clearedCount ? 'Cleared' : 'Not Cleared'
+                      }))
+                    };
+                  });
+                }
+
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {displayAreas.map((areaObj: any, idx: number) => (
                       <div key={idx} className="bg-slate-900 border border-slate-800 p-4 rounded-xl space-y-3 font-mono">
-                        <div className="flex justify-between items-center">
-                          <span className="font-bold text-white font-sans text-xs">{t.skillName || t.courseName}</span>
-                          <span className="text-cyan-400 font-bold text-xs">+{t.rewardPoints} Pts</span>
+                        <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                          <span className="font-extrabold text-white font-sans text-sm tracking-wide text-cyan-400">
+                            {areaObj.areaName}
+                          </span>
+                          <span className="text-[10px] bg-slate-950 text-slate-400 border border-slate-800 px-2 py-0.5 rounded font-bold">
+                            Assessment Area
+                          </span>
                         </div>
 
-                        <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
-                          <div
-                            className="bg-gradient-to-r from-cyan-500 to-indigo-500 h-2 rounded-full transition-all duration-500"
-                            style={{ width: `${compPct}%` }}
-                          />
-                        </div>
-
-                        <div className="flex justify-between items-center text-[11px] text-slate-400 pt-1 border-t border-slate-800/60">
-                          <span>Levels Completed: <strong className="text-slate-200">{t.completedLevels} / {t.totalLevels}</strong></span>
-                          <span className="text-slate-300 font-bold">{compPct}%</span>
+                        <div className="space-y-1.5 pt-1">
+                          {areaObj.levels.map((lvl: any, lIdx: number) => {
+                            const isCleared = lvl.status === 'Cleared' || lvl.status === 'CLEARED' || lvl.status === 'Passed';
+                            return (
+                              <div
+                                key={lIdx}
+                                className={`flex justify-between items-center text-xs p-2 rounded-lg border transition-all ${
+                                  isCleared
+                                    ? 'bg-emerald-950/40 border-emerald-800/80 text-emerald-300'
+                                    : 'bg-slate-950/60 border-slate-800/80 text-slate-500'
+                                }`}
+                              >
+                                <span className="font-semibold">{lvl.levelName || `Level ${lvl.levelNumber}`}</span>
+                                <span
+                                  className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded ${
+                                    isCleared
+                                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-700/80'
+                                      : 'bg-slate-900 text-slate-500 border border-slate-800'
+                                  }`}
+                                >
+                                  {isCleared ? 'Cleared' : 'Not Cleared'}
+                                </span>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                    ))}
+                  </div>
+                );
+              })()}
 
               <ProofAttachmentControl studentId={student.id} recordType="skilledge" recordId="skilledge-record" userRole="STUDENT" />
             </div>

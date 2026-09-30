@@ -151,13 +151,51 @@ async function runSkillEdgeLiveSyncTestSuite() {
     throw new Error(`Initial sync score mismatch. Expected 70, got ${initialPortalRecord?.totalRewardPoints}`);
   }
 
-  // STEP 7: MANDATORY AUTOMATIC UPDATE TEST (70 -> 85 Score Update)
-  console.log(`\n7️⃣ Executing Mandatory Live SkillEdge Update Test (70 -> 85)...`);
-  console.log(`   Modifying SkillEdge DB directly: updating Saran's score to 85 and completing C Programming level 5...`);
+  // STEP 7: MANDATORY AUTOMATIC ASSESSMENT LEVEL UPDATE TEST (C Level 3 Cleared)
+  console.log(`\n7️⃣ Executing Mandatory Live SkillEdge Assessment Update Test (C Level 3 Cleared)...`);
+  console.log(`   Modifying SkillEdge DB directly: student clears C Level 3...`);
 
-  const updatedTracks = JSON.stringify([
-    { skillName: 'C Programming', courseName: 'C Programming', totalLevels: 6, completedLevels: 5, rewardPoints: 250, completionPct: 83, status: 'In Progress' },
-    { skillName: 'Python', courseName: 'Python', totalLevels: 5, completedLevels: 4, rewardPoints: 240, completionPct: 80, status: 'In Progress' }
+  const updatedAssessments = JSON.stringify([
+    {
+      areaName: 'C',
+      levels: [
+        { levelNumber: 1, levelName: 'Level 1', status: 'Cleared' },
+        { levelNumber: 2, levelName: 'Level 2', status: 'Cleared' },
+        { levelNumber: 3, levelName: 'Level 3', status: 'Cleared' },
+        { levelNumber: 4, levelName: 'Level 4', status: 'Not Cleared' },
+        { levelNumber: 5, levelName: 'Level 5', status: 'Not Cleared' }
+      ]
+    },
+    {
+      areaName: 'Python',
+      levels: [
+        { levelNumber: 1, levelName: 'Level 1', status: 'Cleared' },
+        { levelNumber: 2, levelName: 'Level 2', status: 'Cleared' },
+        { levelNumber: 3, levelName: 'Level 3', status: 'Not Cleared' },
+        { levelNumber: 4, levelName: 'Level 4', status: 'Not Cleared' },
+        { levelNumber: 5, levelName: 'Level 5', status: 'Not Cleared' }
+      ]
+    },
+    {
+      areaName: 'Java',
+      levels: [
+        { levelNumber: 1, levelName: 'Level 1', status: 'Cleared' },
+        { levelNumber: 2, levelName: 'Level 2', status: 'Not Cleared' },
+        { levelNumber: 3, levelName: 'Level 3', status: 'Not Cleared' },
+        { levelNumber: 4, levelName: 'Level 4', status: 'Not Cleared' },
+        { levelNumber: 5, levelName: 'Level 5', status: 'Not Cleared' }
+      ]
+    },
+    {
+      areaName: 'Data Structure',
+      levels: [
+        { levelNumber: 1, levelName: 'Level 1', status: 'Cleared' },
+        { levelNumber: 2, levelName: 'Level 2', status: 'Not Cleared' },
+        { levelNumber: 3, levelName: 'Level 3', status: 'Not Cleared' },
+        { levelNumber: 4, levelName: 'Level 4', status: 'Not Cleared' },
+        { levelNumber: 5, levelName: 'Level 5', status: 'Not Cleared' }
+      ]
+    }
   ]);
 
   const updateDb = new betterSqlite3(TEST_DB_PATH);
@@ -169,22 +207,21 @@ async function runSkillEdgeLiveSyncTestSuite() {
     WHERE college_email = 'saran@college.ac.in'
   `
     )
-    .run(updatedTracks);
+    .run(updatedAssessments);
   updateDb.close();
 
   console.log(`   SkillEdge DB updated. Triggering Portal Live-Read / Auto-Sync...`);
 
-  // Execute Live Read Sync
-  await syncStudentSkillEdge(testStu!.id, 'LIVE_READ');
+  const syncResult = await syncStudentSkillEdge(testStu!.id, 'LIVE_READ');
+  const cArea = syncResult.assessments.find((a) => a.areaName === 'C');
+  const cLevel3 = cArea?.levels.find((l) => l.levelNumber === 3);
 
-  const updatedPortalRecord = await db.getSkillEdgeRecord(testStu!.id);
-  console.log(`📊 Portal SkillEdge Score AFTER Live Read: ${updatedPortalRecord?.totalRewardPoints}`);
-  console.log(`📊 Portal SkillEdge Completion % AFTER Live Read: ${updatedPortalRecord?.overallCompletionPct}%`);
+  console.log(`📊 Portal SkillEdge Assessment Status: C → Level 3 Status = "${cLevel3?.status}"`);
 
-  if (updatedPortalRecord?.totalRewardPoints === 85 && updatedPortalRecord?.overallCompletionPct === 82) {
-    console.log(`✅ [PASS] MANDATORY AUTOMATIC UPDATE TEST PASSED! Score updated from 70 -> 85 automatically.`);
+  if (cLevel3?.status === 'Cleared') {
+    console.log(`✅ [PASS] AUTOMATIC ASSESSMENT UPDATE TEST PASSED! C Level 3 updated to Cleared automatically.`);
   } else {
-    throw new Error(`Automatic update test failed! Score was not updated to 85. Got: ${updatedPortalRecord?.totalRewardPoints}`);
+    throw new Error(`Automatic assessment update test failed! Expected 'Cleared', got: ${cLevel3?.status}`);
   }
 
   // STEP 8: Read-Only Verification on Source DB
