@@ -9,7 +9,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "skilledge": "tsx scripts/skilledge_connector.ts"
+    "skilledge": "node --import tsx/esm scripts/skilledge_connector.ts"
   },
   "dependencies": {
     "@types/multer": "^2.2.0",
