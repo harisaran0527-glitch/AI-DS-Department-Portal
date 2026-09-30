@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API } from '../../services/api';
-import type { Role, UserSession } from '../../types';
+import type { Role } from '../../types';
 
 interface LoginRouteProps {
   role: Role;
@@ -10,7 +10,6 @@ interface LoginRouteProps {
 
 export const LoginRoute: React.FC<LoginRouteProps> = ({ role, children }) => {
   const navigate = useNavigate();
-  const [session, setSession] = useState<UserSession | null>(null);
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
@@ -20,7 +19,6 @@ export const LoginRoute: React.FC<LoginRouteProps> = ({ role, children }) => {
       .then((res) => {
         if (!isMounted) return;
         if (res && res.user) {
-          setSession(res.user);
           // If already logged in with the MATCHING role, navigate to their dashboard
           if (res.user.role === role) {
             switch (role) {

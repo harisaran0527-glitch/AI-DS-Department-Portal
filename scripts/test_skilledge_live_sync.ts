@@ -124,7 +124,7 @@ async function runSkillEdgeLiveSyncTestSuite() {
   console.log(`\n5️⃣ Registering Test Student in Portal Database...`);
   const allStus = await db.getStudents('ALL', 'ALL');
   let testStu = allStus.find(
-    (s) => normalizeEmail(s.email || s.college_email) === 'saran@college.ac.in'
+    (s) => normalizeEmail(s.email || s.college_email || '') === 'saran@college.ac.in'
   );
 
   if (!testStu) {

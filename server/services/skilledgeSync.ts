@@ -230,7 +230,7 @@ export async function syncStudentSkillEdge(
 
   const registerNo = student.register_no || student.registerNo || '';
   const studentName = student.name || 'Student';
-  const collegeEmail = normalizeEmail(student.email || student.college_email || student.personal_email);
+  const collegeEmail = normalizeEmail(student.email || student.college_email || student.personal_email || '');
   const now = new Date().toISOString();
 
   const existingRecord = await db.getSkillEdgeRecord(studentId);

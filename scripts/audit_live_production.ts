@@ -1,5 +1,3 @@
-import fetch from 'node-fetch';
-
 const LIVE_URL = 'https://aids-department-portal.vercel.app';
 
 interface TestResult {
