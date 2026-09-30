@@ -1,9 +1,9 @@
 import React from 'react';
-import { FuturisticSuitcaseLogin } from '../../components/auth/FuturisticSuitcaseLogin';
+import { CinematicBookLogin } from '../../components/auth/CinematicBookLogin';
 
 export const HODLogin: React.FC = () => {
   return (
-    <FuturisticSuitcaseLogin
+    <CinematicBookLogin
       portalRole="HOD"
       roleSubtitle="HOD PORTAL"
       placeholderIdentifier="Enter HOD email or ID"
