@@ -51,6 +51,14 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
     }
   }
 
+  // Auto-refresh SkillEdge metrics from source database if configured
+  try {
+    const { syncStudentSkillEdge } = await import('../services/skilledgeSync.js');
+    await syncStudentSkillEdge(studentId, 'LIVE_READ');
+  } catch (_skErr) {
+    // Preserve cached record gracefully if SkillEdge DB is unreachable
+  }
+
   const full360 = (await db.getStudent360(studentId)) || initial360;
 
   if (!full360) {
@@ -106,6 +114,25 @@ router.get('/connected-accounts', async (req: AuthRequest, res: Response) => {
   return res.json({
     connectedAccounts,
     externalMetrics
+  });
+});
+
+// GET Student's Own SkillEdge Record (STRICT IDOR PROTECTION)
+router.get('/skilledge', async (req: AuthRequest, res: Response) => {
+  let studentId = req.user!.studentId || req.user!.id;
+  const studentObj = (await db.getStudentByRegisterNo(req.user!.registerNo || '')) || (await db.getStudentById(studentId));
+  if (studentObj) studentId = studentObj.id;
+
+  try {
+    const { syncStudentSkillEdge } = await import('../services/skilledgeSync.js');
+    await syncStudentSkillEdge(studentId, 'LIVE_READ');
+  } catch (_err) {
+    // Preserve cached record gracefully
+  }
+
+  const skilledgeRecord = await db.getSkillEdgeRecord(studentId);
+  return res.json({
+    skilledge: skilledgeRecord || null
   });
 });
 

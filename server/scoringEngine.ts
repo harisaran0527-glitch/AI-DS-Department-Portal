@@ -181,7 +181,7 @@ export async function computeRepresentativeScore(student: StudentRecord, attenda
     return Math.min(100, Math.round(score * 10) / 10);
   }
 
-  if (!student.isRepresentative) return 0;
+  if (!student.is_representative && !(student as any).isRepresentative) return 0;
   const score = 50 + (student.cgpa / 10) * 30 + attendanceScore * 0.2;
   return Math.min(100, Math.round(score * 10) / 10);
 }

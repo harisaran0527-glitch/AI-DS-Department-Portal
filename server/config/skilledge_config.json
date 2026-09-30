@@ -1,0 +1,36 @@
+{
+  "dbType": "sqlite",
+  "connectionUrl": "C:\\Users\\ELCOT\\OneDrive\\Desktop\\DEPARTMENT OF AI&DS\\scratch\\test_skilledge_source.db",
+  "studentTable": "student_skilledge_profiles",
+  "emailColumn": "college_email",
+  "scoreColumn": "reward_points",
+  "completionPctColumn": "overall_completion_pct",
+  "tracksColumn": "tracks_json",
+  "discoveredTables": [
+    "student_skilledge_profiles"
+  ],
+  "discoveredColumns": {
+    "student_skilledge_profiles": [
+      "profile_id",
+      "college_email",
+      "student_name",
+      "reward_points",
+      "overall_completion_pct",
+      "tracks_json"
+    ]
+  },
+  "primaryKeys": {
+    "student_skilledge_profiles": [
+      "profile_id"
+    ]
+  },
+  "foreignKeys": {},
+  "allCandidateFields": [
+    "profile_id",
+    "college_email",
+    "student_name",
+    "reward_points",
+    "overall_completion_pct",
+    "tracks_json"
+  ]
+}

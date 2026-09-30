@@ -1,5 +1,10 @@
+import fs from 'fs';
+import path from 'path';
+import pg from 'pg';
+import betterSqlite3 from 'better-sqlite3';
 import { db } from '../db.js';
 import { calculateCategoryScores, computeOverallScore } from '../scoringEngine.js';
+import { normalizeEmail } from '../../scripts/skilledge_connector.js';
 
 export interface SkillEdgeSyncResult {
   studentId: string;
@@ -9,21 +14,131 @@ export interface SkillEdgeSyncResult {
   currentPoints: number;
   earnedDelta: number;
   overallCompletionPct: number;
-  status: 'VERIFIED' | 'NOT_LINKED' | 'FAILED';
+  status: 'VERIFIED' | 'NOT_LINKED' | 'FAILED' | 'TEMPORARILY_UNAVAILABLE';
   lastSyncedAt: string;
   errorMessage?: string;
 }
 
+const CONFIG_PATH = path.resolve(process.cwd(), 'server', 'config', 'skilledge_config.json');
+
 let isDepartmentSyncRunning = false;
 let globalLastDailySyncAt: string | null = null;
 
+export function loadSkillEdgeConfig(): any | null {
+  if (fs.existsSync(CONFIG_PATH)) {
+    try {
+      const raw = fs.readFileSync(CONFIG_PATH, 'utf-8');
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (process.env.SKILLEDGE_DATABASE_URL) {
+    const url = process.env.SKILLEDGE_DATABASE_URL.trim();
+    const isPg = url.startsWith('postgres://') || url.startsWith('postgresql://');
+    return {
+      dbType: isPg ? 'postgresql' : 'sqlite',
+      connectionUrl: url,
+      studentTable: process.env.SKILLEDGE_TABLE || 'students',
+      emailColumn: process.env.SKILLEDGE_EMAIL_COL || 'college_email',
+      scoreColumn: process.env.SKILLEDGE_SCORE_COL || 'total_reward_points',
+      completionPctColumn: process.env.SKILLEDGE_PROGRESS_COL || 'overall_completion_pct',
+      tracksColumn: process.env.SKILLEDGE_TRACKS_COL || 'tracks_json'
+    };
+  }
+  return null;
+}
+
 /**
- * Generate accurate track progress for a student based on academic & profile performance
+ * Perform a live read query directly from the source SkillEdge Database for a given student email.
+ * Strictly uses READ-ONLY SELECT queries.
+ */
+export async function fetchLiveRecordFromSkillEdge(collegeEmail: string): Promise<{
+  score: number;
+  completionPct: number;
+  tracks: any[];
+} | null> {
+  const normEmail = normalizeEmail(collegeEmail);
+  if (!normEmail) return null;
+
+  const cfg = loadSkillEdgeConfig();
+  if (!cfg || !cfg.connectionUrl) return null;
+
+  if (cfg.dbType === 'postgresql') {
+    const client = new pg.Client({
+      connectionString: cfg.connectionUrl,
+      ssl: cfg.connectionUrl.includes('localhost') || cfg.connectionUrl.includes('127.0.0.1') ? false : { rejectUnauthorized: false }
+    });
+    await client.connect();
+    try {
+      const query = `
+        SELECT * FROM "${cfg.studentTable || 'students'}"
+        WHERE LOWER(TRIM("${cfg.emailColumn || 'college_email'}")) = $1
+      `;
+      const res = await client.query(query, [normEmail]);
+
+      if (res.rows.length === 0) {
+        return null;
+      }
+      if (res.rows.length > 1) {
+        console.warn(`⚠️ [SkillEdge Live Read] Duplicate records detected in SkillEdge DB for email: ${normEmail}`);
+      }
+
+      const row = res.rows[0];
+      const score = Number(row[cfg.scoreColumn || 'total_reward_points'] || row['reward_points'] || row['score'] || row['points'] || 0);
+      const completionPct = Number(row[cfg.completionPctColumn || 'overall_completion_pct'] || row['completion_pct'] || row['progress'] || 0);
+
+      let tracks: any[] = [];
+      if (cfg.tracksColumn && row[cfg.tracksColumn]) {
+        try {
+          tracks = typeof row[cfg.tracksColumn] === 'string' ? JSON.parse(row[cfg.tracksColumn]) : row[cfg.tracksColumn];
+        } catch {
+          tracks = [];
+        }
+      }
+
+      return { score, completionPct, tracks };
+    } finally {
+      await client.end();
+    }
+  } else if (cfg.dbType === 'sqlite') {
+    const cleanedPath = cfg.connectionUrl.replace(/^sqlite:/, '');
+    if (!fs.existsSync(cleanedPath)) return null;
+    const sqlite = new betterSqlite3(cleanedPath, { readonly: true });
+    try {
+      const row = sqlite
+        .prepare(`SELECT * FROM "${cfg.studentTable || 'students'}" WHERE LOWER(TRIM("${cfg.emailColumn || 'email'}")) = ?`)
+        .get(normEmail) as any;
+
+      if (!row) return null;
+
+      const score = Number(row[cfg.scoreColumn || 'total_reward_points'] || row['reward_points'] || row['score'] || 0);
+      const completionPct = Number(row[cfg.completionPctColumn || 'overall_completion_pct'] || row['completion_pct'] || 0);
+
+      let tracks: any[] = [];
+      if (cfg.tracksColumn && row[cfg.tracksColumn]) {
+        try {
+          tracks = typeof row[cfg.tracksColumn] === 'string' ? JSON.parse(row[cfg.tracksColumn]) : row[cfg.tracksColumn];
+        } catch {
+          tracks = [];
+        }
+      }
+
+      return { score, completionPct, tracks };
+    } finally {
+      sqlite.close();
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Generate track progress for a student based on academic & profile performance
  */
 export function generateSkillEdgeTracksForStudent(student: any, existingTracks?: any[]) {
-  const isLateral = (student.entryType === 'Lateral Entry' || student.entry_type === 'Lateral Entry');
+  const isLateral = student.entryType === 'Lateral Entry' || student.entry_type === 'Lateral Entry';
 
-  // Track configurations
   const defaultTracks = [
     {
       skillName: 'C Programming',
@@ -103,7 +218,7 @@ export function generateSkillEdgeTracksForStudent(student: any, existingTracks?:
  */
 export async function syncStudentSkillEdge(
   studentId: string,
-  syncSource: 'DAILY_AUTO' | 'MANUAL_FACULTY' | 'MANUAL_HOD' = 'DAILY_AUTO'
+  syncSource: 'DAILY_AUTO' | 'MANUAL_FACULTY' | 'MANUAL_HOD' | 'LIVE_READ' = 'DAILY_AUTO'
 ): Promise<SkillEdgeSyncResult> {
   const student = await db.getStudentById(studentId);
   if (!student) {
@@ -112,21 +227,55 @@ export async function syncStudentSkillEdge(
 
   const registerNo = student.register_no || student.registerNo || '';
   const studentName = student.name || 'Student';
+  const collegeEmail = normalizeEmail(student.email || student.college_email || student.personal_email);
   const now = new Date().toISOString();
 
-  // Get existing record to track previous points
   const existingRecord = await db.getSkillEdgeRecord(studentId);
   const previousPoints = existingRecord?.totalRewardPoints || 0;
 
-  // Determine handle / mapping
-  const skilledgeHandle = existingRecord?.skilledgeHandle || student.email || student.personal_email || registerNo;
-
   try {
-    const tracks = generateSkillEdgeTracksForStudent(student, existingRecord?.tracks);
-    const totalLevels = tracks.reduce((sum: number, t: any) => sum + (t.totalLevels || 1), 0);
-    const completedLevels = tracks.reduce((sum: number, t: any) => sum + (t.completedLevels || 0), 0);
-    const currentPoints = tracks.reduce((sum: number, t: any) => sum + (t.rewardPoints || 0), 0);
-    const overallCompletionPct = totalLevels > 0 ? Math.round((completedLevels / totalLevels) * 100) : 0;
+    let liveResult = null;
+    let liveError = false;
+
+    try {
+      liveResult = await fetchLiveRecordFromSkillEdge(collegeEmail);
+    } catch (err: any) {
+      liveError = true;
+      console.warn(`⚠️ [SkillEdge Unreachable] ${err.message}`);
+    }
+
+    if (liveError) {
+      return {
+        studentId,
+        studentName,
+        registerNo,
+        previousPoints,
+        currentPoints: previousPoints,
+        earnedDelta: 0,
+        overallCompletionPct: existingRecord?.overallCompletionPct || 0,
+        status: 'TEMPORARILY_UNAVAILABLE',
+        lastSyncedAt: now,
+        errorMessage: 'SkillEdge data temporarily unavailable.'
+      };
+    }
+
+    let currentPoints = previousPoints;
+    let overallCompletionPct = existingRecord?.overallCompletionPct || 0;
+    let tracks = generateSkillEdgeTracksForStudent(student, existingRecord?.tracks);
+
+    if (liveResult) {
+      currentPoints = liveResult.score;
+      overallCompletionPct = liveResult.completionPct;
+      if (liveResult.tracks && liveResult.tracks.length > 0) {
+        tracks = liveResult.tracks;
+      }
+    } else if (!existingRecord) {
+      currentPoints = tracks.reduce((sum: number, t: any) => sum + (t.rewardPoints || 0), 0);
+      const totalLevels = tracks.reduce((sum: number, t: any) => sum + (t.totalLevels || 1), 0);
+      const completedLevels = tracks.reduce((sum: number, t: any) => sum + (t.completedLevels || 0), 0);
+      overallCompletionPct = totalLevels > 0 ? Math.round((completedLevels / totalLevels) * 100) : 0;
+    }
+
     const earnedDelta = Math.max(0, currentPoints - previousPoints);
     const status = 'VERIFIED';
 
@@ -136,15 +285,13 @@ export async function syncStudentSkillEdge(
       previousPoints,
       earnedDelta,
       status,
-      skilledgeHandle,
+      skilledgeHandle: collegeEmail,
       lastSyncedAt: now,
       tracks
     };
 
-    // Save to main table
     await db.saveSkillEdgeRecord(studentId, skilledgeData);
 
-    // Save snapshot in history table
     await db.saveSkillEdgeSyncHistory({
       student_id: studentId,
       previousPoints,
@@ -157,7 +304,6 @@ export async function syncStudentSkillEdge(
       status: 'SUCCESS'
     });
 
-    // Recalculate student rank and scores
     const full360 = await db.getStudent360(studentId);
     if (full360) {
       const scoringConfig = await db.getScoringConfig();
@@ -190,7 +336,6 @@ export async function syncStudentSkillEdge(
   } catch (err: any) {
     const errorMsg = err.message || 'SkillEdge sync failed.';
 
-    // Save failure snapshot to history
     await db.saveSkillEdgeSyncHistory({
       student_id: studentId,
       previousPoints,
@@ -223,7 +368,7 @@ export async function syncStudentSkillEdge(
  * Synchronize all students in the department
  */
 export async function syncDepartmentSkillEdge(
-  syncSource: 'DAILY_AUTO' | 'MANUAL_FACULTY' | 'MANUAL_HOD' = 'DAILY_AUTO'
+  syncSource: 'DAILY_AUTO' | 'MANUAL_FACULTY' | 'MANUAL_HOD' | 'LIVE_READ' = 'DAILY_AUTO'
 ): Promise<{
   totalStudents: number;
   totalPointsEarned: number;
@@ -275,32 +420,31 @@ export async function syncDepartmentSkillEdge(
 }
 
 /**
- * Initialize backend daily background synchronization scheduler
+ * Initialize backend daily background synchronization scheduler (configurable interval)
  */
 export function initSkillEdgeScheduler() {
-  console.log('⚡ [SkillEdge Scheduler] Initializing automated daily SkillEdge synchronization job...');
+  console.log('⚡ [SkillEdge Scheduler] Initializing automated SkillEdge synchronization job...');
 
-  // Run initial sync on startup
   syncDepartmentSkillEdge('DAILY_AUTO')
     .then((summary) => {
-      console.log(`✅ [SkillEdge Scheduler] Initial daily sync complete. Synced ${summary.totalStudents} students.`);
+      console.log(`✅ [SkillEdge Scheduler] Initial sync complete. Synced ${summary.totalStudents} students.`);
     })
     .catch((err) => {
       console.error(`⚠️ [SkillEdge Scheduler] Initial sync warning: ${err.message}`);
     });
 
-  // Schedule every 24 hours (86,400,000 ms)
-  const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+  // Configured to run every 15 minutes (900,000 ms)
+  const FIFTEEN_MINUTES = 15 * 60 * 1000;
   setInterval(() => {
-    console.log('⏰ [SkillEdge Scheduler] Running scheduled 24-hour automated SkillEdge synchronization...');
+    console.log('⏰ [SkillEdge Scheduler] Running scheduled 15-minute automated SkillEdge synchronization...');
     syncDepartmentSkillEdge('DAILY_AUTO')
       .then((summary) => {
-        console.log(`✅ [SkillEdge Scheduler] Automated 24-hour sync complete. Synced ${summary.totalStudents} students.`);
+        console.log(`✅ [SkillEdge Scheduler] Automated sync complete. Synced ${summary.totalStudents} students.`);
       })
       .catch((err) => {
-        console.error(`❌ [SkillEdge Scheduler] Automated 24-hour sync failed: ${err.message}`);
+        console.error(`❌ [SkillEdge Scheduler] Automated sync failed: ${err.message}`);
       });
-  }, TWENTY_FOUR_HOURS);
+  }, FIFTEEN_MINUTES);
 }
 
 export function getLastDailySyncTimestamp(): string | null {
