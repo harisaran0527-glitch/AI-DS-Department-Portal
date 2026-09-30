@@ -1,12 +1,12 @@
 import React from 'react';
-import { HolographicBookLogin } from '../../components/auth/HolographicBookLogin';
+import { FuturisticSuitcaseLogin } from '../../components/auth/FuturisticSuitcaseLogin';
 
 export const FacultyLogin: React.FC = () => {
   return (
-    <HolographicBookLogin
+    <FuturisticSuitcaseLogin
       portalRole="FACULTY"
       roleSubtitle="FACULTY PORTAL"
-      placeholderIdentifier="Faculty Email / ID"
+      placeholderIdentifier="Enter faculty email or ID"
       destinationRoute="/faculty/dashboard"
     />
   );
