@@ -5,7 +5,7 @@ export const FacultyLogin: React.FC = () => {
   return (
     <VideoPortalLogin
       portalRole="FACULTY"
-      roleSubtitle="Faculty Access"
+      roleSubtitle="FACULTY PORTAL"
       placeholderIdentifier="Faculty Email / ID"
       destinationRoute="/faculty/dashboard"
     />

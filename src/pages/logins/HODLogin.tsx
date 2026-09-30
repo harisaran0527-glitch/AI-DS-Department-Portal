@@ -5,7 +5,7 @@ export const HODLogin: React.FC = () => {
   return (
     <VideoPortalLogin
       portalRole="HOD"
-      roleSubtitle="HOD Access"
+      roleSubtitle="HOD PORTAL"
       placeholderIdentifier="HOD Email / ID"
       destinationRoute="/hod/dashboard"
     />
