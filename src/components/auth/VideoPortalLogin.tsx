@@ -38,13 +38,13 @@ export const VideoPortalLogin: React.FC<VideoPortalLoginProps> = ({
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.play().catch(() => {
-        // Soft fallback if autoplay restricted
+        // Autoplay handled
       });
     }
   }, []);
 
   const handleVideoError = () => {
-    console.error('Holographic Suitcase video fallback engaged.');
+    console.error('Holographic Suitcase video layer fallback initialized.');
     setHasVideoError(true);
   };
 
@@ -108,18 +108,18 @@ export const VideoPortalLogin: React.FC<VideoPortalLoginProps> = ({
   return (
     <div className="min-h-screen bg-[#020617] text-slate-100 flex items-center justify-center p-3 sm:p-6 relative overflow-hidden font-sans select-none">
       
-      {/* 4K Ambient Holographic Backdrop Glow (z-0) */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(6,182,212,0.18),rgba(2,6,23,0.95)_75%)] pointer-events-none z-0" />
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-cyan-500/10 blur-[120px] rounded-full pointer-events-none z-0" />
+      {/* Deep Navy/Black Cinematic Background (z-0) */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(6,182,212,0.22),rgba(2,6,23,0.98)_75%)] pointer-events-none z-0" />
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-cyan-500/15 blur-[140px] rounded-full pointer-events-none z-0" />
 
-      {/* Main Holographic Briefcase Container (Reference Aspect Ratio) */}
-      <div className="relative w-full max-w-[780px] aspect-[496/368] flex items-center justify-center rounded-2xl shadow-[0_0_60px_rgba(6,182,212,0.25)] border border-cyan-500/20 bg-slate-950/40 backdrop-blur-sm overflow-hidden">
+      {/* Main Holographic Briefcase Canvas (Preserves original aspect ratio) */}
+      <div className="relative w-full max-w-[780px] aspect-[496/368] flex items-center justify-center overflow-hidden">
 
-        {/* Video Load Fallback / Grid Visual Layer */}
+        {/* Video Load Fallback Visual Layer */}
         {hasVideoError && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 bg-slate-950/90 text-cyan-400 font-mono text-xs text-center border border-cyan-800/50">
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 bg-slate-950/90 text-cyan-400 font-mono text-xs text-center border border-cyan-800/50 rounded-2xl">
             <ShieldCheck className="w-10 h-10 text-cyan-400 mb-2 animate-pulse" />
-            <span className="font-bold tracking-widest text-slate-200">AVSEC SALEM HOLOGRAPHIC SUITCASE TERMINAL</span>
+            <span className="font-bold tracking-widest text-slate-200">AVSEC SALEM HOLOGRAPHIC TERMINAL</span>
             <span className="text-[10px] text-cyan-400/70 mt-1">Ready for Secure Authentication</span>
           </div>
         )}
@@ -136,18 +136,18 @@ export const VideoPortalLogin: React.FC<VideoPortalLoginProps> = ({
             onTimeUpdate={handleTimeUpdate}
             onEnded={handleVideoEnded}
             onError={handleVideoError}
-            className="w-full h-full object-contain z-10 filter drop-shadow-[0_0_20px_rgba(6,182,212,0.3)]"
+            className="w-full h-full object-contain z-10 filter drop-shadow-[0_0_25px_rgba(6,182,212,0.35)]"
           />
         )}
 
-        {/* THE ONE AND ONLY FUNCTIONAL HOLOGRAPHIC LOGIN INTERFACE (z-30) */}
+        {/* HOLOGRAPHIC PROJECTION LOGIN INTERFACE (z-30) - NO FLOATING CARDS OR BOX CONTAINERS */}
         {!isPlayingExit && (
           <div className="absolute inset-0 flex items-center justify-center z-30 p-2 sm:p-4 pointer-events-auto">
-            <div className="w-[72%] sm:w-[58%] max-w-[350px] transform -translate-y-3 sm:-translate-y-4 flex flex-col items-center justify-center text-center">
+            <div className="w-[74%] sm:w-[58%] max-w-[340px] transform -translate-y-3 sm:-translate-y-4 flex flex-col items-center justify-center text-center drop-shadow-[0_0_20px_rgba(6,182,212,0.4)]">
 
               {authStatus === 'success' ? (
-                /* Holographic Success Screen */
-                <div className="w-full bg-slate-950/95 border-2 border-emerald-400/90 rounded-2xl p-5 shadow-[0_0_40px_rgba(16,185,129,0.55)] backdrop-blur-xl flex flex-col items-center space-y-2.5 z-40 animate-in fade-in zoom-in duration-300">
+                /* Holographic Access Granted Beam */
+                <div className="w-full bg-slate-950/90 border border-emerald-400/80 rounded-2xl p-5 shadow-[0_0_40px_rgba(16,185,129,0.6)] backdrop-blur-md flex flex-col items-center space-y-2 z-40 animate-in fade-in zoom-in duration-300">
                   <div className="w-12 h-12 rounded-full bg-emerald-500/20 border border-emerald-400 flex items-center justify-center text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.5)]">
                     <CheckCircle2 className="w-7 h-7" />
                   </div>
@@ -155,15 +155,15 @@ export const VideoPortalLogin: React.FC<VideoPortalLoginProps> = ({
                     <span className="text-[10px] font-mono tracking-widest text-emerald-400 uppercase font-extrabold">AUTHENTICATION SUCCESSFUL</span>
                     <h3 className="text-base font-extrabold text-white mt-1">Welcome, {authenticatedName}</h3>
                     <p className="text-[10px] text-cyan-300/80 font-mono mt-1 animate-pulse">
-                      Redirecting to {roleSubtitle} Dashboard...
+                      Entering {roleSubtitle} Dashboard...
                     </p>
                   </div>
                 </div>
               ) : (
-                /* SINGLE INTEGRATED 4K HOLOGRAPHIC FORM */
+                /* INVISIBLE FORM WRAPPER — CONTROLS ARE PROJECTED DIRECTLY FROM THE HOLOGRAM BEAM */
                 <form 
                   onSubmit={handleLoginSubmit} 
-                  className="w-full flex flex-col items-center space-y-2 sm:space-y-2.5 bg-slate-950/75 border border-cyan-500/40 rounded-2xl p-3 sm:p-4 shadow-[0_0_35px_rgba(6,182,212,0.35)] backdrop-blur-md"
+                  className="w-full flex flex-col items-center space-y-2 sm:space-y-2.5 bg-transparent border-0 p-0 shadow-none backdrop-blur-none"
                 >
 
                   {/* AVSEC Salem Official Brand Logo & Role Title */}
@@ -171,9 +171,9 @@ export const VideoPortalLogin: React.FC<VideoPortalLoginProps> = ({
                     <img 
                       src="/images/avsec-salem-logo.png" 
                       alt="AVSEC Salem Official Logo" 
-                      className="h-10 sm:h-12 w-auto object-contain drop-shadow-[0_0_15px_rgba(6,182,212,0.6)] mb-1" 
+                      className="h-10 sm:h-12 w-auto object-contain drop-shadow-[0_0_18px_rgba(6,182,212,0.75)] mb-1" 
                     />
-                    <div className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-500/50">
+                    <div className="inline-flex items-center space-x-1.5 px-3 py-0.5 rounded-full bg-cyan-950/60 border border-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.3)]">
                       <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
                       <span className="text-[9px] sm:text-[10px] font-mono text-cyan-200 tracking-widest uppercase font-extrabold drop-shadow-[0_0_8px_#06b6d4]">
                         AVSEC SALEM — {roleSubtitle}
@@ -181,15 +181,15 @@ export const VideoPortalLogin: React.FC<VideoPortalLoginProps> = ({
                     </div>
                   </div>
 
-                  {/* Holographic Error Banner */}
+                  {/* Holographic Error Alert */}
                   {errorMessage && (
-                    <div className="w-full text-[9px] sm:text-[10px] text-red-200 bg-red-950/90 border border-red-500/80 px-2.5 py-1.5 rounded-xl flex items-center space-x-1.5 text-left shadow-[0_0_15px_rgba(239,68,68,0.3)] z-40 animate-in fade-in duration-200">
+                    <div className="w-full text-[9px] sm:text-[10px] text-red-200 bg-red-950/90 border border-red-500/80 px-2.5 py-1.5 rounded-xl flex items-center space-x-1.5 text-left shadow-[0_0_15px_rgba(239,68,68,0.4)] z-40 animate-in fade-in duration-200">
                       <AlertCircle className="w-3.5 h-3.5 shrink-0 text-red-400" />
                       <span className="leading-tight">{errorMessage}</span>
                     </div>
                   )}
 
-                  {/* Email / ID Input Field */}
+                  {/* Email / ID Input Field (Layered directly into Hologram Stream) */}
                   <div className="w-full relative group">
                     <User className="absolute left-3 top-2.5 sm:top-3 w-3.5 h-3.5 text-cyan-400 group-focus-within:text-cyan-200 transition-colors" />
                     <input
@@ -198,7 +198,7 @@ export const VideoPortalLogin: React.FC<VideoPortalLoginProps> = ({
                       placeholder={placeholderIdentifier}
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
-                      className="w-full bg-slate-900/90 border border-cyan-500/50 rounded-xl py-2 pl-9 pr-3 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all"
+                      className="w-full bg-slate-950/80 border border-cyan-500/60 rounded-xl py-2 pl-9 pr-3 text-xs text-white placeholder-cyan-300/60 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/60 shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all"
                     />
                   </div>
 
@@ -211,7 +211,7 @@ export const VideoPortalLogin: React.FC<VideoPortalLoginProps> = ({
                       placeholder="Portal Password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-slate-900/90 border border-cyan-500/50 rounded-xl py-2 pl-9 pr-9 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all"
+                      className="w-full bg-slate-950/80 border border-cyan-500/60 rounded-xl py-2 pl-9 pr-9 text-xs text-white placeholder-cyan-300/60 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/60 shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all"
                     />
                     <button
                       type="button"
@@ -223,11 +223,11 @@ export const VideoPortalLogin: React.FC<VideoPortalLoginProps> = ({
                     </button>
                   </div>
 
-                  {/* LOGIN Button */}
+                  {/* LOGIN Button (Glowing Holographic Light Beam Button) */}
                   <button
                     type="submit"
                     disabled={authStatus === 'loading'}
-                    className="w-full mt-1 py-2 bg-gradient-to-r from-cyan-500 via-sky-400 to-cyan-500 hover:from-cyan-400 hover:to-sky-300 text-slate-950 font-extrabold rounded-xl text-xs tracking-wider uppercase shadow-[0_0_20px_rgba(6,182,212,0.5)] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center space-x-2"
+                    className="w-full mt-1 py-2 bg-gradient-to-r from-cyan-500 via-sky-400 to-cyan-500 hover:from-cyan-400 hover:to-sky-300 text-slate-950 font-extrabold rounded-xl text-xs tracking-wider uppercase shadow-[0_0_25px_rgba(6,182,212,0.6)] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center space-x-2"
                   >
                     {authStatus === 'loading' ? (
                       <span className="flex items-center space-x-2">
@@ -239,11 +239,11 @@ export const VideoPortalLogin: React.FC<VideoPortalLoginProps> = ({
                     )}
                   </button>
 
-                  {/* Forgot Password Trigger */}
+                  {/* Forgot Password Link */}
                   <button
                     type="button"
                     onClick={() => setIsForgotPasswordOpen(true)}
-                    className="text-[9px] sm:text-[10px] text-cyan-300/80 hover:text-cyan-200 transition-colors font-mono cursor-pointer underline-offset-2 hover:underline pt-0.5"
+                    className="text-[9px] sm:text-[10px] text-cyan-300/80 hover:text-cyan-100 transition-colors font-mono cursor-pointer underline-offset-2 hover:underline pt-0.5"
                   >
                     Forgot Password?
                   </button>

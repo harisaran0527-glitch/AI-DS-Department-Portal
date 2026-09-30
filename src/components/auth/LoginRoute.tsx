@@ -46,21 +46,13 @@ export const LoginRoute: React.FC<LoginRouteProps> = ({ role, children }) => {
 
   if (isChecking) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center font-sans space-y-3">
-        <div className="w-10 h-10 border-4 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" />
-        <span className="text-xs font-mono text-slate-400">Loading {role} Portal...</span>
+      <div className="min-h-screen bg-[#020617] text-cyan-400 flex flex-col items-center justify-center font-sans space-y-3">
+        <div className="w-10 h-10 border-4 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin shadow-[0_0_20px_rgba(6,182,212,0.5)]" />
+        <span className="text-xs font-mono text-cyan-300/80 tracking-widest uppercase">Initializing {role} Terminal...</span>
       </div>
     );
   }
 
-  return (
-    <div className="relative">
-      {session && session.role !== role && (
-        <div className="fixed top-0 left-0 right-0 z-50 bg-amber-950/90 border-b border-amber-800 text-amber-300 text-[11px] font-mono py-1.5 px-4 text-center flex justify-center items-center space-x-2">
-          <span>⚠️ Active Session Detected: Logged in as <strong>{session.email}</strong> ({session.role}). Authenticating here will update your session to {role}.</span>
-        </div>
-      )}
-      {children}
-    </div>
-  );
+  // Render children cleanly with zero session warning banner exposed
+  return <>{children}</>;
 };
