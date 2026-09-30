@@ -1,10 +1,10 @@
 import { Router, Response } from 'express';
-import { authenticateToken, requireRole, AuthRequest } from '../middleware/auth';
+import { authenticateToken, requireRole, AuthRequest } from '../middleware/auth.js';
 import {
   getTopRecognitionRankings,
   getAllCategoryRankings,
   getLeetCodeFullAnalytics
-} from '../services/geminiRankingService';
+} from '../services/geminiRankingService.js';
 
 const router = Router();
 

@@ -12,7 +12,7 @@ import {
   ProjectRecord,
   ScoringConfig,
   db
-} from './db';
+} from './db.js';
 
 // 1. Category Score Normalization Engine (0 - 100)
 export function calculateCategoryScores(

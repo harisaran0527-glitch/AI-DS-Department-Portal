@@ -2,7 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
-import { isPostgresActive, queryOne, queryAll, executeRun, executeTransaction, sqliteDb } from './postgresAdapter';
+import { isPostgresActive, queryOne, queryAll, executeRun, executeTransaction, sqliteDb } from './postgresAdapter.js';
 
 dotenv.config();
 
@@ -465,7 +465,7 @@ export async function initDatabaseSchema(): Promise<void> {
   `;
 
   if (isPostgresActive()) {
-    const { pgPool } = await import('./postgresAdapter');
+    const { pgPool } = await import('./postgresAdapter.js');
     if (pgPool) {
       await pgPool.query(ddl);
       const alterCols = [

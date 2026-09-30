@@ -2,10 +2,10 @@ import { Router, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { db } from '../db';
-import { authenticateToken, requireRole, verifyFacultySectionAccess, AuthRequest } from '../middleware/auth';
-import { calculateCategoryScores, computeOverallScore } from '../scoringEngine';
-import { generateSecureRandomPassword } from '../services/security';
+import { db } from '../db.js';
+import { authenticateToken, requireRole, verifyFacultySectionAccess, AuthRequest } from '../middleware/auth.js';
+import { calculateCategoryScores, computeOverallScore } from '../scoringEngine.js';
+import { generateSecureRandomPassword } from '../services/security.js';
 
 const router = Router();
 
@@ -1239,7 +1239,7 @@ router.post('/students/:studentId/connect-account', verifyFacultySectionAccess, 
 
   try {
     if (provider.toLowerCase() === 'leetcode') {
-      const { syncLeetCodeProfile } = await import('../services/externalSync');
+      const { syncLeetCodeProfile } = await import('../services/externalSync.js');
       const result = await syncLeetCodeProfile(studentId, cleanHandle);
       return res.status(201).json({
         message: `LeetCode handle set and verified metrics synchronized for ${targetStudent.name}.`,
@@ -1276,7 +1276,7 @@ router.post('/students/:studentId/sync-leetcode', verifyFacultySectionAccess, as
   }
 
   try {
-    const { syncLeetCodeProfile } = await import('../services/externalSync');
+    const { syncLeetCodeProfile } = await import('../services/externalSync.js');
     const result = await syncLeetCodeProfile(studentId, targetUsername);
 
     return res.json({
@@ -1297,7 +1297,7 @@ router.post('/students/:studentId/sync-skilledge', verifyFacultySectionAccess, a
   }
 
   try {
-    const { syncStudentSkillEdge } = await import('../services/skilledgeSync');
+    const { syncStudentSkillEdge } = await import('../services/skilledgeSync.js');
     const result = await syncStudentSkillEdge(studentId, 'MANUAL_FACULTY');
     return res.json({
       message: `SkillEdge points synchronized successfully for ${targetStudent.name}.`,
@@ -1311,7 +1311,7 @@ router.post('/students/:studentId/sync-skilledge', verifyFacultySectionAccess, a
 // POST Trigger Section-Wide / Department SkillEdge Sync by Faculty
 router.post('/sync-skilledge-all', async (req: AuthRequest, res: Response) => {
   try {
-    const { syncDepartmentSkillEdge } = await import('../services/skilledgeSync');
+    const { syncDepartmentSkillEdge } = await import('../services/skilledgeSync.js');
     const summary = await syncDepartmentSkillEdge('MANUAL_FACULTY');
     return res.json({
       message: `Successfully synchronized SkillEdge metrics for all ${summary.totalStudents} students. Total points earned: +${summary.totalPointsEarned}.`,

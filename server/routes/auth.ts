@@ -2,8 +2,8 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { db } from '../db';
-import { authenticateToken, AuthRequest, JWT_SECRET } from '../middleware/auth';
+import { db } from '../db.js';
+import { authenticateToken, AuthRequest, JWT_SECRET } from '../middleware/auth.js';
 
 const router = Router();
 

@@ -1,11 +1,11 @@
-import { db } from '../db';
+import { db } from '../db.js';
 import {
   calculateCategoryScores,
   computeOverallScore,
   computeLeetCodeAwardScore,
   computeEliteStudentScore,
   computeTeamHeadScore
-} from '../scoringEngine';
+} from '../scoringEngine.js';
 
 export interface CategoryWinner {
   rank: 1 | 2;

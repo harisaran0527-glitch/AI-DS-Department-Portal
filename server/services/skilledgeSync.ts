@@ -1,5 +1,5 @@
-import { db } from '../db';
-import { calculateCategoryScores, computeOverallScore } from '../scoringEngine';
+import { db } from '../db.js';
+import { calculateCategoryScores, computeOverallScore } from '../scoringEngine.js';
 
 export interface SkillEdgeSyncResult {
   studentId: string;

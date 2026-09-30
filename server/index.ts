@@ -4,14 +4,14 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import fs from 'fs';
 
-import authRoutes from './routes/auth';
-import adminRoutes from './routes/admin';
-import facultyRoutes from './routes/faculty';
-import hodRoutes from './routes/hod';
-import studentRoutes from './routes/student';
-import filesRoutes from './routes/files';
-import subjectsRoutes from './routes/subjects';
-import rankingsRoutes from './routes/rankings';
+import authRoutes from './routes/auth.js';
+import adminRoutes from './routes/admin.js';
+import facultyRoutes from './routes/faculty.js';
+import hodRoutes from './routes/hod.js';
+import studentRoutes from './routes/student.js';
+import filesRoutes from './routes/files.js';
+import subjectsRoutes from './routes/subjects.js';
+import rankingsRoutes from './routes/rankings.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -71,7 +71,7 @@ if (process.env.NODE_ENV === 'production' && fs.existsSync(DIST_PATH)) {
   });
 }
 
-import { initSkillEdgeScheduler } from './services/skilledgeSync';
+import { initSkillEdgeScheduler } from './services/skilledgeSync.js';
 
 if (!process.env.VERCEL) {
   app.listen(PORT, () => {

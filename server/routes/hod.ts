@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
-import { db } from '../db';
-import { authenticateToken, requireRole, AuthRequest } from '../middleware/auth';
+import { db } from '../db.js';
+import { authenticateToken, requireRole, AuthRequest } from '../middleware/auth.js';
 import {
   calculateCategoryScores,
   computeOverallScore,
@@ -10,7 +10,7 @@ import {
   computeRepresentativeScore,
   generateAIExplanation,
   generateFinalCandidateRecommendation
-} from '../scoringEngine';
+} from '../scoringEngine.js';
 
 const router = Router();
 
@@ -299,7 +299,7 @@ router.put('/students/:studentId/360', async (req: AuthRequest, res: Response) =
 // POST Trigger Department-Wide SkillEdge Synchronization by HOD
 router.post('/sync-skilledge-all', async (req: AuthRequest, res: Response) => {
   try {
-    const { syncDepartmentSkillEdge } = await import('../services/skilledgeSync');
+    const { syncDepartmentSkillEdge } = await import('../services/skilledgeSync.js');
     const summary = await syncDepartmentSkillEdge('MANUAL_HOD');
     await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'HOD_SYNC_SKILLEDGE_DEPARTMENT', 'DEPARTMENT');
     return res.json({

@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
-import { db } from '../db';
-import { authenticateToken, requireRole, AuthRequest } from '../middleware/auth';
-import { calculateCategoryScores, computeOverallScore, generateAIExplanation } from '../scoringEngine';
+import { db } from '../db.js';
+import { authenticateToken, requireRole, AuthRequest } from '../middleware/auth.js';
+import { calculateCategoryScores, computeOverallScore, generateAIExplanation } from '../scoringEngine.js';
 
 const router = Router();
 
@@ -43,7 +43,7 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
     const isStale = !lastSynced || (Date.now() - new Date(lastSynced).getTime() > 300000);
     if (isStale) {
       try {
-        const { syncLeetCodeProfile } = await import('../services/externalSync');
+        const { syncLeetCodeProfile } = await import('../services/externalSync.js');
         await syncLeetCodeProfile(studentId, handle);
       } catch (_err) {
         // Silently preserve verified database statistics if live fetch fails during page open
@@ -125,7 +125,7 @@ router.post('/sync-leetcode', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'No valid LeetCode handle connected to your profile. Please contact your Class Coordinator.' });
     }
 
-    const { syncLeetCodeProfile } = await import('../services/externalSync');
+    const { syncLeetCodeProfile } = await import('../services/externalSync.js');
     const result = await syncLeetCodeProfile(studentId, handle);
 
     return res.json({
@@ -145,7 +145,7 @@ router.post('/sync-nptel', async (req: AuthRequest, res: Response) => {
     if (studentObj) studentId = studentObj.id;
 
     const { email } = req.body || {};
-    const { syncNPTELProfile } = await import('../services/externalSync');
+    const { syncNPTELProfile } = await import('../services/externalSync.js');
     const result = await syncNPTELProfile(studentId, email);
 
     return res.json({
