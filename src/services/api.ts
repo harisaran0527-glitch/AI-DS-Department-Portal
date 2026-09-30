@@ -1,6 +1,30 @@
 import type { Student, UserSession, TeamHead, Subject } from '../types';
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
+function getApiBaseUrl(): string {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    // On any production domain (Vercel, custom domain, etc.), always use relative /api
+    if (host !== 'localhost' && host !== '127.0.0.1') {
+      return '/api';
+    }
+  }
+
+  const envBase = import.meta.env.VITE_API_BASE_URL;
+  if (envBase && typeof envBase === 'string') {
+    const trimmed = envBase.trim().replace(/\/$/, '');
+    if (typeof window !== 'undefined') {
+      const host = window.location.hostname;
+      if (host !== 'localhost' && host !== '127.0.0.1' && trimmed.includes('localhost')) {
+        return '/api';
+      }
+    }
+    return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
+  }
+
+  return '/api';
+}
+
+const API_BASE = getApiBaseUrl();
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
