@@ -920,18 +920,19 @@ export class SQLiteDB {
       console.log(`🔒 Admin Account Verified: Existing ADMIN account (${existingAdmin.email}) retained without modification.`);
     }
 
+    // ALWAYS ENSURE HOD ACCOUNT EXISTS
+    const existingHOD = await queryOne("SELECT id FROM users WHERE role = 'HOD' OR id = 'hod-sys' OR identifier = 'hod' OR email = 'hod.aids@avsenggcollege.ac.in'");
+    if (!existingHOD) {
+      const hodHash = await bcrypt.hash('hod@123', 10);
+      await executeRun(`
+        INSERT INTO users (id, email, identifier, name, role, password_hash, is_active, created_at)
+        VALUES (?, ?, ?, ?, 'HOD', ?, 1, ?)
+      `, ['hod-sys', 'hod.aids@avsenggcollege.ac.in', 'hod', 'Head of Department', hodHash, new Date().toISOString()]);
+      console.log('🔒 Default HOD account initialized (hod.aids@avsenggcollege.ac.in / hod).');
+    }
+
     // BOOTSTRAP DEMO ACCOUNTS ONLY IF EXPLICITLY ENABLED
     if (process.env.INITIALIZE_DEMO_ACCOUNTS === 'true') {
-      // BOOTSTRAP DEFAULT HOD ACCOUNT IF ABSENT
-      const existingHOD = await queryOne("SELECT id FROM users WHERE role = 'HOD' OR id = 'hod-sys' OR identifier = 'hod' OR email = 'hod.aids@avsenggcollege.ac.in'");
-      if (!existingHOD) {
-        const hodHash = await bcrypt.hash('hod@123', 10);
-        await executeRun(`
-          INSERT INTO users (id, email, identifier, name, role, password_hash, is_active, created_at)
-          VALUES (?, ?, ?, ?, 'HOD', ?, 1, ?)
-        `, ['hod-sys', 'hod.aids@avsenggcollege.ac.in', 'hod', 'Head of Department', hodHash, new Date().toISOString()]);
-        console.log('🔒 Default HOD account initialized (hod.aids@avsenggcollege.ac.in / hod).');
-      }
 
       // BOOTSTRAP DEFAULT FACULTY ACCOUNT IF ABSENT
       const existingFaculty = await queryOne("SELECT id, password_hash FROM users WHERE id = 'fac-sys' OR email = 'faculty.aids@avsenggcollege.ac.in' OR identifier = 'faculty'");

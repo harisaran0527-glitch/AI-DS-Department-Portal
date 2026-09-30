@@ -16,6 +16,43 @@ const router = Router();
 
 router.use(authenticateToken, requireRole('HOD'));
 
+// GET Faculty List from production DB for HOD portal
+router.get('/faculty', async (req: AuthRequest, res: Response) => {
+  const facultyUsers = await db.getUsers('FACULTY');
+  const enriched = [];
+  for (const f of facultyUsers) {
+    const assignment = await db.getFacultyAssignment(f.id);
+    const { password_hash: _ph, ...safe } = f;
+    enriched.push({
+      ...safe,
+      year: assignment ? assignment.year : f.year,
+      section: assignment ? assignment.section : f.section,
+      facultyRole: assignment ? assignment.role : f.faculty_role,
+      department: assignment ? assignment.department : 'AI & DS',
+      isActive: Boolean(f.is_active)
+    });
+  }
+  return res.json({ count: enriched.length, faculty: enriched });
+});
+
+router.get('/faculty-list', async (req: AuthRequest, res: Response) => {
+  const facultyUsers = await db.getUsers('FACULTY');
+  const enriched = [];
+  for (const f of facultyUsers) {
+    const assignment = await db.getFacultyAssignment(f.id);
+    const { password_hash: _ph, ...safe } = f;
+    enriched.push({
+      ...safe,
+      year: assignment ? assignment.year : f.year,
+      section: assignment ? assignment.section : f.section,
+      facultyRole: assignment ? assignment.role : f.faculty_role,
+      department: assignment ? assignment.department : 'AI & DS',
+      isActive: Boolean(f.is_active)
+    });
+  }
+  return res.json({ count: enriched.length, faculty: enriched });
+});
+
 // GET department students with hierarchy filters
 router.get('/students', async (req: AuthRequest, res: Response) => {
   const { year, section } = req.query;

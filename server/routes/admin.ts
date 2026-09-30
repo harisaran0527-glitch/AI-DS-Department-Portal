@@ -43,6 +43,13 @@ router.post('/change-password', async (req: AuthRequest, res: Response) => {
   return res.json({ message: 'Admin password changed successfully.' });
 });
 
+// GET All System Users List for Admin Portal
+router.get('/users', async (req: AuthRequest, res: Response) => {
+  const allUsers = await db.getUsers('ALL');
+  const sanitized = allUsers.map((u) => sanitizeUser(u));
+  return res.json({ count: sanitized.length, users: sanitized });
+});
+
 // GET Faculty List with faculty_assignments mapping
 router.get('/faculty', async (req: AuthRequest, res: Response) => {
   const facultyUsers = await db.getUsers('FACULTY');
