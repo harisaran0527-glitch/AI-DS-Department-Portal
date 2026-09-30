@@ -172,11 +172,18 @@ export const VideoPortalLogin: React.FC<VideoPortalLoginProps> = ({
                 </div>
               ) : (
                 /* REAL INTERACTIVE OVERLAY FIELDS MATCHING REFERENCE HOLOGRAM POSITIONS */
-                <form onSubmit={handleLoginSubmit} className="w-full flex flex-col items-center space-y-2.5">
+                <form onSubmit={handleLoginSubmit} className="w-full flex flex-col items-center space-y-2">
 
-                  {/* Subtitle / Role Badge */}
-                  <div className="text-[10px] font-mono text-cyan-300/90 tracking-widest uppercase mb-0.5 font-bold drop-shadow-[0_0_5px_#06b6d4]">
-                    {roleSubtitle}
+                  {/* AVSEC Salem Official Department Brand Header */}
+                  <div className="flex flex-col items-center justify-center mb-0.5">
+                    <img 
+                      src="/images/avsec-salem-logo.png" 
+                      alt="AVSEC Salem Logo" 
+                      className="h-12 w-auto object-contain drop-shadow-[0_0_12px_rgba(6,182,212,0.4)] mb-0.5" 
+                    />
+                    <div className="text-[10px] font-mono text-cyan-300/90 tracking-widest uppercase font-bold drop-shadow-[0_0_5px_#06b6d4]">
+                      AVSEC SALEM — {roleSubtitle}
+                    </div>
                   </div>
 
                   {/* Error Notification (z-40) */}

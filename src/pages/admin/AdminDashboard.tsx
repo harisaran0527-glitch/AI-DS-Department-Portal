@@ -659,19 +659,19 @@ export const AdminDashboard: React.FC = () => {
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="flex items-center space-x-4">
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-500 to-indigo-600 p-0.5 shadow-xl shrink-0">
-                  <div className="w-full h-full bg-slate-950 rounded-xl flex items-center justify-center text-cyan-400">
-                    <ShieldCheck className="w-8 h-8" />
+                  <div className="w-full h-full bg-slate-950 rounded-xl flex items-center justify-center p-1.5">
+                    <img src="/images/avsec-salem-logo.png" alt="AVSEC Salem Logo" className="w-full h-full object-contain drop-shadow" />
                   </div>
                 </div>
                 <div>
                   <div className="flex items-center space-x-3">
                     <h1 className="text-xl font-bold text-white">{session.name}</h1>
                     <span className="bg-cyan-950 border border-cyan-700 text-cyan-300 text-xs px-3 py-0.5 rounded-full font-bold">
-                      System Administrator
+                      AVSEC Salem Admin
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 font-mono mt-0.5">
-                    AI & DS Department System Control | Faculty: <strong className="text-white">{facultyList.length}</strong> | HOD Accounts: <strong className="text-amber-400">{hodList.length}</strong>
+                    AVSEC Salem — AI & DS System Control | Faculty: <strong className="text-white">{facultyList.length}</strong> | HOD Accounts: <strong className="text-amber-400">{hodList.length}</strong>
                   </p>
                 </div>
               </div>

@@ -70,15 +70,15 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     <div className="min-h-screen bg-gradient-to-br from-[#0A0E1A] via-[#0E172A] to-[#0A101F] text-slate-100 flex flex-col md:flex-row antialiased selection:bg-cyan-500 selection:text-slate-950">
       {/* MOBILE TOP NAVBAR HEADER */}
       <div className="md:hidden bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between z-40 sticky top-0">
-        <div className="flex items-center space-x-2.5">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-500 to-indigo-600 p-0.5 shadow-md">
-            <div className="w-full h-full bg-slate-950 rounded-[6px] flex items-center justify-center">
-              {getRoleIcon()}
-            </div>
-          </div>
+        <div className="flex items-center space-x-3">
+          <img 
+            src="/images/avsec-salem-logo.png" 
+            alt="AVSEC Salem Logo" 
+            className="h-9 w-auto object-contain shrink-0 drop-shadow-[0_0_8px_rgba(6,182,212,0.3)]" 
+          />
           <div>
-            <div className="text-xs font-bold text-white tracking-wide">AI & DS PORTAL</div>
-            <div className="text-[10px] text-cyan-400 font-mono">{portalRole} WORKSPACE</div>
+            <div className="text-xs font-bold text-white tracking-wide">AVSEC - SALEM</div>
+            <div className="text-[10px] text-cyan-400 font-mono font-semibold">{portalRole} WORKSPACE</div>
           </div>
         </div>
         <button
@@ -96,16 +96,16 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         }`}
       >
         {/* Sidebar Header Brand */}
-        <div className="p-5 border-b border-slate-800 flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 p-0.5 shadow-lg shrink-0">
-            <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-              {getRoleIcon()}
-            </div>
-          </div>
+        <div className="p-4 border-b border-slate-800 flex items-center space-x-3 bg-slate-950/60">
+          <img 
+            src="/images/avsec-salem-logo.png" 
+            alt="AVSEC Salem Logo" 
+            className="h-10 w-auto object-contain shrink-0 drop-shadow-[0_0_10px_rgba(6,182,212,0.35)]" 
+          />
           <div className="overflow-hidden">
-            <div className="text-sm font-bold text-white tracking-wide truncate">AI & DS PORTAL</div>
-            <div className="text-[10px] text-cyan-400 font-mono font-semibold tracking-wider uppercase truncate">
-              {portalRole} CONTROL
+            <div className="text-xs font-extrabold text-white tracking-wider truncate">AVSEC - SALEM</div>
+            <div className="text-[10px] text-cyan-400 font-mono font-bold tracking-wider uppercase truncate">
+              AI & DS {portalRole}
             </div>
           </div>
         </div>

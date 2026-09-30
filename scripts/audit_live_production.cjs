@@ -187,7 +187,7 @@ async function runLiveProductionAudit() {
       const hodAuthHeader = { 'Authorization': `Bearer ${tokens['HOD'].token}` };
       
       // HOD Faculty List
-      const facListRes = await fetch(`${LIVE_URL}/api/admin/faculty`, { headers: hodAuthHeader });
+      const facListRes = await fetch(`${LIVE_URL}/api/hod/faculty`, { headers: hodAuthHeader });
       const facListBody = await facListRes.json();
       const facCount = (facListBody.faculty || facListBody || []).length;
 

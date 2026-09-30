@@ -100,10 +100,11 @@ export const StudentDashboard: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center font-sans">
-        <div className="flex items-center space-x-3 text-indigo-400">
-          <Sparkles className="w-6 h-6 animate-spin" />
-          <span className="text-sm font-mono">Loading 360° Student Performance Profile...</span>
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center font-sans space-y-4">
+        <img src="/images/avsec-salem-logo.png" alt="AVSEC Salem Logo" className="h-16 w-auto object-contain animate-pulse drop-shadow-[0_0_15px_rgba(6,182,212,0.4)]" />
+        <div className="flex items-center space-x-3 text-cyan-400">
+          <Sparkles className="w-5 h-5 animate-spin" />
+          <span className="text-sm font-mono tracking-wider">Loading 360° Student Performance Profile...</span>
         </div>
       </div>
     );
@@ -112,10 +113,8 @@ export const StudentDashboard: React.FC = () => {
   if (errorMsg || !student360 || !student360.student) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center font-sans p-6">
-        <div className="bg-slate-900 border border-slate-800 p-8 rounded-2xl max-w-md text-center space-y-4">
-          <div className="w-14 h-14 bg-slate-950 border border-slate-800 rounded-2xl flex items-center justify-center mx-auto text-slate-500">
-            <Users className="w-8 h-8" />
-          </div>
+        <div className="bg-slate-900 border border-slate-800 p-8 rounded-2xl max-w-md text-center space-y-4 shadow-2xl">
+          <img src="/images/avsec-salem-logo.png" alt="AVSEC Salem Logo" className="h-14 w-auto object-contain mx-auto drop-shadow-[0_0_10px_rgba(6,182,212,0.3)]" />
           <h3 className="text-lg font-bold text-slate-200">No Student Profile Linked Yet</h3>
           <p className="text-xs text-slate-400 leading-relaxed">
             {errorMsg || 'Your student account is authenticated, but your 360 performance record has not been imported by the department admin yet.'}

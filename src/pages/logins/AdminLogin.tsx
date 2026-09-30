@@ -33,10 +33,14 @@ export const AdminLogin: React.FC = () => {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 font-sans">
       <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6">
         <div className="text-center space-y-2">
-          <div className="w-14 h-14 bg-indigo-950 border border-indigo-500/40 rounded-2xl flex items-center justify-center mx-auto text-indigo-400">
-            <ShieldAlert className="w-8 h-8" />
+          <div className="flex flex-col items-center justify-center mx-auto mb-2">
+            <img 
+              src="/images/avsec-salem-logo.png" 
+              alt="AVSEC Salem Logo" 
+              className="h-16 w-auto object-contain drop-shadow-[0_0_20px_rgba(99,102,241,0.5)] mb-1" 
+            />
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">System Administration</h1>
+          <h1 className="text-xl font-extrabold text-white tracking-tight">AVSEC SALEM — ADMIN PORTAL</h1>
           <p className="text-xs text-slate-400 font-mono">FACULTY MAPPING & SYSTEM ACCESS CONTROL</p>
         </div>
 

@@ -201,8 +201,8 @@ export const HODDashboard: React.FC = () => {
     <DashboardLayout
       portalRole="HOD"
       userName={session.name}
-      userRoleTitle="HOD — AI & Data Science"
-      subtitle={`AI & DS Department Overview | Selected: ${selectedYear} ${selectedSection}`}
+      userRoleTitle="HOD — AVSEC Salem"
+      subtitle={`AVSEC Salem — AI & DS Overview | ${selectedYear} ${selectedSection}`}
       menuItems={hodMenuItems}
       activeTab={activeTab}
       onSelectTab={setActiveTab}
