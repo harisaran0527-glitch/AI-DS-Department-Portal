@@ -543,70 +543,72 @@ export async function getAllCategoryRankings(
   const pool = includeTest ? allStudents : allStudents.filter((s) => !isTestOrDemoRecord(s));
   const activePool = pool.length > 0 ? pool : allStudents;
 
-  const evaluatedPoolRaw = await Promise.all(
-    activePool.map(async (stu) => {
-      const full360 = await db.getStudent360(stu.id);
-      if (!full360 || !full360.student) return null;
+  const evaluatedPool = (
+    await Promise.all(
+      activePool.map(async (stu) => {
+        const full360 = await db.getStudent360(stu.id);
+        if (!full360 || !full360.student) return null;
 
-      const breakdown = calculateCategoryScores(
-        full360.student as any,
-        full360.academics || [],
-        full360.arrears || [],
-        full360.skillEdge,
-        full360.nptel || [],
-        full360.attendance,
-        full360.discipline || [],
-        full360.leetcode,
-        full360.projects || [],
-        full360.certificates || [],
-        full360.participation || []
-      );
+        const breakdown = calculateCategoryScores(
+          full360.student as any,
+          full360.academics || [],
+          full360.arrears || [],
+          full360.skillEdge,
+          full360.nptel || [],
+          full360.attendance,
+          full360.discipline || [],
+          full360.leetcode,
+          full360.projects || [],
+          full360.certificates || [],
+          full360.participation || []
+        );
 
-      const academicScore = Math.min(100, Math.max(0, (full360.student.cgpa || 0) * 10 - (full360.arrears || []).length * 15));
-      const skilledgeScore = breakdown.skillEdge || 0;
-      const nptelScore = breakdown.nptel || 0;
-      const leetCodeScore = computeLeetCodeAwardScore(full360.leetcode);
-      const certificateScore = breakdown.certificates || 0;
-      const participationScore = breakdown.participation || 0;
-      const projectScore = breakdown.projects || 0;
-      
-      const hackathonsCount = (full360.participation || []).filter((p: any) => 
-        (p.eventName || '').toLowerCase().includes('hackathon') || (p.category || '').toLowerCase().includes('hackathon')
-      ).length;
-      const hackathonScore = Math.min(100, hackathonsCount * 35 + (full360.projects || []).length * 10);
+        const academicScore = Math.min(100, Math.max(0, (full360.student.cgpa || 0) * 10 - (full360.arrears || []).length * 15));
+        const skilledgeScore = breakdown.skillEdge || 0;
+        const nptelScore = breakdown.nptel || 0;
+        const leetCodeScore = computeLeetCodeAwardScore(full360.leetcode);
+        const certificateScore = breakdown.certificates || 0;
+        const participationScore = breakdown.participation || 0;
+        const projectScore = breakdown.projects || 0;
+        
+        const hackathonsCount = (full360.participation || []).filter((p: any) => 
+          (p.eventName || '').toLowerCase().includes('hackathon') || (p.category || '').toLowerCase().includes('hackathon')
+        ).length;
+        const hackathonScore = Math.min(100, hackathonsCount * 35 + (full360.projects || []).length * 10);
 
-      const connectedAccs = (full360 as any).connectedAccounts || [];
-      const hasGithub = connectedAccs.some((a: any) => a.provider === 'GitHub' || a.platform_name === 'GitHub');
-      const hasLinkedin = connectedAccs.some((a: any) => a.provider === 'LinkedIn' || a.platform_name === 'LinkedIn');
-      const linkedinGithubScore = Math.min(100, (hasGithub ? 50 : 0) + (hasLinkedin ? 50 : 0) + ((full360.student as any).github_profile || full360.student.githubUrl || (full360.student as any).github_url ? 10 : 0));
+        const connectedAccs = (full360 as any).connectedAccounts || [];
+        const hasGithub = connectedAccs.some((a: any) => a.provider === 'GitHub' || a.platform_name === 'GitHub');
+        const hasLinkedin = connectedAccs.some((a: any) => a.provider === 'LinkedIn' || a.platform_name === 'LinkedIn');
+        const linkedinGithubScore = Math.min(100, (hasGithub ? 50 : 0) + (hasLinkedin ? 50 : 0) + ((full360.student as any).github_profile || full360.student.githubUrl || (full360.student as any).github_url ? 10 : 0));
 
-      const attendanceScore = breakdown.attendance || 0;
-      const disciplineScore = breakdown.discipline || 0;
-      const teamHeadScore = computeTeamHeadScore(stu as any, full360.projects || []);
-      const eliteScore = computeEliteStudentScore(breakdown);
-      const overallScore = computeOverallScore(breakdown, scoringConfig);
+        const attendanceScore = breakdown.attendance || 0;
+        const disciplineScore = breakdown.discipline || 0;
+        const teamHeadScore = computeTeamHeadScore(stu as any, full360.projects || []);
+        const eliteScore = computeEliteStudentScore(breakdown);
+        const overallScore = computeOverallScore(breakdown, scoringConfig);
 
-      return {
-        student: full360.student,
-        full360,
-        breakdown,
-        academicScore,
-        skilledgeScore,
-        nptelScore,
-        leetCodeScore,
-        certificateScore,
-        participationScore,
-        projectScore,
-        hackathonScore,
-        linkedinGithubScore,
-        attendanceScore,
-        disciplineScore,
-        teamHeadScore,
-        eliteScore,
-        overallScore
-      };
-    })
-    .filter(Boolean) as any[];
+        return {
+          student: full360.student,
+          full360,
+          breakdown,
+          academicScore,
+          skilledgeScore,
+          nptelScore,
+          leetCodeScore,
+          certificateScore,
+          participationScore,
+          projectScore,
+          hackathonScore,
+          linkedinGithubScore,
+          attendanceScore,
+          disciplineScore,
+          teamHeadScore,
+          eliteScore,
+          overallScore
+        };
+      })
+    )
+  ).filter(Boolean) as any[];
 
   // Helper sorting
   const sortByScore = (scoreKey: string) => [...evaluatedPool].sort((a, b) => b[scoreKey] - a[scoreKey]);
