@@ -1071,6 +1071,15 @@ export class SQLiteDB {
     return (await queryOne<FacultyAssignmentRecord>('SELECT * FROM faculty_assignments WHERE faculty_id = ? AND is_active = 1', [facultyId])) || undefined;
   }
 
+  public async getAllFacultyAssignments(): Promise<Record<string, FacultyAssignmentRecord>> {
+    const rows = await queryAll<FacultyAssignmentRecord>('SELECT * FROM faculty_assignments WHERE is_active = 1');
+    const map: Record<string, FacultyAssignmentRecord> = {};
+    for (const r of rows) {
+      map[r.faculty_id] = r;
+    }
+    return map;
+  }
+
   public async assignStudentsToFaculty(facultyId: string, studentIds: string[]): Promise<void> {
     for (const sid of studentIds) {
       await executeRun(`
@@ -1256,18 +1265,49 @@ export class SQLiteDB {
     const student = await this.getStudentById(studentId);
     if (!student) return null;
 
-    const academicsRaw = await queryAll('SELECT * FROM academic_records WHERE student_id = ?', [studentId]);
+    const [
+      academicsRaw,
+      arrears,
+      skillRaw,
+      historyRows,
+      nptelRaw,
+      attRaw,
+      discipline,
+      certsRaw,
+      partRaw,
+      lcRaw,
+      connLc,
+      prjRaw,
+      achievements,
+      nptelProofs,
+      leetcodeProofs,
+      connectedAccounts
+    ] = await Promise.all([
+      queryAll('SELECT * FROM academic_records WHERE student_id = ?', [studentId]),
+      queryAll<ArrearRecord>('SELECT * FROM arrear_history WHERE student_id = ?', [studentId]),
+      queryOne('SELECT * FROM skilledge_records WHERE student_id = ?', [studentId]),
+      queryAll('SELECT * FROM skilledge_sync_history WHERE student_id = ? ORDER BY synced_at DESC LIMIT 15', [studentId]),
+      queryAll('SELECT * FROM nptel_records WHERE student_id = ?', [studentId]),
+      queryOne('SELECT * FROM attendance_records WHERE student_id = ?', [studentId]),
+      queryAll<DisciplineRecord>('SELECT * FROM discipline_records WHERE student_id = ?', [studentId]),
+      queryAll('SELECT * FROM certificate_records WHERE student_id = ?', [studentId]),
+      queryAll('SELECT * FROM participation_records WHERE student_id = ?', [studentId]),
+      queryOne('SELECT * FROM leetcode_stats WHERE student_id = ?', [studentId]),
+      queryOne("SELECT provider_username FROM connected_accounts WHERE student_id = ? AND LOWER(provider) = 'leetcode'", [studentId]),
+      queryAll('SELECT * FROM project_records WHERE student_id = ?', [studentId]),
+      queryAll<AchievementRecord>('SELECT * FROM achievement_records WHERE student_id = ?', [studentId]),
+      this.getNptelProofs(studentId),
+      this.getLeetcodeProofs(studentId),
+      this.getConnectedAccounts(studentId)
+    ]);
+
     const academics: AcademicRecord[] = academicsRaw.map((a) => ({
       ...a,
       subjects: safeParseJson(a.subjects_json, [])
     }));
 
-    const arrears = await queryAll<ArrearRecord>('SELECT * FROM arrear_history WHERE student_id = ?', [studentId]);
-
-    const skillRaw = await queryOne('SELECT * FROM skilledge_records WHERE student_id = ?', [studentId]);
     let skillEdge: any | undefined = undefined;
     if (skillRaw) {
-      const historyRows = await queryAll('SELECT * FROM skilledge_sync_history WHERE student_id = ? ORDER BY synced_at DESC LIMIT 15', [studentId]);
       const history = historyRows.map((h) => ({
         id: h.id,
         student_id: h.student_id,
@@ -1298,7 +1338,6 @@ export class SQLiteDB {
       };
     }
 
-    const nptelRaw = await queryAll('SELECT * FROM nptel_records WHERE student_id = ?', [studentId]);
     const nptel: NPTELRecord[] = nptelRaw.map((n) => ({
       id: n.id,
       student_id: n.student_id,
@@ -1311,7 +1350,6 @@ export class SQLiteDB {
       status: n.status
     }));
 
-    const attRaw = await queryOne('SELECT * FROM attendance_records WHERE student_id = ?', [studentId]);
     let attendance: AttendanceRecord | undefined = undefined;
     if (attRaw) {
       attendance = {
@@ -1327,9 +1365,6 @@ export class SQLiteDB {
       };
     }
 
-    const discipline = await queryAll<DisciplineRecord>('SELECT * FROM discipline_records WHERE student_id = ?', [studentId]);
-
-    const certsRaw = await queryAll('SELECT * FROM certificate_records WHERE student_id = ?', [studentId]);
     const certificates: CertificateRecord[] = certsRaw.map((c) => ({
       id: c.id,
       student_id: c.student_id,
@@ -1343,7 +1378,6 @@ export class SQLiteDB {
       uploadedAt: c.uploaded_at
     }));
 
-    const partRaw = await queryAll('SELECT * FROM participation_records WHERE student_id = ?', [studentId]);
     const participation: ParticipationRecord[] = partRaw.map((p) => ({
       id: p.id,
       student_id: p.student_id,
@@ -1367,9 +1401,6 @@ export class SQLiteDB {
       uploadedAt: p.uploaded_at,
       uploaded_at: p.uploaded_at
     }));
-
-    const lcRaw = await queryOne('SELECT * FROM leetcode_stats WHERE student_id = ?', [studentId]);
-    const connLc = await queryOne("SELECT provider_username FROM connected_accounts WHERE student_id = ? AND LOWER(provider) = 'leetcode'", [studentId]);
 
     const isValidHandle = (u: any) => {
       if (!u || typeof u !== 'string') return false;
@@ -1419,7 +1450,6 @@ export class SQLiteDB {
       };
     }
 
-    const prjRaw = await queryAll('SELECT * FROM project_records WHERE student_id = ?', [studentId]);
     const projects: ProjectRecord[] = prjRaw.map((p) => ({
       id: p.id,
       student_id: p.student_id,
@@ -1434,11 +1464,6 @@ export class SQLiteDB {
       status: p.status,
       prizeAwarded: p.prize_awarded
     }));
-
-    const achievements = await queryAll<AchievementRecord>('SELECT * FROM achievement_records WHERE student_id = ?', [studentId]);
-    const nptelProofs = await this.getNptelProofs(studentId);
-    const leetcodeProofs = await this.getLeetcodeProofs(studentId);
-    const connectedAccounts = await this.getConnectedAccounts(studentId);
 
     return {
       student,

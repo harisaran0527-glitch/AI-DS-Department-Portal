@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API } from '../../services/api';
 import type { Role, UserSession } from '../../types';
-import { ShieldAlert, LogOut, LayoutDashboard, RefreshCw } from 'lucide-react';
+import { ShieldAlert, LogOut, LayoutDashboard } from 'lucide-react';
 
 interface ProtectedRouteProps {
   allowedRoles: Role[];
@@ -48,9 +48,9 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   if (status === 'checking') {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center font-sans space-y-3">
-        <div className="w-10 h-10 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
-        <span className="text-xs font-mono text-slate-400">Verifying Portal Access Credentials...</span>
+      <div className="min-h-screen bg-[#080A0F] text-[#F1F5F9] flex flex-col items-center justify-center font-sans space-y-3">
+        <div className="w-10 h-10 border-4 border-[#252B36] border-t-[#A78BFA] rounded-full animate-spin" />
+        <span className="text-xs font-mono text-[#94A3B8]">Verifying Portal Access Credentials...</span>
       </div>
     );
   }
@@ -83,20 +83,20 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     };
 
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 font-sans select-none">
-        <div className="w-full max-w-md bg-slate-900 border border-red-900/60 rounded-2xl p-8 shadow-2xl space-y-6 text-center">
-          <div className="w-16 h-16 rounded-full bg-red-950 border border-red-800 flex items-center justify-center mx-auto text-red-400 shadow-[0_0_20px_rgba(239,68,68,0.3)]">
+      <div className="min-h-screen bg-[#080A0F] text-[#F1F5F9] flex flex-col items-center justify-center p-4 font-sans select-none">
+        <div className="w-full max-w-md bg-[#12161F] border border-[#252B36] rounded-2xl p-8 shadow-2xl space-y-6 text-center">
+          <div className="w-16 h-16 rounded-full bg-rose-950/60 border border-rose-800 flex items-center justify-center mx-auto text-rose-400 shadow-md">
             <ShieldAlert className="w-8 h-8" />
           </div>
 
           <div className="space-y-2">
-            <span className="text-[10px] font-mono tracking-widest text-red-400 uppercase font-bold bg-red-950 px-3 py-1 rounded-full border border-red-800">
+            <span className="text-[10px] font-mono tracking-widest text-rose-400 uppercase font-bold bg-rose-950/80 px-3 py-1 rounded-full border border-rose-800/80">
               403 FORBIDDEN — ROLE MISMATCH
             </span>
-            <h2 className="text-xl font-bold text-white">Access Denied</h2>
-            <p className="text-xs text-slate-400 leading-relaxed font-mono">
-              You are currently authenticated as <strong className="text-cyan-400">{session?.email}</strong> with role <strong className="text-amber-400">{currentRole}</strong>.
-              This section requires <strong className="text-indigo-400">{requiredRole}</strong> permissions.
+            <h2 className="text-xl font-bold text-[#F1F5F9]">Access Denied</h2>
+            <p className="text-xs text-[#94A3B8] leading-relaxed font-mono">
+              You are currently authenticated as <strong className="text-[#A78BFA]">{session?.email}</strong> with role <strong className="text-amber-400">{currentRole}</strong>.
+              This section requires <strong className="text-[#22D3EE]">{requiredRole}</strong> permissions.
             </p>
           </div>
 

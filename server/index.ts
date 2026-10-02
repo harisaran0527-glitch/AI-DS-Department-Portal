@@ -64,12 +64,15 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', department: 'AI & Data Science', timestamp: new Date().toISOString() });
 });
 
-// Production Static Serving if client dist exists
+// Production & Preview Static Serving if client dist exists
 const DIST_PATH = path.resolve(process.cwd(), 'dist');
-if (!process.env.VERCEL && process.env.NODE_ENV === 'production' && fs.existsSync(DIST_PATH)) {
+if (!process.env.VERCEL && fs.existsSync(DIST_PATH)) {
   app.use(express.static(DIST_PATH));
-  app.get('(.*)', (req, res) => {
-    res.sendFile(path.join(DIST_PATH, 'index.html'));
+  app.use((req, res, next) => {
+    if (req.method === 'GET' && !req.path.startsWith('/api')) {
+      return res.sendFile(path.join(DIST_PATH, 'index.html'));
+    }
+    next();
   });
 }
 

@@ -49,6 +49,7 @@ export const StudentDashboard: React.FC = () => {
   const [isRefreshingLeetCode, setIsRefreshingLeetCode] = useState(false);
   const [lcSyncSuccess, setLcSyncSuccess] = useState('');
   const [lcSyncError, setLcSyncError] = useState('');
+  const [nptelUrlError, setNptelUrlError] = useState('');
 
   const fetchProfile = React.useCallback(async () => {
     try {
@@ -100,9 +101,9 @@ export const StudentDashboard: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center font-sans space-y-4">
-        <img src="/images/avsec-salem-logo.png" alt="AVSEC Salem Logo" className="h-16 w-auto object-contain animate-pulse drop-shadow-[0_0_15px_rgba(6,182,212,0.4)]" />
-        <div className="flex items-center space-x-3 text-cyan-400">
+      <div className="min-h-screen bg-[#080A0F] text-[#F1F5F9] flex flex-col items-center justify-center font-sans space-y-4">
+        <img src="/images/avsec-salem-logo.png" alt="AVSEC Salem Logo" className="h-16 w-auto object-contain animate-pulse" />
+        <div className="flex items-center space-x-3 text-[#A78BFA]">
           <Sparkles className="w-5 h-5 animate-spin" />
           <span className="text-sm font-mono tracking-wider">Loading 360° Student Performance Profile...</span>
         </div>
@@ -112,14 +113,14 @@ export const StudentDashboard: React.FC = () => {
 
   if (errorMsg || !student360 || !student360.student) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center font-sans p-6">
-        <div className="bg-slate-900 border border-slate-800 p-8 rounded-2xl max-w-md text-center space-y-4 shadow-2xl">
-          <img src="/images/avsec-salem-logo.png" alt="AVSEC Salem Logo" className="h-14 w-auto object-contain mx-auto drop-shadow-[0_0_10px_rgba(6,182,212,0.3)]" />
-          <h3 className="text-lg font-bold text-slate-200">No Student Profile Linked Yet</h3>
-          <p className="text-xs text-slate-400 leading-relaxed">
+      <div className="min-h-screen bg-[#080A0F] text-[#F1F5F9] flex items-center justify-center font-sans p-6">
+        <div className="bg-[#12161F] border border-[#252B36] p-8 rounded-2xl max-w-md text-center space-y-4 shadow-2xl">
+          <img src="/images/avsec-salem-logo.png" alt="AVSEC Salem Logo" className="h-14 w-auto object-contain mx-auto" />
+          <h3 className="text-lg font-bold text-[#F1F5F9]">No Student Profile Linked Yet</h3>
+          <p className="text-xs text-[#94A3B8] leading-relaxed">
             {errorMsg || 'Your student account is authenticated, but your 360 performance record has not been imported by the department admin yet.'}
           </p>
-          <button onClick={handleLogout} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold">
+          <button onClick={handleLogout} className="bg-[#A78BFA] hover:bg-[#C4B5FD] text-[#080A0F] font-bold px-4 py-2 rounded-xl text-xs btn-action">
             Logout to Portal
           </button>
         </div>
@@ -501,7 +502,16 @@ export const StudentDashboard: React.FC = () => {
               assignedSection={student.section}
             />
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 text-xs font-mono">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-4">
+              {nptelUrlError && (
+                <div className="bg-red-950/80 border border-red-800/80 text-red-300 p-2.5 rounded-xl flex items-center justify-between text-xs font-mono animate-in fade-in">
+                  <div className="flex items-center space-x-2">
+                    <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                    <span>{nptelUrlError}</span>
+                  </div>
+                  <button type="button" onClick={() => setNptelUrlError('')} className="text-red-400 hover:text-white font-bold ml-2">✕</button>
+                </div>
+              )}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-4">
               <div>
                 <h3 className="text-lg font-bold text-white flex items-center space-x-2 font-sans">
                   <FileCheck className="w-5 h-5 text-indigo-400" />
@@ -515,9 +525,10 @@ export const StudentDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
+                    setNptelUrlError('');
                     const res = getNptelUrlForStudent(student);
                     if (res.error) {
-                      alert(res.error);
+                      setNptelUrlError(res.error);
                     } else if (res.url) {
                       window.open(res.url, '_blank');
                     }

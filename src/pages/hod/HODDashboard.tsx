@@ -114,15 +114,18 @@ export const HODDashboard: React.FC = () => {
       }
       setSession(meRes.user);
 
-      const stuRes = await API.getDepartmentStudents(selectedYear, selectedSection);
+      const [stuRes, candRes, cfgRes] = await Promise.all([
+        API.getDepartmentStudents(selectedYear, selectedSection),
+        API.getAIAwardCandidates(selectedYear),
+        API.getScoringConfig()
+      ]);
+
       setStudents(stuRes.students || []);
-
-      const candRes = await API.getAIAwardCandidates(selectedYear);
       setAwardCandidates(candRes.candidates || null);
-
-      const cfgRes = await API.getScoringConfig();
-      setScoringConfig(cfgRes.config);
-      setTempConfig(cfgRes.config);
+      if (cfgRes?.config) {
+        setScoringConfig(cfgRes.config);
+        setTempConfig(cfgRes.config);
+      }
     } catch (err: any) {
       console.error(err);
     }

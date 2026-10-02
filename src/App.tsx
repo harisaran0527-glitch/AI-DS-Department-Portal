@@ -12,29 +12,33 @@ import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { LoginRoute } from './components/auth/LoginRoute';
 
+import { ThemeProvider } from './context/ThemeContext';
+
 export const App: React.FC = () => {
   return (
-    <BrowserRouter>
-      <Routes>
-        {/* Default root route redirects to Student Login */}
-        <Route path="/" element={<Navigate to="/student" replace />} />
+    <ThemeProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Default root route redirects to Student Login */}
+          <Route path="/" element={<Navigate to="/student" replace />} />
 
-        {/* Four Completely Separate Portal Login Routes */}
-        <Route path="/student" element={<LoginRoute role="STUDENT"><StudentLogin /></LoginRoute>} />
-        <Route path="/faculty" element={<LoginRoute role="FACULTY"><FacultyLogin /></LoginRoute>} />
-        <Route path="/hod" element={<LoginRoute role="HOD"><HODLogin /></LoginRoute>} />
-        <Route path="/admin" element={<LoginRoute role="ADMIN"><AdminLogin /></LoginRoute>} />
+          {/* Four Completely Separate Portal Login Routes */}
+          <Route path="/student" element={<LoginRoute role="STUDENT"><StudentLogin /></LoginRoute>} />
+          <Route path="/faculty" element={<LoginRoute role="FACULTY"><FacultyLogin /></LoginRoute>} />
+          <Route path="/hod" element={<LoginRoute role="HOD"><HODLogin /></LoginRoute>} />
+          <Route path="/admin" element={<LoginRoute role="ADMIN"><AdminLogin /></LoginRoute>} />
 
-        {/* Dashboard Routes with Protected Role Access */}
-        <Route path="/student/dashboard" element={<ProtectedRoute allowedRoles={['STUDENT']} loginRoute="/student"><StudentDashboard /></ProtectedRoute>} />
-        <Route path="/faculty/dashboard" element={<ProtectedRoute allowedRoles={['FACULTY']} loginRoute="/faculty"><FacultyDashboard /></ProtectedRoute>} />
-        <Route path="/hod/dashboard" element={<ProtectedRoute allowedRoles={['HOD']} loginRoute="/hod"><HODDashboard /></ProtectedRoute>} />
-        <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={['ADMIN']} loginRoute="/admin"><AdminDashboard /></ProtectedRoute>} />
+          {/* Dashboard Routes with Protected Role Access */}
+          <Route path="/student/dashboard" element={<ProtectedRoute allowedRoles={['STUDENT']} loginRoute="/student"><StudentDashboard /></ProtectedRoute>} />
+          <Route path="/faculty/dashboard" element={<ProtectedRoute allowedRoles={['FACULTY']} loginRoute="/faculty"><FacultyDashboard /></ProtectedRoute>} />
+          <Route path="/hod/dashboard" element={<ProtectedRoute allowedRoles={['HOD']} loginRoute="/hod"><HODDashboard /></ProtectedRoute>} />
+          <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={['ADMIN']} loginRoute="/admin"><AdminDashboard /></ProtectedRoute>} />
 
-        {/* Fallback for Unknown Paths */}
-        <Route path="*" element={<Navigate to="/student" replace />} />
-      </Routes>
-    </BrowserRouter>
+          {/* Fallback for Unknown Paths */}
+          <Route path="*" element={<Navigate to="/student" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </ThemeProvider>
   );
 };
 

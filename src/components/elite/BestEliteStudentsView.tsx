@@ -515,21 +515,21 @@ export const BestEliteStudentsView: React.FC<BestEliteStudentsViewProps> = ({
       )}
 
       {/* CONTROLS & SEARCH BAR */}
-      <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-5 space-y-4 shadow-xl font-mono">
+      <div className="bg-[#3039A8] border border-white/14 rounded-2xl p-5 space-y-4 shadow-xl font-mono text-white">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center space-x-2 text-xs text-slate-300">
+          <div className="flex items-center space-x-2 text-xs text-[#D9DEFF]">
             <User className="w-4 h-4 text-amber-400" />
             <span>Displaying <strong>{evaluatedStudents.length}</strong> Elite Students in Scope</span>
           </div>
 
           <div className="relative w-full sm:w-72">
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
+            <Search className="w-3.5 h-3.5 text-[#AEB7F5] absolute left-3 top-2.5" />
             <input
               type="text"
               placeholder="Search Student Name or Reg No..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 pl-8 pr-3 py-1.5 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-500"
+              className="w-full bg-[#252B86] border border-white/14 pl-8 pr-3 py-1.5 rounded-xl text-xs text-white placeholder:text-[#AEB7F5] focus:outline-none focus:border-cyan-400"
             />
           </div>
         </div>
@@ -537,21 +537,21 @@ export const BestEliteStudentsView: React.FC<BestEliteStudentsViewProps> = ({
 
       {/* STUDENT CARDS GRID */}
       {isLoading ? (
-        <div className="bg-slate-900 border border-slate-800 p-12 rounded-2xl text-center text-slate-400 font-mono space-y-3">
+        <div className="bg-[#3039A8] border border-white/14 p-12 rounded-2xl text-center text-[#D9DEFF] font-mono space-y-3">
           <Crown className="w-8 h-8 text-amber-400 animate-spin mx-auto" />
           <p className="text-xs">Loading Elite Student records across source database modules...</p>
         </div>
       ) : eliteDesignatedStudents.length === 0 ? (
-        <div className="bg-slate-900 border border-slate-800 p-10 rounded-2xl text-center space-y-4">
-          <Crown className="w-12 h-12 text-slate-600 mx-auto" />
+        <div className="bg-[#3039A8] border border-white/14 p-10 rounded-2xl text-center space-y-4">
+          <Crown className="w-12 h-12 text-[#AEB7F5] mx-auto" />
           <h3 className="text-base font-bold text-white font-sans">No Elite Students Designated Yet</h3>
-          <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
+          <p className="text-xs text-[#D9DEFF] max-w-md mx-auto leading-relaxed">
             Not all students in the department portal are Elite Students. Select top performers from your roster to feature them in the Best Elite Students rankings.
           </p>
           {userRole !== 'STUDENT' && (
             <button
               onClick={() => setShowManageModal(true)}
-              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-2 mx-auto"
+              className="btn-action bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-2 mx-auto"
             >
               <PlusCircle className="w-4 h-4" />
               <span>Mark Students as Elite</span>
@@ -559,7 +559,7 @@ export const BestEliteStudentsView: React.FC<BestEliteStudentsViewProps> = ({
           )}
         </div>
       ) : evaluatedStudents.length === 0 ? (
-        <div className="bg-slate-900 border border-slate-800 p-8 rounded-2xl text-center text-slate-400 font-mono">
+        <div className="portal-card p-8 rounded-2xl text-center text-[#475569] font-mono">
           No Elite Student matches found for "{searchQuery}".
         </div>
       ) : (
@@ -571,7 +571,7 @@ export const BestEliteStudentsView: React.FC<BestEliteStudentsViewProps> = ({
             return (
               <div
                 key={student.id}
-                className="bg-slate-900 border border-slate-800 hover:border-amber-500/50 p-5 rounded-2xl transition-all space-y-4 shadow-lg flex flex-col justify-between"
+                className="portal-card p-5 rounded-2xl transition-all space-y-4 shadow-sm flex flex-col justify-between"
               >
                 <div className="space-y-3">
                   <div className="flex items-start justify-between">
@@ -580,21 +580,21 @@ export const BestEliteStudentsView: React.FC<BestEliteStudentsViewProps> = ({
                         <span className="bg-amber-950 border border-amber-700 text-amber-300 font-mono text-[10px] px-2 py-0.5 rounded-full font-bold">
                           #{rank} Rank
                         </span>
-                        <span className="bg-slate-800 text-slate-300 font-mono text-[10px] px-2 py-0.5 rounded-full">
+                        <span className="bg-[#252B86] text-white font-mono text-[10px] px-2 py-0.5 rounded-full">
                           {student.year} Sec {student.section}
                         </span>
                       </div>
                       <h3 className="text-sm font-bold text-white mt-1.5 truncate">{name}</h3>
-                      <p className="text-[11px] text-slate-400 font-mono">{regNo}</p>
+                      <p className="text-[11px] text-[#D9DEFF] font-mono">{regNo}</p>
                     </div>
 
-                    <div className="w-10 h-10 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center shrink-0 text-amber-400">
+                    <div className="w-10 h-10 rounded-xl bg-[#1B205F] border border-white/14 flex items-center justify-center shrink-0 text-amber-400">
                       <Crown className="w-5 h-5" />
                     </div>
                   </div>
 
                   {/* CATEGORY SPECIFIC DETAIL VIEW */}
-                  <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs font-mono space-y-2">
+                  <div className="bg-[#1B205F] p-3.5 rounded-xl border border-white/14 text-xs font-mono space-y-2">
                     {!hasData ? (
                       <div className="text-slate-500 italic py-2 text-center">No Data Available</div>
                     ) : (
@@ -953,10 +953,19 @@ export const BestEliteStudentsView: React.FC<BestEliteStudentsViewProps> = ({
                   <button
                     onClick={handleSaveProfileEdits}
                     disabled={isSavingProfile}
-                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-5 py-2 rounded-xl text-xs flex items-center space-x-2"
+                    className="btn-action bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-5 py-2 rounded-xl text-xs flex items-center space-x-2 transition-transform duration-200 transform-gpu hover:scale-[1.03] active:scale-[0.97] disabled:scale-100 disabled:opacity-75 disabled:cursor-not-allowed motion-reduce:transform-none cursor-pointer"
                   >
-                    {isSavingProfile ? <Crown className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                    <span>Save Profile Changes</span>
+                    {isSavingProfile ? (
+                      <>
+                        <Crown className="w-4 h-4 animate-spin" />
+                        <span>Saving Changes...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>Save Profile Changes</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

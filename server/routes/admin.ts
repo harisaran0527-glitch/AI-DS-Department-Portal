@@ -59,10 +59,10 @@ router.get('/students', async (req: AuthRequest, res: Response) => {
 // GET Faculty List with faculty_assignments mapping
 router.get('/faculty', async (req: AuthRequest, res: Response) => {
   const facultyUsers = await db.getUsers('FACULTY');
-  const enriched = [];
-  for (const f of facultyUsers) {
-    const assignment = await db.getFacultyAssignment(f.id);
-    enriched.push(sanitizeUser({
+  const assignmentsMap = await db.getAllFacultyAssignments();
+  const enriched = facultyUsers.map((f) => {
+    const assignment = assignmentsMap[f.id];
+    return sanitizeUser({
       id: f.id,
       email: f.email,
       identifier: f.identifier,
@@ -74,53 +74,73 @@ router.get('/faculty', async (req: AuthRequest, res: Response) => {
       department: assignment ? assignment.department : 'AI & DS',
       isActive: Boolean(f.is_active),
       createdAt: f.created_at
-    }));
-  }
+    });
+  });
   return res.json({ faculty: enriched });
 });
 
 // POST Create Faculty Account with separate Portal Password & faculty_assignments
 router.post('/faculty', async (req: AuthRequest, res: Response) => {
-  const { facultyId, facultyName, email, year, section, role, password, department: _department } = req.body;
+  try {
+    const { facultyId, facultyName, email, year, section, role, password, department: _department } = req.body || {};
 
-  if (!facultyId || !facultyName || !email || !year || !section || !password) {
-    return res.status(400).json({ error: 'All fields are required (facultyId, facultyName, email, year, section, password).' });
+    if (!facultyId || !facultyName || !email || !year || !section || !password) {
+      return res.status(400).json({ error: 'All fields are required (facultyId, facultyName, email, year, section, password).' });
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanFacultyId = String(facultyId).trim();
+
+    if (typeof password !== 'string' || password.length < 6) {
+      return res.status(400).json({ error: 'Portal password must be at least 6 characters long.' });
+    }
+
+    // Cross-role duplicate protection: check if Email or Faculty ID exists anywhere in the system
+    const existingEmailUser = await db.findUserByIdentifier(cleanEmail);
+    const existingIdUser = await db.findUserByIdentifier(cleanFacultyId);
+    if (existingEmailUser || existingIdUser) {
+      return res.status(409).json({ error: 'A user account with this Email address or Faculty ID already exists in the system.' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const newId = `fac-${Date.now()}`;
+
+    // Role Escalation Protection: System role is strictly 'FACULTY' regardless of request payload
+    const facultyRoleTitle = role && ['Class Coordinator', 'Subject Faculty'].includes(role) ? role : 'Class Coordinator';
+
+    await db.createUser({
+      id: newId,
+      email: cleanEmail,
+      identifier: cleanFacultyId,
+      name: String(facultyName).trim(),
+      role: 'FACULTY',
+      passwordHash,
+      year: String(year).trim(),
+      section: String(section).trim(),
+      facultyRole: facultyRoleTitle,
+      isActive: true
+    });
+
+    await db.updateUserAssignment(newId, String(year).trim(), String(section).trim(), facultyRoleTitle);
+    
+    if (req.user) {
+      await db.logAudit(req.user.id, req.user.email, req.user.role, 'CREATE_FACULTY', `FACULTY:${cleanEmail}`);
+    }
+
+    const createdUser = await db.getUserById(newId);
+    const assignment = await db.getFacultyAssignment(newId);
+
+    return res.status(201).json({
+      message: 'Faculty account created successfully.',
+      faculty: sanitizeUser({
+        ...createdUser,
+        assignment
+      })
+    });
+  } catch (err: any) {
+    console.error('❌ Error creating Faculty account:', err);
+    return res.status(500).json({ error: err.message || 'Unable to create faculty account. Please check the entered details and try again.' });
   }
-
-  const existing = (await db.findUserByIdentifier(email, 'FACULTY')) || (await db.findUserByIdentifier(facultyId, 'FACULTY'));
-  if (existing) {
-    return res.status(409).json({ error: 'Faculty account with this Email or Faculty ID already exists.' });
-  }
-
-  const passwordHash = await bcrypt.hash(password, 10);
-  const newId = `fac-${Date.now()}`;
-
-  await db.createUser({
-    id: newId,
-    email,
-    identifier: facultyId,
-    name: facultyName,
-    role: 'FACULTY',
-    passwordHash,
-    year,
-    section,
-    facultyRole: role || 'Class Coordinator',
-    isActive: true
-  });
-
-  await db.updateUserAssignment(newId, year, section, role || 'Class Coordinator');
-  await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'CREATE_FACULTY', `FACULTY:${email}`);
-
-  const createdUser = await db.getUserById(newId);
-  const assignment = await db.getFacultyAssignment(newId);
-
-  return res.status(201).json({
-    message: 'Faculty account created successfully.',
-    faculty: sanitizeUser({
-      ...createdUser,
-      assignment
-    })
-  });
 });
 
 // GET Students assigned to a specific Faculty Workspace
@@ -355,58 +375,72 @@ router.get('/hod', async (req: AuthRequest, res: Response) => {
 
 // POST Create HOD Account with Single Active HOD Guard for AI & DS
 router.post('/hod', async (req: AuthRequest, res: Response) => {
-  const { hodId, hodName, email, password, isActive } = req.body;
+  try {
+    const { hodId, hodName, email, password, isActive } = req.body || {};
 
-  if (!hodId || !hodName || !email || !password) {
-    return res.status(400).json({ error: 'HOD ID, Name, Email, and Portal Password are required.' });
-  }
-
-  const cleanEmail = email.trim().toLowerCase();
-  const cleanId = hodId.trim();
-
-  // Rule: Only ONE active HOD account for AI & DS
-  if (isActive !== false) {
-    const hodUsers = await db.getUsers('HOD');
-    const existingActive = hodUsers.find((u) => Boolean(u.is_active));
-    if (existingActive) {
-      return res.status(400).json({ error: 'An active HOD account already exists for AI & DS.' });
+    if (!hodId || !hodName || !email || !password) {
+      return res.status(400).json({ error: 'HOD ID, Name, Email, and Portal Password are required.' });
     }
-  }
 
-  const existing = (await db.findUserByIdentifier(cleanEmail, 'HOD')) || (await db.findUserByIdentifier(cleanId, 'HOD'));
-  if (existing) {
-    return res.status(409).json({ error: 'An HOD account with this Email or HOD ID already exists.' });
-  }
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanId = String(hodId).trim();
 
-  const passwordHash = await bcrypt.hash(password, 10);
-  const newId = `hod-${Date.now()}`;
+    if (typeof password !== 'string' || password.length < 6) {
+      return res.status(400).json({ error: 'Portal password must be at least 6 characters long.' });
+    }
 
-  await db.createUser({
-    id: newId,
-    email: cleanEmail,
-    identifier: cleanId,
-    name: hodName.trim(),
-    role: 'HOD',
-    passwordHash,
-    isActive: isActive !== false
-  });
+    // Rule: Only ONE active HOD account for AI & DS
+    if (isActive !== false) {
+      const hodUsers = await db.getUsers('HOD');
+      const existingActive = hodUsers.find((u) => Boolean(u.is_active));
+      if (existingActive) {
+        return res.status(400).json({ error: 'An active HOD account already exists for AI & DS.' });
+      }
+    }
 
-  await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'CREATE_HOD', `HOD:${cleanEmail}`);
+    // Cross-role duplicate protection: check if Email or HOD ID exists anywhere in the system
+    const existingEmailUser = await db.findUserByIdentifier(cleanEmail);
+    const existingIdUser = await db.findUserByIdentifier(cleanId);
+    if (existingEmailUser || existingIdUser) {
+      return res.status(409).json({ error: 'An HOD account with this Email address or HOD ID already exists in the system.' });
+    }
 
-  const createdHOD = await db.getUserById(newId);
-  return res.status(201).json({
-    message: 'HOD account created successfully.',
-    hod: sanitizeUser({
-      id: createdHOD!.id,
-      email: createdHOD!.email,
-      identifier: createdHOD!.identifier,
-      name: createdHOD!.name,
+    const passwordHash = await bcrypt.hash(password, 10);
+    const newId = `hod-${Date.now()}`;
+
+    // Role Escalation Protection: System role is strictly 'HOD' regardless of request payload
+    await db.createUser({
+      id: newId,
+      email: cleanEmail,
+      identifier: cleanId,
+      name: String(hodName).trim(),
       role: 'HOD',
-      department: 'AI & DS',
-      isActive: Boolean(createdHOD!.is_active),
-      createdAt: createdHOD!.created_at
-    })
-  });
+      passwordHash,
+      isActive: isActive !== false
+    });
+
+    if (req.user) {
+      await db.logAudit(req.user.id, req.user.email, req.user.role, 'CREATE_HOD', `HOD:${cleanEmail}`);
+    }
+
+    const createdHOD = await db.getUserById(newId);
+    return res.status(201).json({
+      message: 'HOD account created successfully.',
+      hod: sanitizeUser({
+        id: createdHOD!.id,
+        email: createdHOD!.email,
+        identifier: createdHOD!.identifier,
+        name: createdHOD!.name,
+        role: 'HOD',
+        department: 'AI & DS',
+        isActive: Boolean(createdHOD!.is_active),
+        createdAt: createdHOD!.created_at
+      })
+    });
+  } catch (err: any) {
+    console.error('❌ Error creating HOD account:', err);
+    return res.status(500).json({ error: err.message || 'Unable to create HOD account. Please check the entered details and try again.' });
+  }
 });
 
 // PUT Update HOD Account

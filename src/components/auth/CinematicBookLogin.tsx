@@ -98,11 +98,11 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#020510] text-slate-100 flex items-center justify-center p-4 relative overflow-hidden font-sans select-none">
+    <div className="min-h-screen bg-[#3641C9] text-white flex items-center justify-center p-4 relative overflow-hidden font-sans select-none">
       
-      {/* 4K Dark Navy Ambient Background with Soft Cyan Spotlight Glow */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(6,182,212,0.2),rgba(2,5,16,0.98)_75%)] pointer-events-none z-0" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_25%,rgba(14,165,233,0.15),transparent_60%)] pointer-events-none z-0" />
+      {/* 4K Portal Ambient Background with Soft Radial Glow */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(63,75,218,0.4),rgba(27,32,95,0.95)_75%)] pointer-events-none z-0" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_25%,rgba(34,211,238,0.15),transparent_60%)] pointer-events-none z-0" />
 
       {/* CENTERED 3D BOOK CONTAINER WITH PERSPECTIVE */}
       <div className="relative w-full max-w-[700px] h-[560px] flex items-center justify-center [perspective:1400px]">
@@ -117,7 +117,7 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
             opacity: 1 
           }}
           transition={{ duration: 0.8, ease: 'easeOut' }}
-          className="relative w-[620px] h-[480px] bg-[#0d1527] border-2 border-cyan-800/60 rounded-2xl shadow-[0_0_80px_rgba(0,0,0,0.9),0_0_30px_rgba(6,182,212,0.25)] flex items-center justify-between p-3 sm:p-4 [transform-style:preserve-3d]"
+          className="relative w-[620px] h-[480px] bg-[#1B205F] border-2 border-white/14 rounded-2xl shadow-2xl flex items-center justify-between p-3 sm:p-4 [transform-style:preserve-3d]"
         >
           {/* Central Book Spine */}
           <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-8 bg-slate-950 border-x border-slate-800 shadow-2xl z-30 flex items-center justify-center">
@@ -268,7 +268,7 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
                     <button
                       type="submit"
                       disabled={authStatus === 'loading'}
-                      className="w-full mt-1 py-2 bg-gradient-to-r from-cyan-500 via-sky-400 to-cyan-500 hover:from-cyan-400 hover:to-sky-300 text-slate-950 font-extrabold rounded-lg text-xs tracking-wider uppercase shadow-[0_0_15px_rgba(6,182,212,0.5)] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center space-x-2"
+                      className="btn-action w-full mt-1 py-2 bg-gradient-to-r from-cyan-500 via-sky-400 to-cyan-500 hover:from-cyan-400 hover:to-sky-300 text-slate-950 font-extrabold rounded-lg text-xs tracking-wider uppercase shadow-[0_0_15px_rgba(6,182,212,0.5)] transition-transform duration-200 transform-gpu hover:scale-[1.03] active:scale-[0.97] disabled:scale-100 disabled:opacity-75 disabled:cursor-not-allowed motion-reduce:transform-none cursor-pointer flex items-center justify-center space-x-2"
                     >
                       {authStatus === 'loading' ? (
                         <span className="flex items-center space-x-2">

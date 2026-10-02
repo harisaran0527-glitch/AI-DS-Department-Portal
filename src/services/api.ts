@@ -113,6 +113,10 @@ export const API = {
     });
   },
 
+  getAllStudents: async () => {
+    return request<{ count: number; students: any[] }>('/admin/students');
+  },
+
   importStudents: async (students: any[], defaultPassword?: string) => {
     return request<{ message: string; importedCount: number; skippedCount: number; errors: string[] }>('/admin/students/import', {
       method: 'POST',

@@ -44,9 +44,9 @@ export const LoginRoute: React.FC<LoginRouteProps> = ({ role, children }) => {
 
   if (isChecking) {
     return (
-      <div className="min-h-screen bg-[#020617] text-cyan-400 flex flex-col items-center justify-center font-sans space-y-3">
-        <div className="w-10 h-10 border-4 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin shadow-[0_0_20px_rgba(6,182,212,0.5)]" />
-        <span className="text-xs font-mono text-cyan-300/80 tracking-widest uppercase">Initializing {role} Terminal...</span>
+      <div className="min-h-screen bg-[#080A0F] text-[#F1F5F9] flex flex-col items-center justify-center font-sans space-y-3">
+        <div className="w-10 h-10 border-4 border-[#252B36] border-t-[#A78BFA] rounded-full animate-spin" />
+        <span className="text-xs font-mono text-[#94A3B8] tracking-widest uppercase">Initializing {role} Terminal...</span>
       </div>
     );
   }

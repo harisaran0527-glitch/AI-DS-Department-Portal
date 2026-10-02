@@ -1,13 +1,7 @@
 import React from 'react';
-import { VideoPortalLogin } from '../../components/auth/VideoPortalLogin';
+import { SimpleAdminLogin } from '../../components/auth/SimpleAdminLogin';
 
 export const AdminLogin: React.FC = () => {
-  return (
-    <VideoPortalLogin
-      portalRole="ADMIN"
-      roleSubtitle="ADMIN PORTAL"
-      placeholderIdentifier="Enter admin email or ID"
-      destinationRoute="/admin/dashboard"
-    />
-  );
+  return <SimpleAdminLogin />;
 };
+

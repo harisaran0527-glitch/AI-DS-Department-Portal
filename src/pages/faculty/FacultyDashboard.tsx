@@ -2,10 +2,9 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Papa from 'papaparse';
 import { API } from '../../services/api';
-import type { UserSession, Student, TeamHead } from '../../types';
+import type { UserSession, Student, TeamHead, Subject } from '../../types';
 import { DashboardLayout, type MenuItem } from '../../components/layout/DashboardLayout';
 import { ConfirmDeleteModal } from '../../components/common/ConfirmDeleteModal';
-import { ProofAttachmentControl } from '../../components/common/ProofAttachmentControl';
 import { ForgotPasswordModal } from '../../components/common/ForgotPasswordModal';
 import { SubjectManagement } from '../../components/academic/SubjectManagement';
 import { BestEliteStudentsView } from '../../components/elite/BestEliteStudentsView';
@@ -36,7 +35,6 @@ import {
   X,
   ArrowLeft,
   Save,
-  FileDown,
   RefreshCw,
   ImageIcon,
   Upload,
@@ -45,20 +43,17 @@ import {
   Crown,
   Sparkles,
   CheckCircle2,
-  ChevronDown,
-  Check,
   Star,
-  Filter,
-  Info,
   User,
-  GraduationCap,
   History,
   Clock,
   CheckCircle,
   XCircle,
   RotateCcw,
   Pencil,
-  Download
+  Download,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 
 function formatDate(d?: string): string {
@@ -105,15 +100,20 @@ export const FacultyDashboard: React.FC = () => {
   const [showAddPassword, setShowAddPassword] = useState(false);
   const [addError, setAddError] = useState('');
   const [addSuccess, setAddSuccess] = useState('');
+  const [isAddingStudent, setIsAddingStudent] = useState(false);
 
   // Password Reset Modal State for Class Coordinator
   const [resetStudentTarget, setResetStudentTarget] = useState<Student | null>(null);
   const [resetPasswordVal, setResetPasswordVal] = useState('');
   const [resetConfirmVal, setResetConfirmVal] = useState('');
+  const [isResettingStudentPass, setIsResettingStudentPass] = useState(false);
+  const [resetStudentError, setResetStudentError] = useState('');
 
   // Delete Student Modal State for Class Coordinator
   const [deleteStudentTarget, setDeleteStudentTarget] = useState<Student | null>(null);
   const [isDeletingStudent, setIsDeletingStudent] = useState(false);
+  const [deleteStudentError, setDeleteStudentError] = useState('');
+  const [updatingStudentId, setUpdatingStudentId] = useState<string | null>(null);
 
   // CSV File Bulk Import State for Faculty
   const facCsvFileInputRef = useRef<HTMLInputElement>(null);
@@ -121,6 +121,8 @@ export const FacultyDashboard: React.FC = () => {
   const [facCsvRows, setFacCsvRows] = useState<any[]>([]);
   const [facCsvStats, setFacCsvStats] = useState({ total: 0, valid: 0, duplicates: 0, invalid: 0 });
   const [facImportResult, setFacImportResult] = useState<any | null>(null);
+  const [isImportingFacCsv, setIsImportingFacCsv] = useState(false);
+  const [facCsvImportError, setFacCsvImportError] = useState('');
 
   // Global Selected Student state for Module Editors
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -139,15 +141,18 @@ export const FacultyDashboard: React.FC = () => {
   const [addTeamHeadStudentId, setAddTeamHeadStudentId] = useState('');
   const [addTeamHeadMemberLimit, setAddTeamHeadMemberLimit] = useState<number>(5);
   const [addTeamHeadError, setAddTeamHeadError] = useState('');
+  const [isSavingTeamHead, setIsSavingTeamHead] = useState(false);
 
   const [showAddMembersModal, setShowAddMembersModal] = useState(false);
   const [addMembersTargetHead, setAddMembersTargetHead] = useState<TeamHead | null>(null);
   const [addMembersSlotSelections, setAddMembersSlotSelections] = useState<string[]>([]);
   const [addMembersError, setAddMembersError] = useState('');
+  const [isSavingMembers, setIsSavingMembers] = useState(false);
 
   const [editingLimitHead, setEditingLimitHead] = useState<TeamHead | null>(null);
   const [newLimitVal, setNewLimitVal] = useState<number>(5);
   const [editLimitError, setEditLimitError] = useState('');
+  const [isUpdatingLimit, setIsUpdatingLimit] = useState(false);
 
   const [selectedTeamContext, setSelectedTeamContext] = useState<{
     isTeamContext: boolean;
@@ -222,6 +227,8 @@ export const FacultyDashboard: React.FC = () => {
   const [leetcodeSelectedEmail, setLeetcodeSelectedEmail] = useState<string>('');
   const [editLeetCodeUsername, setEditLeetCodeUsername] = useState('');
   const [isEditingLeetcodeUser, setIsEditingLeetcodeUser] = useState(false);
+  const [besLinkedinUrl, setBesLinkedinUrl] = useState('');
+  const [besGithubUrl, setBesGithubUrl] = useState('');
 
   // --- PARTICIPATION FORM & UPLOAD MODAL STATE ---
   const [showPartModal, setShowPartModal] = useState(false);
@@ -316,6 +323,7 @@ export const FacultyDashboard: React.FC = () => {
       setAddTeamHeadError('Please select a student for Team Head.');
       return;
     }
+    setIsSavingTeamHead(true);
     try {
       await API.createTeamHead(addTeamHeadStudentId, addTeamHeadMemberLimit);
       await fetchTeamHeads();
@@ -324,6 +332,8 @@ export const FacultyDashboard: React.FC = () => {
       setAddTeamHeadMemberLimit(5);
     } catch (err: any) {
       setAddTeamHeadError(err.message || 'Failed to create Team Head.');
+    } finally {
+      setIsSavingTeamHead(false);
     }
   };
 
@@ -340,12 +350,15 @@ export const FacultyDashboard: React.FC = () => {
     if (!addMembersTargetHead) return;
     setAddMembersError('');
     const filteredStudentIds = addMembersSlotSelections.filter(Boolean);
+    setIsSavingMembers(true);
     try {
       await API.updateTeamHeadMembers(addMembersTargetHead.id, filteredStudentIds);
       await fetchTeamHeads();
       setShowAddMembersModal(false);
     } catch (err: any) {
       setAddMembersError(err.message || 'Failed to save members.');
+    } finally {
+      setIsSavingMembers(false);
     }
   };
 
@@ -362,12 +375,15 @@ export const FacultyDashboard: React.FC = () => {
     e.preventDefault();
     if (!editingLimitHead) return;
     setEditLimitError('');
+    setIsUpdatingLimit(true);
     try {
       await API.updateTeamHeadLimit(editingLimitHead.id, newLimitVal);
       await fetchTeamHeads();
       setEditingLimitHead(null);
     } catch (err: any) {
       setEditLimitError(err.message || 'Failed to update member limit.');
+    } finally {
+      setIsUpdatingLimit(false);
     }
   };
 
@@ -822,22 +838,27 @@ export const FacultyDashboard: React.FC = () => {
 
   const handleAddStudentByFaculty = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isAddingStudent) return;
     setAddError('');
     setAddSuccess('');
+    setIsAddingStudent(true);
 
     const targetEmail = addCollegeMail.trim() || `${addRegNo.trim().toLowerCase()}@aids.edu`;
     const targetPassword = addPassword.trim();
 
     if (!addRegNo.trim() || !addName.trim()) {
       setAddError('Please enter Student Register Number and Name.');
+      setIsAddingStudent(false);
       return;
     }
     if (!targetEmail) {
       setAddError('Please enter a valid College Email ID.');
+      setIsAddingStudent(false);
       return;
     }
     if (!targetPassword) {
       setAddError('Please enter a valid College Portal Password.');
+      setIsAddingStudent(false);
       return;
     }
 
@@ -862,33 +883,42 @@ export const FacultyDashboard: React.FC = () => {
       if (res.student) handleSelectStudent(res.student);
     } catch (err: any) {
       setAddError(err.message || 'Failed to create student account.');
+    } finally {
+      setIsAddingStudent(false);
     }
   };
 
   const handleResetStudentPassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    setResetStudentError('');
     if (!resetStudentTarget) return;
     if (resetPasswordVal !== resetConfirmVal) {
-      alert('Passwords do not match.');
+      setResetStudentError('Passwords do not match.');
       return;
     }
 
+    setIsResettingStudentPass(true);
     try {
       await API.resetStudentPasswordByFaculty(resetStudentTarget.id, resetPasswordVal, resetConfirmVal);
-      alert(`Student portal password reset successfully for ${resetStudentTarget.name}!`);
       setResetStudentTarget(null);
       setResetPasswordVal(''); setResetConfirmVal('');
+      await fetchRoster();
     } catch (err: any) {
-      alert(err.message || 'Failed to reset student password.');
+      setResetStudentError(err.message || 'Failed to reset student password.');
+    } finally {
+      setIsResettingStudentPass(false);
     }
   };
 
   const handleToggleStudentStatus = async (stu: Student) => {
+    setUpdatingStudentId(stu.id);
     try {
       await API.setStudentStatusByFaculty(stu.id, !stu.isActive);
       await fetchRoster();
     } catch (err: any) {
       alert(err.message || 'Failed to update student status.');
+    } finally {
+      setUpdatingStudentId(null);
     }
   };
 
@@ -896,17 +926,17 @@ export const FacultyDashboard: React.FC = () => {
     if (!deleteStudentTarget) return;
 
     setIsDeletingStudent(true);
+    setDeleteStudentError('');
     try {
       await API.deleteStudentForFaculty(deleteStudentTarget.id);
-      alert(`Student ${deleteStudentTarget.name} (${deleteStudentTarget.registerNo || deleteStudentTarget.email}) deleted successfully from your section roster.`);
       if (selectedStudent?.id === deleteStudentTarget.id) {
         setSelectedStudent(null);
-        setStudent360(null);
+        setStudent360Edit(null);
       }
       setDeleteStudentTarget(null);
       await fetchRoster();
     } catch (err: any) {
-      alert(err.message || 'Failed to delete student account.');
+      setDeleteStudentError(err.message || 'Failed to delete student account.');
     } finally {
       setIsDeletingStudent(false);
     }
@@ -953,6 +983,8 @@ export const FacultyDashboard: React.FC = () => {
     const validStudents = facCsvRows.filter((r) => r.status === 'valid');
     if (validStudents.length === 0) return;
 
+    setIsImportingFacCsv(true);
+    setFacCsvImportError('');
     try {
       const res = await API.importStudentsForFaculty(validStudents);
       setFacImportResult(res);
@@ -961,7 +993,9 @@ export const FacultyDashboard: React.FC = () => {
       setShowImportModal(false);
       await fetchRoster();
     } catch (err: any) {
-      alert(err.message || 'Failed to import CSV students.');
+      setFacCsvImportError(err.message || 'Failed to import CSV students.');
+    } finally {
+      setIsImportingFacCsv(false);
     }
   };
 
@@ -1592,8 +1626,6 @@ export const FacultyDashboard: React.FC = () => {
       activeTab={activeTab}
       onSelectTab={setActiveTab}
       onLogout={handleLogout}
-      activeStudentName={selectedStudent?.name}
-      activeStudentRegNo={selectedStudent?.registerNo || (selectedStudent as any)?.register_no}
       headerActions={
         <button
           onClick={() => setShowForgotModal(true)}
@@ -2512,7 +2544,7 @@ export const FacultyDashboard: React.FC = () => {
                         const payload = {
                           c_basics: skillLevels.c[0], c_control: skillLevels.c[1], c_functions: skillLevels.c[2], c_arrays: skillLevels.c[3], c_pointers: skillLevels.c[4], c_structures: skillLevels.c[5],
                           java_basics: skillLevels.java[0], java_oop: skillLevels.java[1], java_collections: skillLevels.java[2], java_threads: skillLevels.java[3], java_frameworks: skillLevels.java[4],
-                          py_basics: skillLevels.py_basics || skillLevels.python[0], py_ds: skillLevels.python[1], py_oops: skillLevels.python[2], py_libraries: skillLevels.python[3], py_advanced: skillLevels.python[4],
+                          py_basics: skillLevels.python[0], py_ds: skillLevels.python[1], py_oops: skillLevels.python[2], py_libraries: skillLevels.python[3], py_advanced: skillLevels.python[4],
                           ds_arrays: skillLevels.ds[0], ds_linkedlist: skillLevels.ds[1], ds_stack: skillLevels.ds[2], ds_queue: skillLevels.ds[3], ds_trees: skillLevels.ds[4], ds_graphs: skillLevels.ds[5], ds_hashing: skillLevels.ds[6], ds_heaps: skillLevels.ds[7], ds_dp: skillLevels.ds[8], ds_greedy: skillLevels.ds[9]
                         };
                         await API.updateStudent360(selectedStudent.id, { skilledge: payload });
@@ -4393,7 +4425,7 @@ export const FacultyDashboard: React.FC = () => {
                   <div className="space-y-3">
                     <div>
                       <label className="text-slate-300 font-bold block mb-1 flex items-center space-x-1.5">
-                        <Linkedin className="w-4 h-4 text-sky-400" />
+                        <ExternalLink className="w-4 h-4 text-sky-400" />
                         <span>LinkedIn Profile URL</span>
                       </label>
                       <input
@@ -4413,8 +4445,8 @@ export const FacultyDashboard: React.FC = () => {
                       <input
                         type="url"
                         placeholder="https://github.com/username"
-                        value={besUrl}
-                        onChange={(e) => setBesUrl(e.target.value)}
+                        value={besGithubUrl}
+                        onChange={(e) => setBesGithubUrl(e.target.value)}
                         className="w-full bg-slate-900 border border-slate-800 p-2.5 rounded-xl text-white font-mono"
                       />
                     </div>
@@ -4428,7 +4460,7 @@ export const FacultyDashboard: React.FC = () => {
                         try {
                           await API.updateStudent360(selectedStudent.id, {
                             linkedinUrl: besLinkedinUrl,
-                            githubUrl: besUrl
+                            githubUrl: besGithubUrl
                           });
                           alert(`LinkedIn & GitHub links updated for ${selectedStudent.name}!`);
                           await reloadStudent360();
@@ -4793,7 +4825,20 @@ export const FacultyDashboard: React.FC = () => {
 
               <div className="flex justify-end space-x-2 pt-2 font-sans">
                 <button type="button" onClick={() => setShowAddStudentModal(false)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl cursor-pointer">Cancel</button>
-                <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold px-4 py-2 rounded-xl cursor-pointer">Save Student Account</button>
+                <button
+                  type="submit"
+                  disabled={isAddingStudent}
+                  className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-slate-950 font-bold px-4 py-2 rounded-xl cursor-pointer flex items-center space-x-2"
+                >
+                  {isAddingStudent ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                      <span>Saving Student Account...</span>
+                    </>
+                  ) : (
+                    <span>Save Student Account</span>
+                  )}
+                </button>
               </div>
             </form>
           </div>
@@ -4811,6 +4856,13 @@ export const FacultyDashboard: React.FC = () => {
               </h3>
               <button onClick={() => setShowImportModal(false)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
             </div>
+
+            {facCsvImportError && (
+              <div className="bg-red-950/80 border border-red-800/80 text-red-300 p-2.5 rounded-xl flex items-center space-x-2 font-mono text-[11px] animate-in fade-in">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{facCsvImportError}</span>
+              </div>
+            )}
 
             <div className="space-y-3 font-mono">
               <input type="file" accept=".csv" ref={facCsvFileInputRef} onChange={handleFacSelectCsvFile} className="hidden" />
@@ -4830,8 +4882,22 @@ export const FacultyDashboard: React.FC = () => {
                   </div>
 
                   <div className="flex justify-end space-x-2 pt-2 font-sans">
-                    <button type="button" onClick={() => setShowImportModal(false)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl cursor-pointer">Cancel</button>
-                    <button onClick={handleConfirmFacCsvImport} disabled={facCsvStats.valid === 0} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-slate-950 font-bold px-4 py-2 rounded-xl cursor-pointer">Confirm Import ({facCsvStats.valid} Valid)</button>
+                    <button type="button" onClick={() => setShowImportModal(false)} disabled={isImportingFacCsv} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl cursor-pointer disabled:opacity-50 font-bold">Cancel</button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmFacCsvImport}
+                      disabled={facCsvStats.valid === 0 || isImportingFacCsv}
+                      className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-slate-950 font-bold px-4 py-2 rounded-xl cursor-pointer flex items-center space-x-2"
+                    >
+                      {isImportingFacCsv ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Importing CSV...</span>
+                        </>
+                      ) : (
+                        <span>Confirm Import ({facCsvStats.valid} Valid)</span>
+                      )}
+                    </button>
                   </div>
                 </div>
               )}
@@ -4852,6 +4918,13 @@ export const FacultyDashboard: React.FC = () => {
               <button onClick={() => setResetStudentTarget(null)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
             </div>
 
+            {resetStudentError && (
+              <div className="bg-red-950/80 border border-red-800/80 text-red-300 p-2.5 rounded-xl flex items-center space-x-2 font-mono text-[11px] animate-in fade-in">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{resetStudentError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleResetStudentPassword} className="space-y-3">
               <div>
                 <label className="text-slate-300 font-bold block mb-1">New Portal Password</label>
@@ -4862,8 +4935,28 @@ export const FacultyDashboard: React.FC = () => {
                 <input type="password" required value={resetConfirmVal} onChange={(e) => setResetConfirmVal(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white font-mono" />
               </div>
               <div className="flex justify-end space-x-2 pt-2 font-sans">
-                <button type="button" onClick={() => setResetStudentTarget(null)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl cursor-pointer">Cancel</button>
-                <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2 rounded-xl cursor-pointer">Reset Password</button>
+                <button
+                  type="button"
+                  onClick={() => setResetStudentTarget(null)}
+                  disabled={isResettingStudentPass}
+                  className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl cursor-pointer disabled:opacity-50 font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResettingStudentPass}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-5 py-2 rounded-xl cursor-pointer disabled:opacity-50 flex items-center space-x-2"
+                >
+                  {isResettingStudentPass ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Resetting Password...</span>
+                    </>
+                  ) : (
+                    <span>Reset Password</span>
+                  )}
+                </button>
               </div>
             </form>
           </div>
@@ -5039,15 +5132,24 @@ export const FacultyDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowAddTeamHeadModal(false)}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl font-bold cursor-pointer"
+                  disabled={isSavingTeamHead}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl font-bold cursor-pointer disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold px-5 py-2 rounded-xl cursor-pointer shadow-lg"
+                  disabled={isSavingTeamHead}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold px-5 py-2 rounded-xl cursor-pointer shadow-lg disabled:opacity-50 flex items-center space-x-2"
                 >
-                  Save Team Head
+                  {isSavingTeamHead ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving Team Head...</span>
+                    </>
+                  ) : (
+                    <span>Save Team Head</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -5119,15 +5221,24 @@ export const FacultyDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowAddMembersModal(false)}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl font-bold cursor-pointer"
+                  disabled={isSavingMembers}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl font-bold cursor-pointer disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-5 py-2 rounded-xl cursor-pointer shadow-lg"
+                  disabled={isSavingMembers}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-5 py-2 rounded-xl cursor-pointer shadow-lg disabled:opacity-50 flex items-center space-x-2"
                 >
-                  Save Members
+                  {isSavingMembers ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving Members...</span>
+                    </>
+                  ) : (
+                    <span>Save Members</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -5174,15 +5285,24 @@ export const FacultyDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setEditingLimitHead(null)}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl font-bold cursor-pointer"
+                  disabled={isUpdatingLimit}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl font-bold cursor-pointer disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2 rounded-xl cursor-pointer"
+                  disabled={isUpdatingLimit}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2 rounded-xl cursor-pointer disabled:opacity-50 flex items-center space-x-2"
                 >
-                  Update Limit
+                  {isUpdatingLimit ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Updating Limit...</span>
+                    </>
+                  ) : (
+                    <span>Update Limit</span>
+                  )}
                 </button>
               </div>
             </form>

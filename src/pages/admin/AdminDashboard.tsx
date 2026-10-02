@@ -27,7 +27,11 @@ import {
   FileText,
   UserCheck,
   Crown,
-  Code
+  Code,
+  Download,
+  RefreshCw,
+  Filter,
+  Loader2
 } from 'lucide-react';
 
 import { GeminiTopRecognitionView } from '../../components/ranking/GeminiTopRecognitionView';
@@ -43,6 +47,15 @@ export const AdminDashboard: React.FC = () => {
   // Faculty State
   const [facultyList, setFacultyList] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Student Roster State
+  const [studentsList, setStudentsList] = useState<any[]>([]);
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [studentYearFilter, setStudentYearFilter] = useState('ALL');
+  const [studentSectionFilter, setStudentSectionFilter] = useState('ALL');
+  const [studentDeptFilter, setStudentDeptFilter] = useState('ALL');
+  const [studentCoordinatorFilter, setStudentCoordinatorFilter] = useState('ALL');
+  const [isStudentsLoading, setIsStudentsLoading] = useState(false);
 
   // HOD State
   const [hodList, setHodList] = useState<any[]>([]);
@@ -67,6 +80,15 @@ export const AdminDashboard: React.FC = () => {
   // Add / Edit Faculty Form Modal State
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingFaculty, setEditingFaculty] = useState<any | null>(null);
+  const [isSavingFaculty, setIsSavingFaculty] = useState(false);
+  const [isSavingHOD, setIsSavingHOD] = useState(false);
+  const [isResettingPass, setIsResettingPass] = useState(false);
+  const [isChangingAdminPass, setIsChangingAdminPass] = useState(false);
+  const [updatingHodId, setUpdatingHodId] = useState<string | null>(null);
+  const [updatingFacultyId, setUpdatingFacultyId] = useState<string | null>(null);
+  const [isImportingCsv, setIsImportingCsv] = useState(false);
+  const [isExportingCsv, setIsExportingCsv] = useState(false);
+  const [importError, setImportError] = useState('');
 
   const [formFacultyId, setFormFacultyId] = useState('');
   const [formFacultyName, setFormFacultyName] = useState('');
@@ -103,7 +125,7 @@ export const AdminDashboard: React.FC = () => {
   const [adminPasswordSuccess, setAdminPasswordSuccess] = useState('');
 
   // Delete Target Modal State
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; type: string; isHOD?: boolean } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; type: string; isHOD?: boolean; isStudent?: boolean } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Student CSV Import State
@@ -228,6 +250,7 @@ export const AdminDashboard: React.FC = () => {
       setSelectedCsvFile(null);
       setCsvPreviewRows([]);
       if (csvFileInputRef.current) csvFileInputRef.current.value = '';
+      fetchAdminData();
     } catch (err: any) {
       alert(err.message || 'Failed to import CSV student records.');
     }
@@ -235,6 +258,7 @@ export const AdminDashboard: React.FC = () => {
 
   const fetchAdminData = React.useCallback(async () => {
     try {
+      setIsStudentsLoading(true);
       const meRes = await API.getMe();
       if (!meRes.user || meRes.user.role !== 'ADMIN') {
         navigate('/admin');
@@ -247,8 +271,13 @@ export const AdminDashboard: React.FC = () => {
 
       const hodRes = await API.getHODList();
       setHodList(hodRes.hodList || []);
+
+      const stuRes = await API.getAllStudents();
+      setStudentsList(stuRes.students || []);
     } catch (err) {
       console.error(err);
+    } finally {
+      setIsStudentsLoading(false);
     }
   }, [navigate]);
 
@@ -298,24 +327,30 @@ export const AdminDashboard: React.FC = () => {
 
   const handleSaveHOD = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSavingHOD) return;
     setHodFormError('');
+    setIsSavingHOD(true);
 
     if (!hodIdInput.trim() || !hodNameInput.trim() || !hodEmailInput.trim()) {
       setHodFormError('HOD ID, Name, and Email are required.');
+      setIsSavingHOD(false);
       return;
     }
 
     if (!editingHOD) {
       if (!hodPasswordInput) {
         setHodFormError('Portal Password is required for new HOD account.');
+        setIsSavingHOD(false);
         return;
       }
       if (hodPasswordInput !== hodConfirmPasswordInput) {
         setHodFormError('Portal passwords do not match.');
+        setIsSavingHOD(false);
         return;
       }
       if (hodPasswordInput.length < 6) {
         setHodFormError('Portal password must be at least 6 characters long.');
+        setIsSavingHOD(false);
         return;
       }
     }
@@ -341,15 +376,20 @@ export const AdminDashboard: React.FC = () => {
       fetchAdminData();
     } catch (err: any) {
       setHodFormError(err.message || 'Failed to save HOD account.');
+    } finally {
+      setIsSavingHOD(false);
     }
   };
 
   const handleToggleHODStatus = async (hod: any) => {
+    setUpdatingHodId(hod.id);
     try {
       await API.updateHODStatus(hod.id, !hod.isActive);
       fetchAdminData();
     } catch (err: any) {
       alert(err.message || 'Failed to update HOD account status.');
+    } finally {
+      setUpdatingHodId(null);
     }
   };
 
@@ -363,14 +403,17 @@ export const AdminDashboard: React.FC = () => {
       return;
     }
 
+    setIsResettingPass(true);
     try {
       await API.resetHODPassword(resetTargetHOD.id, newHODPasswordInput);
       setResetTargetHOD(null);
       setNewHODPasswordInput('');
       setShowResetHODPassword(false);
-      alert(`Portal password reset successfully for HOD ${resetTargetHOD.name}.`);
+      fetchAdminData();
     } catch (err: any) {
       setResetHODError(err.message || 'Failed to reset HOD portal password.');
+    } finally {
+      setIsResettingPass(false);
     }
   };
 
@@ -380,6 +423,8 @@ export const AdminDashboard: React.FC = () => {
     try {
       if (deleteTarget.isHOD) {
         await API.deleteHODAccount(deleteTarget.id);
+      } else if (deleteTarget.isStudent) {
+        await API.deleteStudentAccount(deleteTarget.id);
       } else {
         await API.deleteFacultyAccount(deleteTarget.id);
       }
@@ -431,24 +476,30 @@ export const AdminDashboard: React.FC = () => {
 
   const handleSaveFaculty = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSavingFaculty) return;
     setFormError('');
+    setIsSavingFaculty(true);
 
     if (!formFacultyId.trim() || !formFacultyName.trim() || !formEmail.trim()) {
       setFormError('Faculty ID, Name, and Email are required.');
+      setIsSavingFaculty(false);
       return;
     }
 
     if (!editingFaculty) {
       if (!formPassword) {
         setFormError('Portal Password is required for new faculty accounts.');
+        setIsSavingFaculty(false);
         return;
       }
       if (formPassword !== formConfirmPassword) {
         setFormError('Portal passwords do not match.');
+        setIsSavingFaculty(false);
         return;
       }
       if (formPassword.length < 6) {
         setFormError('Portal password must be at least 6 characters.');
+        setIsSavingFaculty(false);
         return;
       }
     }
@@ -478,15 +529,20 @@ export const AdminDashboard: React.FC = () => {
       fetchAdminData();
     } catch (err: any) {
       setFormError(err.message || 'Failed to save faculty account.');
+    } finally {
+      setIsSavingFaculty(false);
     }
   };
 
   const handleToggleStatus = async (fac: any) => {
+    setUpdatingFacultyId(fac.id);
     try {
       await API.updateFacultyStatus(fac.id, !fac.isActive);
       fetchAdminData();
     } catch (err: any) {
       alert(err.message || 'Failed to update account status.');
+    } finally {
+      setUpdatingFacultyId(null);
     }
   };
 
@@ -500,14 +556,17 @@ export const AdminDashboard: React.FC = () => {
       return;
     }
 
+    setIsResettingPass(true);
     try {
       await API.resetFacultyPassword(resetTargetFaculty.id, newPasswordInput);
       setResetTargetFaculty(null);
       setNewPasswordInput('');
       setShowResetPassword(false);
-      alert(`Portal password reset successfully for ${resetTargetFaculty.name}.`);
+      fetchAdminData();
     } catch (err: any) {
       setResetError(err.message || 'Failed to reset portal password.');
+    } finally {
+      setIsResettingPass(false);
     }
   };
 
@@ -526,6 +585,7 @@ export const AdminDashboard: React.FC = () => {
       return;
     }
 
+    setIsChangingAdminPass(true);
     try {
       const res = await API.changeAdminPassword(adminCurrentPassword, adminNewPassword);
       setAdminPasswordSuccess(res.message || 'Password changed successfully!');
@@ -541,12 +601,15 @@ export const AdminDashboard: React.FC = () => {
       }, 1500);
     } catch (err: any) {
       setAdminPasswordError(err.message || 'Failed to change admin password.');
+    } finally {
+      setIsChangingAdminPass(false);
     }
   };
 
   const handleCSVImport = async (e: React.FormEvent) => {
     e.preventDefault();
     setImportResult(null);
+    setImportError('');
     if (!csvText.trim()) return;
 
     const lines = csvText.trim().split('\n');
@@ -568,16 +631,20 @@ export const AdminDashboard: React.FC = () => {
     });
 
     if (parsedStudents.length === 0) {
-      alert('No valid student records found in CSV text.');
+      setImportError('No valid student records found in CSV text.');
       return;
     }
 
+    setIsImportingCsv(true);
     try {
       const res = await API.importStudents(parsedStudents, defaultStudentPassword);
       setImportResult(res);
       setCsvText('');
+      fetchAdminData();
     } catch (err: any) {
-      alert(err.message || 'Failed to import student CSV.');
+      setImportError(err.message || 'Failed to import student CSV.');
+    } finally {
+      setIsImportingCsv(false);
     }
   };
 
@@ -599,6 +666,101 @@ export const AdminDashboard: React.FC = () => {
     );
   }, [facultyList, searchQuery]);
 
+  const uniqueCoordinators = useMemo(() => {
+    const set = new Set<string>();
+    studentsList.forEach((s: any) => {
+      const coord = s.classCoordinatorName || s.class_coordinator_name || s.classCoordinator;
+      if (coord && typeof coord === 'string' && coord.trim()) {
+        set.add(coord.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [studentsList]);
+
+  const uniqueDepartments = useMemo(() => {
+    const set = new Set<string>();
+    studentsList.forEach((s: any) => {
+      const dept = s.department || 'AI & DS';
+      if (dept && typeof dept === 'string' && dept.trim()) {
+        set.add(dept.trim());
+      }
+    });
+    if (set.size === 0) set.add('AI & DS');
+    return Array.from(set).sort();
+  }, [studentsList]);
+
+  const filteredStudents = useMemo(() => {
+    return studentsList.filter((s: any) => {
+      const q = studentSearchQuery.toLowerCase().trim();
+      const regNo = (s.registerNo || s.register_no || '').toLowerCase();
+      const name = (s.name || '').toLowerCase();
+      const email = (s.email || '').toLowerCase();
+
+      if (q && !regNo.includes(q) && !name.includes(q) && !email.includes(q)) {
+        return false;
+      }
+
+      const year = s.year || '2nd Year';
+      if (studentYearFilter !== 'ALL' && year !== studentYearFilter) {
+        return false;
+      }
+
+      const sec = s.section || 'A';
+      if (studentSectionFilter !== 'ALL' && sec !== studentSectionFilter) {
+        return false;
+      }
+
+      const dept = s.department || 'AI & DS';
+      if (studentDeptFilter !== 'ALL' && dept !== studentDeptFilter) {
+        return false;
+      }
+
+      const coord = s.classCoordinatorName || s.class_coordinator_name || s.classCoordinator || '';
+      if (studentCoordinatorFilter !== 'ALL' && coord !== studentCoordinatorFilter) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [studentsList, studentSearchQuery, studentYearFilter, studentSectionFilter, studentDeptFilter, studentCoordinatorFilter]);
+
+  const handleClearStudentFilters = () => {
+    setStudentSearchQuery('');
+    setStudentYearFilter('ALL');
+    setStudentSectionFilter('ALL');
+    setStudentDeptFilter('ALL');
+    setStudentCoordinatorFilter('ALL');
+  };
+
+  const exportStudentsCsv = (list: any[], filename: string) => {
+    if (!list || list.length === 0) {
+      alert('No student records available to export.');
+      return;
+    }
+    const headers = ['Register Number', 'Student Name', 'Email', 'Year', 'Section', 'Department', 'Class Coordinator', 'CGPA', 'Overall Score', 'Created At'];
+    const rows = list.map((s) => [
+      `"${s.registerNo || s.register_no || ''}"`,
+      `"${(s.name || '').replace(/"/g, '""')}"`,
+      `"${s.email || ''}"`,
+      `"${s.year || ''}"`,
+      `"${s.section || ''}"`,
+      `"${s.department || 'AI & DS'}"`,
+      `"${(s.classCoordinatorName || s.class_coordinator_name || '').replace(/"/g, '""')}"`,
+      `"${s.cgpa ?? 0}"`,
+      `"${s.overallScore ?? s.overall_score ?? 0}"`,
+      `"${s.createdAt || s.created_at ? new Date(s.createdAt || s.created_at).toLocaleDateString() : ''}"`
+    ]);
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (!session) return null;
 
   const adminMenuItems: MenuItem[] = [
@@ -606,7 +768,7 @@ export const AdminDashboard: React.FC = () => {
     { id: 'faculty-management', label: 'Faculty Management', icon: Users, badge: String(facultyList.length) },
     { id: 'add-faculty', label: 'Add Faculty', icon: UserPlus },
     { id: 'hod-management', label: 'HOD Management', icon: Crown, badge: String(hodList.length) },
-    { id: 'student-management', label: 'Student Management', icon: UserCheck },
+    { id: 'student-management', label: 'Student Management', icon: UserCheck, badge: String(studentsList.length) },
     { id: 'csv-import', label: 'CSV Import', icon: FileSpreadsheet },
     { id: 'account-status', label: 'Account Status', icon: ShieldCheck },
     { id: 'rankings', label: 'Gemini Student Recognition', icon: Crown },
@@ -636,14 +798,14 @@ export const AdminDashboard: React.FC = () => {
         <div className="flex items-center space-x-2">
           <button
             onClick={openAddHODModal}
-            className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold px-3.5 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 shadow-lg shadow-amber-500/20"
+            className="btn-action bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold px-3.5 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 shadow-lg shadow-amber-500/20 transition-transform duration-200 transform-gpu hover:scale-[1.03] active:scale-[0.97] disabled:scale-100 disabled:opacity-75 disabled:cursor-not-allowed motion-reduce:transform-none"
           >
             <Crown className="w-3.5 h-3.5" />
             <span>Add HOD</span>
           </button>
           <button
             onClick={openAddFacultyModal}
-            className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold px-3.5 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 shadow-lg shadow-cyan-500/20"
+            className="btn-action bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold px-3.5 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 shadow-lg shadow-cyan-500/20 transition-transform duration-200 transform-gpu hover:scale-[1.03] active:scale-[0.97] disabled:scale-100 disabled:opacity-75 disabled:cursor-not-allowed motion-reduce:transform-none"
           >
             <UserPlus className="w-3.5 h-3.5" />
             <span>Add Faculty</span>
@@ -1063,9 +1225,269 @@ export const AdminDashboard: React.FC = () => {
 
         {/* 5. STUDENT MANAGEMENT */}
         {activeTab === 'student-management' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-            <h2 className="text-lg font-bold text-white border-b border-slate-800 pb-3">Student Account Roster Management</h2>
-            <p className="text-xs text-slate-400 font-mono">View and manage imported student accounts across all sections.</p>
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-xl">
+            {/* HEADER BAR */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <div className="flex items-center space-x-3">
+                  <h2 className="text-lg font-bold text-white flex items-center space-x-2">
+                    <UserCheck className="w-5 h-5 text-cyan-400" />
+                    <span>Student Roster Management</span>
+                  </h2>
+                  <span className="bg-cyan-950 border border-cyan-700 text-cyan-300 text-xs px-2.5 py-0.5 rounded-full font-mono font-bold">
+                    {filteredStudents.length} of {studentsList.length} Students
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 font-mono mt-1">
+                  Central PostgreSQL Database Roster — Real-time synchronization across Faculty & Admin Portals.
+                </p>
+              </div>
+
+              {/* ACTION BUTTONS */}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => setActiveTab('csv-import')}
+                  className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 shadow-lg shadow-cyan-500/20"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>Import Students</span>
+                </button>
+                <button
+                  onClick={() => exportStudentsCsv(filteredStudents, `students_filtered_${Date.now()}.csv`)}
+                  disabled={filteredStudents.length === 0}
+                  className="bg-slate-800 hover:bg-slate-700 text-cyan-300 disabled:opacity-40 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 border border-slate-700"
+                  title="Download CSV containing only currently filtered records"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Export Filtered ({filteredStudents.length})</span>
+                </button>
+                <button
+                  onClick={() => exportStudentsCsv(studentsList, `students_all_${Date.now()}.csv`)}
+                  disabled={studentsList.length === 0}
+                  className="bg-slate-800 hover:bg-slate-700 text-emerald-400 disabled:opacity-40 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 border border-slate-700"
+                  title="Download CSV containing all database student records"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>Download All ({studentsList.length})</span>
+                </button>
+                <button
+                  onClick={fetchAdminData}
+                  disabled={isStudentsLoading}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold p-1.5 rounded-xl text-xs border border-slate-700"
+                  title="Refresh latest data from database"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isStudentsLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* FILTER & SEARCH TOOLBAR */}
+            <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center space-x-2 text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">
+                <Filter className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Search & Filter Toolbar</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                {/* Search Input */}
+                <div className="lg:col-span-2 relative">
+                  <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by Name, Reg No, Email..."
+                    value={studentSearchQuery}
+                    onChange={(e) => setStudentSearchQuery(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2 pl-9 pr-3 text-xs text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none font-mono"
+                  />
+                </div>
+
+                {/* Year Dropdown */}
+                <div>
+                  <select
+                    value={studentYearFilter}
+                    onChange={(e) => setStudentYearFilter(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2 px-3 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none font-mono"
+                  >
+                    <option value="ALL">Year: All</option>
+                    <option value="1st Year">1st Year</option>
+                    <option value="2nd Year">2nd Year</option>
+                    <option value="3rd Year">3rd Year</option>
+                    <option value="4th Year">4th Year</option>
+                  </select>
+                </div>
+
+                {/* Section Dropdown */}
+                <div>
+                  <select
+                    value={studentSectionFilter}
+                    onChange={(e) => setStudentSectionFilter(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2 px-3 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none font-mono"
+                  >
+                    <option value="ALL">Section: All</option>
+                    <option value="A">Section A</option>
+                    <option value="B">Section B</option>
+                    <option value="C">Section C</option>
+                  </select>
+                </div>
+
+                {/* Department Dropdown */}
+                <div>
+                  <select
+                    value={studentDeptFilter}
+                    onChange={(e) => setStudentDeptFilter(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2 px-3 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none font-mono"
+                  >
+                    <option value="ALL">Dept: All</option>
+                    {uniqueDepartments.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Faculty/Coordinator Dropdown */}
+                <div>
+                  <select
+                    value={studentCoordinatorFilter}
+                    onChange={(e) => setStudentCoordinatorFilter(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2 px-3 text-xs text-slate-200 focus:border-cyan-500 focus:outline-none font-mono"
+                  >
+                    <option value="ALL">Faculty: All</option>
+                    {uniqueCoordinators.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* ACTIVE FILTER SUMMARY & CLEAR FILTERS */}
+              {(studentSearchQuery ||
+                studentYearFilter !== 'ALL' ||
+                studentSectionFilter !== 'ALL' ||
+                studentDeptFilter !== 'ALL' ||
+                studentCoordinatorFilter !== 'ALL') && (
+                <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs">
+                  <div className="text-slate-400 font-mono text-[11px]">
+                    Active Filters: {studentSearchQuery && <span className="text-cyan-400 mr-2">Query: "{studentSearchQuery}"</span>}
+                    {studentYearFilter !== 'ALL' && <span className="text-cyan-400 mr-2">Year: {studentYearFilter}</span>}
+                    {studentSectionFilter !== 'ALL' && <span className="text-cyan-400 mr-2">Sec: {studentSectionFilter}</span>}
+                    {studentDeptFilter !== 'ALL' && <span className="text-cyan-400 mr-2">Dept: {studentDeptFilter}</span>}
+                    {studentCoordinatorFilter !== 'ALL' && <span className="text-cyan-400 mr-2">Coord: {studentCoordinatorFilter}</span>}
+                  </div>
+                  <button
+                    onClick={handleClearStudentFilters}
+                    className="text-amber-400 hover:text-amber-300 font-bold font-mono text-[11px] underline"
+                  >
+                    Clear Filters
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* STUDENT ROSTER TABLE */}
+            {isStudentsLoading ? (
+              <div className="text-center py-12 space-y-3 font-mono text-slate-400 text-xs">
+                <RefreshCw className="w-8 h-8 text-cyan-400 animate-spin mx-auto" />
+                <div>Fetching latest student records from PostgreSQL database...</div>
+              </div>
+            ) : filteredStudents.length === 0 ? (
+              <div className="text-center py-12 space-y-3 bg-slate-950/40 rounded-2xl border border-slate-800">
+                <UserCheck className="w-10 h-10 text-slate-600 mx-auto" />
+                <div className="text-slate-300 font-bold text-sm">
+                  {studentsList.length === 0 ? 'No Students Stored in Database' : 'No Students Match Current Filters'}
+                </div>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  {studentsList.length === 0
+                    ? 'Faculty or Admin can add students. Use the CSV Import or Faculty Portal to populate student records.'
+                    : 'Try broadening your search query or clearing filter selections.'}
+                </p>
+                {studentsList.length > 0 && (
+                  <button
+                    onClick={handleClearStudentFilters}
+                    className="bg-slate-800 hover:bg-slate-700 text-cyan-300 font-bold px-4 py-1.5 rounded-xl text-xs mt-2"
+                  >
+                    Reset All Filters
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left font-mono">
+                  <thead>
+                    <tr className="text-slate-400 border-b border-slate-800 uppercase tracking-wider text-[11px]">
+                      <th className="py-3 px-3">Student Name</th>
+                      <th className="py-3 px-3">Register Number</th>
+                      <th className="py-3 px-3">Email</th>
+                      <th className="py-3 px-3">Year / Sec</th>
+                      <th className="py-3 px-3">Department</th>
+                      <th className="py-3 px-3">Faculty / Coordinator</th>
+                      <th className="py-3 px-3">Created Date</th>
+                      <th className="py-3 px-3 text-center">Status</th>
+                      <th className="py-3 px-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {filteredStudents.map((s: any) => {
+                      const regNo = s.registerNo || s.register_no || s.identifier || 'N/A';
+                      const name = s.name || 'N/A';
+                      const email = s.email || 'N/A';
+                      const year = s.year || '2nd Year';
+                      const section = s.section || 'A';
+                      const dept = s.department || 'AI & DS';
+                      const coord = s.classCoordinatorName || s.class_coordinator_name || s.classCoordinator || 'Assigned Faculty';
+                      const createdDate = s.createdAt || s.created_at ? new Date(s.createdAt || s.created_at).toLocaleDateString() : 'N/A';
+                      const isActive = s.isActive !== false;
+
+                      return (
+                        <tr key={s.id || regNo} className="hover:bg-slate-950/60 transition-colors">
+                          <td className="py-3 px-3 font-bold text-white">{name}</td>
+                          <td className="py-3 px-3 font-mono text-cyan-400 font-bold">{regNo}</td>
+                          <td className="py-3 px-3 font-mono text-slate-400">{email}</td>
+                          <td className="py-3 px-3">
+                            <span className="bg-slate-950 border border-slate-800 px-2 py-0.5 rounded-md font-bold text-slate-200">
+                              {year} - {section}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-slate-300 font-semibold">{dept}</td>
+                          <td className="py-3 px-3 text-amber-300 font-semibold">{coord}</td>
+                          <td className="py-3 px-3 text-slate-400">{createdDate}</td>
+                          <td className="py-3 px-3 text-center">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                isActive
+                                  ? 'bg-emerald-950 border border-emerald-700 text-emerald-300'
+                                  : 'bg-red-950 border border-red-800 text-red-300'
+                              }`}
+                            >
+                              {isActive ? 'Active' : 'Disabled'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-right">
+                            <button
+                              onClick={() => {
+                                setDeleteTarget({
+                                  id: s.id,
+                                  name: `${name} (${regNo})`,
+                                  type: 'Student Account',
+                                  isStudent: true
+                                });
+                              }}
+                              className="bg-red-950/60 hover:bg-red-900 border border-red-800/80 text-red-400 p-1.5 rounded-lg transition-all"
+                              title="Delete Student Account"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
@@ -1195,6 +1617,13 @@ export const AdminDashboard: React.FC = () => {
               </div>
             )}
 
+            {importError && (
+              <div className="bg-red-950/80 border border-red-800/80 text-red-300 p-2.5 rounded-xl flex items-center space-x-2 font-mono text-[11px] animate-in fade-in">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{importError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleCSVImport} className="space-y-4 pt-4 border-t border-slate-800">
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-300">Or Paste CSV Text Input</label>
@@ -1230,11 +1659,20 @@ export const AdminDashboard: React.FC = () => {
 
                 <button
                   type="submit"
-                  disabled={!csvText.trim()}
-                  className="bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 font-bold px-6 py-2 rounded-xl text-xs flex items-center space-x-2 shadow-lg shadow-cyan-500/20 transition-all"
+                  disabled={!csvText.trim() || isImportingCsv}
+                  className="bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 font-bold px-6 py-2 rounded-xl text-xs flex items-center space-x-2 shadow-lg shadow-cyan-500/20 transition-all cursor-pointer"
                 >
-                  <Upload className="w-4 h-4" />
-                  <span>Execute Bulk Import</span>
+                  {isImportingCsv ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Importing Students...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      <span>Execute Bulk Import</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -1428,8 +1866,19 @@ export const AdminDashboard: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl shadow-lg shadow-amber-500/20">
-                  Save HOD Account
+                <button
+                  type="submit"
+                  disabled={isSavingHOD}
+                  className="px-5 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold rounded-xl shadow-lg shadow-amber-500/20 flex items-center space-x-2"
+                >
+                  {isSavingHOD ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                      <span>Saving HOD...</span>
+                    </>
+                  ) : (
+                    <span>Save HOD Account</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -1480,12 +1929,24 @@ export const AdminDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setResetTargetHOD(null)}
-                  className="px-3 py-1.5 bg-slate-800 text-slate-300 text-xs rounded-xl font-semibold"
+                  disabled={isResettingPass}
+                  className="px-3 py-1.5 bg-slate-800 text-slate-300 text-xs rounded-xl font-semibold disabled:opacity-50"
                 >
                   Cancel
                 </button>
-                <button type="submit" className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl shadow-lg shadow-amber-500/20">
-                  Reset Password
+                <button
+                  type="submit"
+                  disabled={isResettingPass}
+                  className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 text-xs font-bold rounded-xl shadow-lg shadow-amber-500/20 flex items-center space-x-2 cursor-pointer"
+                >
+                  {isResettingPass ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Resetting Password...</span>
+                    </>
+                  ) : (
+                    <span>Reset Password</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -1676,8 +2137,19 @@ export const AdminDashboard: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="px-5 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-xl shadow-lg shadow-cyan-500/20">
-                  Save Faculty
+                <button
+                  type="submit"
+                  disabled={isSavingFaculty}
+                  className="px-5 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 font-bold rounded-xl shadow-lg shadow-cyan-500/20 flex items-center space-x-2"
+                >
+                  {isSavingFaculty ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                      <span>Saving Faculty...</span>
+                    </>
+                  ) : (
+                    <span>Save Faculty</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -1728,12 +2200,24 @@ export const AdminDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setResetTargetFaculty(null)}
-                  className="px-3 py-1.5 bg-slate-800 text-slate-300 text-xs rounded-xl font-semibold"
+                  disabled={isResettingPass}
+                  className="px-3 py-1.5 bg-slate-800 text-slate-300 text-xs rounded-xl font-semibold disabled:opacity-50"
                 >
                   Cancel
                 </button>
-                <button type="submit" className="px-4 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold rounded-xl shadow-lg shadow-cyan-500/20">
-                  Reset Password
+                <button
+                  type="submit"
+                  disabled={isResettingPass}
+                  className="px-4 py-1.5 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 text-xs font-bold rounded-xl shadow-lg shadow-cyan-500/20 flex items-center space-x-2 cursor-pointer"
+                >
+                  {isResettingPass ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Resetting Password...</span>
+                    </>
+                  ) : (
+                    <span>Reset Password</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -1840,12 +2324,24 @@ export const AdminDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowAdminChangePasswordModal(false)}
-                  className="px-3 py-1.5 bg-slate-800 text-slate-300 text-xs rounded-xl font-semibold"
+                  disabled={isChangingAdminPass}
+                  className="px-3 py-1.5 bg-slate-800 text-slate-300 text-xs rounded-xl font-semibold disabled:opacity-50"
                 >
                   Cancel
                 </button>
-                <button type="submit" className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/30">
-                  Update Password
+                <button
+                  type="submit"
+                  disabled={isChangingAdminPass}
+                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/30 flex items-center space-x-2 cursor-pointer"
+                >
+                  {isChangingAdminPass ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Updating Password...</span>
+                    </>
+                  ) : (
+                    <span>Update Password</span>
+                  )}
                 </button>
               </div>
             </form>

@@ -11,6 +11,7 @@ import {
   Filter,
   Check,
   AlertCircle,
+  Loader2,
   Sparkles,
   GraduationCap
 } from 'lucide-react';
@@ -61,6 +62,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
   // Delete State
   const [deleteTarget, setDeleteTarget] = useState<Subject | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [deleteError, setDeleteError] = useState<string>('');
 
   const fetchSubjects = async () => {
     setIsLoading(true);
@@ -166,6 +168,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
   const handleDeleteSubject = async () => {
     if (!deleteTarget) return;
     setIsDeleting(true);
+    setDeleteError('');
     try {
       await API.deleteSubject(deleteTarget.id);
       setSuccessMsg(`Subject "${deleteTarget.subjectCode || deleteTarget.subject_code}" deleted.`);
@@ -173,7 +176,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
       await fetchSubjects();
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err: any) {
-      alert(err.message || 'Failed to delete subject.');
+      setDeleteError(err.message || 'Failed to delete subject.');
     } finally {
       setIsDeleting(false);
     }
@@ -198,14 +201,14 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
   return (
     <div className="space-y-6">
       {/* HEADER & CONTROLS */}
-      <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-6 space-y-4 shadow-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
+      <div className="bg-[#3039A8] border border-white/14 rounded-2xl p-6 space-y-4 shadow-xl text-white">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/14 pb-4">
           <div>
             <h3 className="text-lg font-bold text-white flex items-center space-x-2 font-sans">
-              <BookOpen className="w-5 h-5 text-indigo-400" />
+              <BookOpen className="w-5 h-5 text-cyan-300" />
               <span>Academic Subjects & Course Curriculum</span>
             </h3>
-            <p className="text-xs text-slate-400 font-mono mt-0.5">
+            <p className="text-xs text-[#D9DEFF] font-mono mt-0.5">
               Manage department subject offerings, credits, faculty handlers, and academic syllabus mappings.
             </p>
           </div>
@@ -213,7 +216,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
           {!isReadOnly && (
             <button
               onClick={handleOpenAddModal}
-              className="bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center space-x-2 transition-all shadow-lg cursor-pointer shrink-0"
+              className="btn-action bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center space-x-2 transition-transform duration-200 shadow-md cursor-pointer shrink-0"
             >
               <Plus className="w-4 h-4" />
               <span>+ Add Subject</span>
@@ -246,13 +249,13 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1">
           {/* SEARCH */}
           <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
+            <Search className="w-3.5 h-3.5 text-[#AEB7F5] absolute left-3 top-2.5" />
             <input
               type="text"
               placeholder="Search Code, Subject, Faculty..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 pl-8 pr-3 py-1.5 rounded-xl text-xs text-white font-mono placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+              className="w-full bg-[#252B86] border border-white/14 pl-8 pr-3 py-1.5 rounded-xl text-xs text-white font-mono placeholder:text-[#AEB7F5] focus:outline-none focus:border-cyan-300"
             />
           </div>
 
@@ -261,7 +264,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
             <select
               value={yearFilter}
               onChange={(e) => setYearFilter(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl text-xs text-indigo-300 font-mono cursor-pointer hover:border-indigo-500"
+              className="w-full bg-[#252B86] border border-white/14 px-3 py-1.5 rounded-xl text-xs text-cyan-200 font-mono cursor-pointer hover:border-cyan-300"
             >
               <option value="ALL">All Years</option>
               <option value="1st Year">1st Year</option>
@@ -276,7 +279,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
             <select
               value={semesterFilter}
               onChange={(e) => setSemesterFilter(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl text-xs text-indigo-300 font-mono cursor-pointer hover:border-indigo-500"
+              className="w-full bg-[#252B86] border border-white/14 px-3 py-1.5 rounded-xl text-xs text-cyan-200 font-mono cursor-pointer hover:border-cyan-300"
             >
               <option value="ALL">All Semesters</option>
               <option value="1">Semester 1</option>
@@ -295,7 +298,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
             <select
               value={sectionFilter}
               onChange={(e) => setSectionFilter(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl text-xs text-indigo-300 font-mono cursor-pointer hover:border-indigo-500"
+              className="w-full bg-[#252B86] border border-white/14 px-3 py-1.5 rounded-xl text-xs text-cyan-200 font-mono cursor-pointer hover:border-cyan-300"
             >
               <option value="ALL">All Sections</option>
               <option value="A">Section A</option>
@@ -306,30 +309,30 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
         </div>
 
         {/* SUBJECTS TABLE */}
-        <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60 shadow-inner">
+        <div className="overflow-x-auto rounded-xl border border-white/14 bg-[#3039A8] shadow-inner">
           <table className="w-full text-left border-collapse text-xs font-mono">
             <thead>
-              <tr className="bg-slate-900/80 text-slate-400 border-b border-slate-800 uppercase tracking-wider text-[11px]">
+              <tr className="bg-[#252B86] text-[#D9DEFF] border-b border-white/14 uppercase tracking-wider text-[11px]">
                 <th className="py-3 px-3.5">Code</th>
                 <th className="py-3 px-3.5">Subject Name</th>
                 <th className="py-3 px-3.5">Year / Sem / Sec</th>
                 <th className="py-3 px-3.5">Type</th>
                 <th className="py-3 px-3.5 text-center">Credits</th>
                 <th className="py-3 px-3.5">Faculty Handler</th>
-                <th className="py-3 px-3.5 text-slate-400">Academic Year</th>
+                <th className="py-3 px-3.5 text-[#D9DEFF]">Academic Year</th>
                 {!isReadOnly && <th className="py-3 px-3.5 text-right">Actions</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/80">
+            <tbody className="divide-y divide-white/14">
               {isLoading ? (
                 <tr>
-                  <td colSpan={isReadOnly ? 7 : 8} className="py-8 text-center text-slate-500">
+                  <td colSpan={isReadOnly ? 7 : 8} className="py-8 text-center text-[#AEB7F5]">
                     Loading registered subjects...
                   </td>
                 </tr>
               ) : filteredSubjects.length === 0 ? (
                 <tr>
-                  <td colSpan={isReadOnly ? 7 : 8} className="py-8 text-center text-slate-500">
+                  <td colSpan={isReadOnly ? 7 : 8} className="py-8 text-center text-[#AEB7F5]">
                     No subjects found matching current filters.
                   </td>
                 </tr>
@@ -342,10 +345,10 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
                   const handler = sub.facultyHandler || sub.faculty_handler || 'TBD';
 
                   return (
-                    <tr key={sub.id} className="hover:bg-slate-900/60 transition-colors">
-                      <td className="py-3 px-3.5 font-bold text-sky-400">{code}</td>
+                    <tr key={sub.id} className="hover:bg-[#3F4BDA] transition-colors">
+                      <td className="py-3 px-3.5 font-bold text-cyan-300">{code}</td>
                       <td className="py-3 px-3.5 text-white font-bold font-sans text-sm">{name}</td>
-                      <td className="py-3 px-3.5 text-indigo-300 font-bold">
+                      <td className="py-3 px-3.5 text-[#D9DEFF] font-bold">
                         {sub.year} • Sem {sub.semester} • Sec {sub.section}
                       </td>
                       <td className="py-3 px-3.5">
@@ -355,20 +358,20 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
                               ? 'bg-purple-950 text-purple-300 border border-purple-800'
                               : type === 'Elective'
                               ? 'bg-amber-950 text-amber-300 border border-amber-800'
-                              : 'bg-cyan-950 text-cyan-300 border border-cyan-800'
+                              : 'bg-[#252B86] text-cyan-300 border border-white/14'
                           }`}
                         >
                           {type}
                         </span>
                       </td>
                       <td className="py-3 px-3.5 text-center text-emerald-400 font-bold">{sub.credits}</td>
-                      <td className="py-3 px-3.5 text-slate-300 font-sans text-xs">{handler}</td>
-                      <td className="py-3 px-3.5 text-slate-500">{acadYear}</td>
+                      <td className="py-3 px-3.5 text-[#D9DEFF] font-sans text-xs">{handler}</td>
+                      <td className="py-3 px-3.5 text-[#AEB7F5]">{acadYear}</td>
                       {!isReadOnly && (
                         <td className="py-3 px-3.5 text-right space-x-2 font-sans">
                           <button
                             onClick={() => handleOpenEditModal(sub)}
-                            className="bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 px-2.5 py-1 rounded-lg text-[11px] inline-flex items-center space-x-1 cursor-pointer"
+                            className="bg-[#252B86] hover:bg-[#3F4BDA] text-cyan-200 border border-white/14 px-2.5 py-1 rounded-lg text-[11px] inline-flex items-center space-x-1 cursor-pointer"
                           >
                             <Pencil className="w-3 h-3" />
                             <span>Edit</span>
@@ -393,8 +396,8 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
 
       {/* ADD / EDIT SUBJECT MODAL */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in font-sans">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl space-y-0">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1B205F]/85 backdrop-blur-sm animate-fade-in font-sans">
+          <div className="bg-[#252B86] border border-white/14 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl space-y-0 text-white">
             {/* MODAL HEADER */}
             <div className="bg-slate-950 p-4 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center space-x-2 text-indigo-400 font-bold text-base">
@@ -576,9 +579,16 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-bold px-5 py-2 rounded-xl text-xs font-sans transition-all cursor-pointer shadow-lg disabled:opacity-50"
+                  className="btn-action bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-bold px-5 py-2 rounded-xl text-xs font-sans transition-transform duration-200 transform-gpu hover:scale-[1.03] active:scale-[0.97] disabled:scale-100 disabled:opacity-75 disabled:cursor-not-allowed motion-reduce:transform-none cursor-pointer shadow-lg flex items-center space-x-2"
                 >
-                  {isSaving ? 'Saving Subject...' : editingSubject ? 'Update Subject' : 'Save Subject'}
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving Subject...</span>
+                    </>
+                  ) : (
+                    <span>{editingSubject ? 'Update Subject' : 'Save Subject'}</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -594,22 +604,43 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
               <AlertCircle className="w-6 h-6" />
               <h4 className="text-base font-bold text-white">Delete Subject Confirmation</h4>
             </div>
+
+            {deleteError && (
+              <div className="bg-red-950/80 border border-red-800/80 text-red-300 p-2.5 rounded-xl flex items-center space-x-2 font-mono text-[11px] animate-in fade-in">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{deleteError}</span>
+              </div>
+            )}
+
             <p className="text-xs text-slate-300 leading-relaxed font-mono">
               Are you sure you want to delete subject <strong className="text-sky-400">{deleteTarget.subjectCode || deleteTarget.subject_code}</strong> — {deleteTarget.subjectName || deleteTarget.subject_name}? This action cannot be undone.
             </p>
             <div className="flex justify-end space-x-3 pt-2">
               <button
-                onClick={() => setDeleteTarget(null)}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-xl font-bold cursor-pointer"
+                type="button"
+                onClick={() => {
+                  setDeleteTarget(null);
+                  setDeleteError('');
+                }}
+                disabled={isDeleting}
+                className="btn-action bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-xl font-bold cursor-pointer transition-transform duration-200 transform-gpu hover:scale-[1.03] active:scale-[0.97] disabled:scale-100 disabled:opacity-75 disabled:cursor-not-allowed motion-reduce:transform-none"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleDeleteSubject}
                 disabled={isDeleting}
-                className="bg-red-600 hover:bg-red-500 text-white text-xs px-4 py-2 rounded-xl font-bold cursor-pointer transition-all disabled:opacity-50"
+                className="btn-action bg-red-600 hover:bg-red-500 text-white text-xs px-4 py-2 rounded-xl font-bold cursor-pointer transition-transform duration-200 transform-gpu hover:scale-[1.03] active:scale-[0.97] disabled:scale-100 disabled:opacity-75 disabled:cursor-not-allowed motion-reduce:transform-none flex items-center space-x-2"
               >
-                {isDeleting ? 'Deleting...' : 'Confirm Delete'}
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>Confirm Delete</span>
+                )}
               </button>
             </div>
           </div>

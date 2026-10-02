@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node ./node_modules/vite/bin/vite.js",
     "server": "node --import tsx/esm server/index.ts",
-    "build": "vite build",
+    "build": "node ./node_modules/vite/bin/vite.js build",
     "lint": "oxlint",
     "preview": "vite preview",
     "skilledge": "node --import tsx/esm scripts/skilledge_connector.ts"

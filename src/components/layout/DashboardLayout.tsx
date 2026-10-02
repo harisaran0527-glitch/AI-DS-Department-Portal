@@ -12,6 +12,8 @@ export type MenuItem = {
   childrenItems?: MenuItem[];
 };
 
+import { ThemeToggle } from '../common/ThemeToggle';
+
 interface DashboardLayoutProps {
   portalRole: 'STUDENT' | 'FACULTY' | 'HOD' | 'ADMIN';
   userName: string;
@@ -43,96 +45,86 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   const getRoleBadgeColor = () => {
     switch (portalRole) {
       case 'ADMIN':
-        return 'bg-purple-950/80 text-purple-300 border-purple-800';
+        return 'bg-purple-950/70 text-purple-300 border-purple-800/60';
       case 'HOD':
-        return 'bg-amber-950/80 text-amber-300 border-amber-800';
+        return 'bg-amber-950/70 text-amber-300 border-amber-800/60';
       case 'FACULTY':
-        return 'bg-cyan-950/80 text-cyan-300 border-cyan-800';
+        return 'bg-cyan-950/70 text-cyan-300 border-cyan-800/60';
       default:
-        return 'bg-indigo-950/80 text-indigo-300 border-indigo-800';
-    }
-  };
-
-  const getRoleIcon = () => {
-    switch (portalRole) {
-      case 'ADMIN':
-        return <ShieldCheck className="w-5 h-5 text-purple-400" />;
-      case 'HOD':
-        return <Crown className="w-5 h-5 text-amber-400" />;
-      case 'FACULTY':
-        return <UserCheck className="w-5 h-5 text-cyan-400" />;
-      default:
-        return <GraduationCap className="w-5 h-5 text-indigo-400" />;
+        return 'bg-indigo-950/70 text-indigo-300 border-indigo-800/60';
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0A0E1A] via-[#0E172A] to-[#0A101F] text-slate-100 flex flex-col md:flex-row antialiased selection:bg-cyan-500 selection:text-slate-950">
+    <div className="min-h-screen bg-[#080A0F] text-[#94A3B8] flex flex-col md:flex-row antialiased selection:bg-[#A78BFA] selection:text-[#080A0F]">
       {/* MOBILE TOP NAVBAR HEADER */}
-      <div className="md:hidden bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between z-40 sticky top-0">
+      <div className="md:hidden bg-[#0D1017] border-b border-[#252B36] px-4 py-3 flex items-center justify-between z-40 sticky top-0">
         <div className="flex items-center space-x-3">
           <img 
             src="/images/avsec-salem-logo.png" 
             alt="AVSEC Salem Logo" 
-            className="h-9 w-auto object-contain shrink-0 drop-shadow-[0_0_8px_rgba(6,182,212,0.3)]" 
+            className="h-8 w-auto object-contain shrink-0 drop-shadow-[0_0_8px_rgba(167,139,250,0.3)]" 
           />
           <div>
-            <div className="text-xs font-bold text-white tracking-wide">AVSEC - SALEM</div>
-            <div className="text-[10px] text-cyan-400 font-mono font-semibold">{portalRole} WORKSPACE</div>
+            <div className="text-xs font-bold text-[#F1F5F9] tracking-wide">AVSEC - SALEM</div>
+            <div className="text-[10px] text-[#A78BFA] font-mono font-semibold">{portalRole} WORKSPACE</div>
           </div>
         </div>
-        <button
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="p-2 rounded-lg bg-slate-800 text-slate-300 hover:text-white"
-        >
-          {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
+        <div className="flex items-center space-x-2">
+          <ThemeToggle />
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="p-2 rounded-lg bg-[#12161F] text-[#F1F5F9] hover:bg-[#202633]"
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </div>
 
       {/* DESKTOP SIDEBAR NAVIGATION */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-800 flex flex-col transition-transform duration-300 ease-in-out md:static md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#0D1017] border-r border-[#252B36] flex flex-col transition-transform duration-300 ease-in-out md:static md:translate-x-0 ${
           mobileMenuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
         }`}
       >
         {/* Sidebar Header Brand */}
-        <div className="p-4 border-b border-slate-800 flex items-center space-x-3 bg-slate-950/60">
+        <div className="p-4 border-b border-[#252B36] flex items-center space-x-3 bg-[#0D1017]">
           <img 
             src="/images/avsec-salem-logo.png" 
             alt="AVSEC Salem Logo" 
-            className="h-10 w-auto object-contain shrink-0 drop-shadow-[0_0_10px_rgba(6,182,212,0.35)]" 
+            className="h-9 w-auto object-contain shrink-0 drop-shadow-[0_0_10px_rgba(167,139,250,0.35)]" 
           />
           <div className="overflow-hidden">
-            <div className="text-xs font-extrabold text-white tracking-wider truncate">AVSEC - SALEM</div>
-            <div className="text-[10px] text-cyan-400 font-mono font-bold tracking-wider uppercase truncate">
+            <div className="text-xs font-extrabold text-[#F1F5F9] tracking-wider truncate">AVSEC - SALEM</div>
+            <div className="text-[10px] text-[#22D3EE] font-mono font-bold tracking-wider uppercase truncate">
               AI & DS {portalRole}
             </div>
           </div>
         </div>
 
         {/* User Identity Profile Card inside Sidebar */}
-        <div className="p-4 border-b border-slate-800/80 bg-slate-950/50">
+        <div className="p-4 border-b border-[#252B36] bg-[#12161F]">
           <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-white">
+            <div className="w-8 h-8 rounded-lg bg-[#171C26] border border-[#252B36] flex items-center justify-center text-xs font-bold text-[#A78BFA] shadow-md">
               {userName ? userName.charAt(0).toUpperCase() : 'U'}
             </div>
             <div className="overflow-hidden">
-              <div className="text-xs font-bold text-white truncate">{userName}</div>
+              <div className="text-xs font-bold text-[#F1F5F9] truncate">{userName}</div>
               <span className={`inline-block text-[9px] px-2 py-0.2 rounded-full font-bold border ${getRoleBadgeColor()}`}>
                 {userRoleTitle}
               </span>
             </div>
           </div>
           {subtitle && (
-            <p className="text-[10px] text-slate-400 font-mono mt-2 leading-tight">
+            <p className="text-[10px] text-[#94A3B8] font-mono mt-2 leading-tight">
               {subtitle}
             </p>
           )}
         </div>
 
         {/* Menu Items List */}
-        <nav className="flex-1 overflow-y-auto p-3 space-y-1 scrollbar-thin scrollbar-thumb-slate-800">
-          <div className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest px-3 py-1.5">
+        <nav className="flex-1 overflow-y-auto p-3 space-y-1 scrollbar-thin scrollbar-thumb-[#171C26]">
+          <div className="text-[10px] font-mono font-bold text-[#64748B] uppercase tracking-widest px-3 py-1.5">
             Navigation Menu
           </div>
           {menuItems.map((item) => {
@@ -155,27 +147,27 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                   }}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
                     isActive
-                      ? 'bg-gradient-to-r from-amber-500/20 via-indigo-600/30 to-amber-500/10 border border-amber-500/40 text-amber-300 font-bold shadow-lg shadow-amber-500/10'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                      ? 'bg-[#171C26] text-[#F1F5F9] font-bold border-l-2 border-[#A78BFA] shadow-sm'
+                      : 'text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#12161F]'
                   }`}
                 >
                   <div className="flex items-center space-x-2.5 truncate">
-                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-amber-400' : 'text-slate-400'}`} />
+                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#A78BFA]' : 'text-[#64748B]'}`} />
                     <span className="truncate font-bold">{item.label}</span>
                   </div>
                   <div className="flex items-center space-x-1.5">
                     {item.badge && (
                       <span
                         className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full ${
-                          isActive ? 'bg-amber-950 border border-amber-700 text-amber-300 font-bold' : 'bg-slate-800 text-slate-300'
+                          isActive ? 'bg-[#202633] text-[#A78BFA] border border-[#A78BFA]/30 font-bold' : 'bg-[#12161F] text-[#94A3B8]'
                         }`}
                       >
                         {item.badge}
                       </span>
                     )}
                     {isCollapsible && (
-                      <span className="text-slate-400 p-0.5">
-                        {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-amber-400" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                      <span className="text-[#64748B] p-0.5">
+                        {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-[#A78BFA]" /> : <ChevronRight className="w-3.5 h-3.5" />}
                       </span>
                     )}
                   </div>
@@ -183,7 +175,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
                 {/* Render Collapsible Children Submenu */}
                 {isCollapsible && isExpanded && item.childrenItems && (
-                  <div className="pl-4 pr-1 py-1 space-y-1 border-l-2 border-slate-800 ml-3">
+                  <div className="pl-4 pr-1 py-1 space-y-1 border-l border-[#252B36] ml-3">
                     {item.childrenItems.map((child) => {
                       const ChildIcon = child.icon || Sparkles;
                       const isChildActive = activeTab === child.id;
@@ -196,12 +188,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                           }}
                           className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
                             isChildActive
-                              ? 'bg-indigo-600 text-white font-bold shadow-md shadow-indigo-600/30'
-                              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                              ? 'bg-[#171C26] text-[#F1F5F9] font-bold border-l-2 border-[#A78BFA]'
+                              : 'text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#12161F]'
                           }`}
                         >
                           <div className="flex items-center space-x-2 truncate">
-                            <ChildIcon className={`w-3.5 h-3.5 shrink-0 ${isChildActive ? 'text-white' : 'text-slate-400'}`} />
+                            <ChildIcon className={`w-3.5 h-3.5 shrink-0 ${isChildActive ? 'text-[#A78BFA]' : 'text-[#64748B]'}`} />
                             <span className="truncate">{child.label}</span>
                           </div>
                         </button>
@@ -215,10 +207,10 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         </nav>
 
         {/* Sidebar Footer Logout */}
-        <div className="p-3 border-t border-slate-800 bg-slate-950/40">
+        <div className="p-3 border-t border-[#252B36] bg-[#0D1017]">
           <button
             onClick={onLogout}
-            className="w-full flex items-center justify-center space-x-2 bg-slate-800 hover:bg-red-950/80 hover:text-red-300 hover:border-red-800 border border-slate-700 text-slate-300 py-2 rounded-xl text-xs font-bold transition-all"
+            className="w-full flex items-center justify-center space-x-2 bg-[#12161F] hover:bg-rose-950/80 hover:text-white border border-[#252B36] text-[#94A3B8] py-2 rounded-xl text-xs font-bold transition-all btn-action"
           >
             <LogOut className="w-4 h-4" />
             <span>Logout Portal</span>
@@ -230,37 +222,38 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       {mobileMenuOpen && (
         <div
           onClick={() => setMobileMenuOpen(false)}
-          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 md:hidden"
+          className="fixed inset-0 bg-[#080A0F]/80 backdrop-blur-sm z-40 md:hidden"
         />
       )}
 
       {/* MAIN CONTENT AREA */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 bg-[#080A0F]">
         {/* Top Desktop Header Bar */}
-        <header className="hidden md:flex bg-slate-900 border-b border-slate-800 px-6 py-4 items-center justify-between z-30 sticky top-0">
+        <header className="hidden md:flex bg-[#0D1017] border-b border-[#252B36] px-6 py-3.5 items-center justify-between z-30 sticky top-0">
           <div className="flex items-center space-x-3">
             <span className={`text-xs font-bold px-3 py-1 rounded-full border ${getRoleBadgeColor()}`}>
               {portalRole} PORTAL
             </span>
-            <div className="text-xs text-slate-400 font-mono">
-              Active Section: <strong className="text-white capitalize">{activeTab}</strong>
+            <div className="text-xs text-[#94A3B8] font-mono">
+              Active Section: <strong className="text-[#F1F5F9] capitalize font-bold">{activeTab}</strong>
             </div>
           </div>
 
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
+            <ThemeToggle />
             {headerActions}
             <button
               onClick={onLogout}
-              className="flex items-center space-x-2 bg-slate-800 hover:bg-red-950/80 hover:text-red-300 hover:border-red-800 border border-slate-700 text-slate-300 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all"
+              className="flex items-center space-x-2 bg-[#12161F] hover:bg-rose-950/80 hover:text-white border border-[#252B36] text-[#94A3B8] px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all btn-action"
             >
-              <LogOut className="w-3.5 h-3.5" />
+              <LogOut className="w-3.5 h-3.5 text-[#64748B]" />
               <span>Logout</span>
             </button>
           </div>
         </header>
 
         {/* Page Content Body */}
-        <main className="flex-1 p-4 md:p-6 overflow-y-auto min-w-0 bg-gradient-to-br from-[#0A0E1A] via-[#0E172A] to-[#0A101F]">
+        <main className="flex-1 p-4 md:p-6 overflow-y-auto min-w-0 bg-[#080A0F] text-[#94A3B8]">
           {children}
         </main>
       </div>

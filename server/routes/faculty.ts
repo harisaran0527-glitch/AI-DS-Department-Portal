@@ -390,6 +390,9 @@ router.post('/students', requireClassCoordinator, async (req: AuthRequest, res: 
       student: newStudent
     });
   } catch (err: any) {
+    if (err.message && err.message.toLowerCase().includes('already exists')) {
+      return res.status(409).json({ error: err.message });
+    }
     return res.status(400).json({ error: err.message || 'Failed to create student account.' });
   }
 });

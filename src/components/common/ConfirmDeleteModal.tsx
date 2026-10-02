@@ -23,34 +23,34 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in duration-150">
+    <div className="fixed inset-0 bg-[#080A0F]/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+      <div className="bg-[#12161F] border border-[#252B36] rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in duration-150 text-[#94A3B8]">
         <div className="flex items-start justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-red-950/80 border border-red-800/80 flex items-center justify-center text-red-400 shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-rose-950/60 border border-rose-800 flex items-center justify-center text-rose-400 shrink-0">
               <AlertTriangle className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white leading-snug">Confirm Deletion</h3>
-              <p className="text-xs text-red-300/90 font-mono mt-0.5">PERMANENT / AUDITED ACTION</p>
+              <h3 className="text-base font-bold text-[#F1F5F9] leading-snug">Confirm Deletion</h3>
+              <p className="text-xs text-rose-400 font-mono mt-0.5">PERMANENT / AUDITED ACTION</p>
             </div>
           </div>
 
-          <button onClick={onCancel} className="text-slate-400 hover:text-white transition-colors">
+          <button onClick={onCancel} className="text-[#64748B] hover:text-[#F1F5F9] transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="space-y-3 bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs">
-          <p className="text-slate-300 font-semibold">{title}</p>
-          <div className="border-t border-slate-800/80 pt-2 flex flex-col space-y-1 font-mono text-[11px]">
-            <div className="flex justify-between text-slate-400">
+        <div className="space-y-3 bg-[#171C26] border border-[#252B36] rounded-xl p-3.5 text-xs">
+          <p className="text-[#F1F5F9] font-semibold">{title}</p>
+          <div className="border-t border-[#252B36] pt-2 flex flex-col space-y-1 font-mono text-[11px]">
+            <div className="flex justify-between text-[#94A3B8]">
               <span>Category / Type:</span>
-              <span className="text-cyan-400 font-bold uppercase">{recordType}</span>
+              <span className="text-[#A78BFA] font-bold uppercase">{recordType}</span>
             </div>
-            <div className="flex justify-between text-slate-400">
+            <div className="flex justify-between text-[#94A3B8]">
               <span>Target Record:</span>
-              <span className="text-white font-bold truncate max-w-[200px]">{recordName}</span>
+              <span className="text-[#F1F5F9] font-bold truncate max-w-[200px]">{recordName}</span>
             </div>
           </div>
         </div>
@@ -60,7 +60,7 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
             type="button"
             onClick={onCancel}
             disabled={isDeleting}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-all"
+            className="btn-action px-4 py-2 bg-[#171C26] hover:bg-[#202633] border border-[#252B36] text-[#F1F5F9] text-xs font-semibold rounded-xl transition-transform duration-200"
           >
             Cancel
           </button>
@@ -68,7 +68,7 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
             type="button"
             onClick={onConfirm}
             disabled={isDeleting}
-            className="px-5 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-xs font-extrabold rounded-xl shadow-lg shadow-red-600/30 flex items-center space-x-2 transition-all"
+            className="btn-action px-5 py-2 bg-[#FB7185] hover:bg-rose-600 text-[#080A0F] font-extrabold text-xs rounded-xl shadow-md flex items-center space-x-2 transition-transform duration-200"
           >
             <Trash2 className="w-4 h-4" />
             <span>{isDeleting ? 'Deleting...' : 'Delete Record'}</span>
