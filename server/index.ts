@@ -67,6 +67,10 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', department: 'AI & Data Science', timestamp: new Date().toISOString() });
 });
 
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', department: 'AI & Data Science', timestamp: new Date().toISOString() });
+});
+
 // Production & Preview Static Serving if client dist exists
 const DIST_PATH = path.resolve(process.cwd(), 'dist');
 if (!process.env.VERCEL && fs.existsSync(DIST_PATH)) {

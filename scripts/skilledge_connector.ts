@@ -492,6 +492,6 @@ export async function runInteractiveCli() {
   });
 }
 
-if (import.meta.url === `file:///${process.argv[1].replace(/\\/g, '/')}` || process.argv[1]?.includes('skilledge_connector')) {
+if (process.argv[1] && (import.meta.url === `file:///${process.argv[1].replace(/\\/g, '/')}` || process.argv[1].includes('skilledge_connector'))) {
   runInteractiveCli();
 }
