@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { API } from '../../services/api';
+import { API, API_BASE } from '../../services/api';
 import type { UserSession } from '../../types';
 import { DashboardLayout, type MenuItem } from '../../components/layout/DashboardLayout';
 import { ProofAttachmentControl } from '../../components/common/ProofAttachmentControl';
@@ -698,7 +698,7 @@ export const StudentDashboard: React.FC = () => {
                       {hasFile ? (
                         <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
                           <a
-                            href={`/api/faculty/participation/${p.id}/view`}
+                            href={`${API_BASE}/faculty/participation/${p.id}/view`}
                             target="_blank"
                             rel="noreferrer"
                             className="flex-1 bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-800/80 px-2 py-1 rounded text-center font-bold text-[11px] flex items-center justify-center space-x-1"
@@ -707,7 +707,7 @@ export const StudentDashboard: React.FC = () => {
                             <span>View Proof</span>
                           </a>
                           <a
-                            href={`/api/faculty/participation/${p.id}/download`}
+                            href={`${API_BASE}/faculty/participation/${p.id}/download`}
                             download
                             className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 px-2 py-1 rounded text-center font-bold text-[11px] flex items-center justify-center space-x-1"
                           >

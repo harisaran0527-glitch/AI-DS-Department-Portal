@@ -1,17 +1,14 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
-@theme {
-  --color-portal-accent: #22D3EE;
-  --color-portal-brand: #A78BFA;
-}
-
 :root,
 [data-theme="dark"],
 [data-theme="light"],
 html.dark,
 html.light {
   color-scheme: dark;
+  --color-portal-accent: #22D3EE;
+  --color-portal-brand: #A78BFA;
   --portal-bg: #080A0F;
   --portal-sidebar: #0D1017;
   --portal-navbar: #0D1017;

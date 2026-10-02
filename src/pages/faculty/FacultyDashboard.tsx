@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Papa from 'papaparse';
-import { API } from '../../services/api';
+import { API, API_BASE } from '../../services/api';
 import type { UserSession, Student, TeamHead, Subject } from '../../types';
 import { DashboardLayout, type MenuItem } from '../../components/layout/DashboardLayout';
 import { ConfirmDeleteModal } from '../../components/common/ConfirmDeleteModal';
@@ -127,6 +127,59 @@ export const FacultyDashboard: React.FC = () => {
   // Global Selected Student state for Module Editors
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [student360Edit, setStudent360Edit] = useState<any>(null);
+
+  // Student View & Edit Modals State
+  const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    mobileNumber: '',
+    collegeEmail: '',
+    personalEmail: '',
+    address: '',
+    cgpa: 0
+  });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editError, setEditError] = useState('');
+
+  const handleViewStudent = async (stu: Student) => {
+    try {
+      const res = await API.getFacultyStudentById(stu.id);
+      setViewingStudent(res.student);
+    } catch (err: any) {
+      alert(err.message || 'Failed to fetch student details.');
+    }
+  };
+
+  const handleOpenEditStudent = (stu: Student) => {
+    setEditingStudent(stu);
+    setEditForm({
+      name: stu.name || '',
+      mobileNumber: stu.mobileNumber || (stu as any).mobile_number || '',
+      collegeEmail: stu.collegeEmail || stu.email || '',
+      personalEmail: stu.personalEmail || (stu as any).personal_email || '',
+      address: stu.address || '',
+      cgpa: stu.cgpa || 0
+    });
+    setEditError('');
+  };
+
+  const handleSaveStudentEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStudent) return;
+    setIsSavingEdit(true);
+    setEditError('');
+    try {
+      const res = await API.updateFacultyStudentDetails(editingStudent.id, editForm);
+      alert(res.message || 'Student details updated successfully.');
+      setEditingStudent(null);
+      fetchFacultyData();
+    } catch (err: any) {
+      setEditError(err.message || 'Failed to update student details.');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
 
   // Module Student Search State inside helper picker
   const [pickerSearchQuery, setPickerSearchQuery] = useState('');
@@ -517,7 +570,7 @@ export const FacultyDashboard: React.FC = () => {
     setNptelSelectedEmail(primaryEmail);
     setLeetcodeSelectedEmail(primaryEmail);
 
-    fetch(`/api/faculty/students/${selectedStudent.id}/nptel-connection`)
+    fetch(`${API_BASE}/faculty/students/${selectedStudent.id}/nptel-connection`)
       .then((r) => r.json())
       .then((data) => {
         setNptelConnection(data.connection || null);
@@ -772,7 +825,7 @@ export const FacultyDashboard: React.FC = () => {
 
   const fetchAttendanceHistory = React.useCallback(async () => {
     try {
-      const res = await fetch('/api/faculty/attendance/history');
+      const res = await fetch(`${API_BASE}/faculty/attendance/history`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.history)) {
@@ -785,7 +838,7 @@ export const FacultyDashboard: React.FC = () => {
   // Fetch Daily Attendance whenever attDate changes
   useEffect(() => {
     if (!attDate || attDate < '2026-07-13') return;
-    fetch(`/api/faculty/attendance?date=${attDate}`)
+    fetch(`${API_BASE}/faculty/attendance?date=${attDate}`)
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data.records)) {
@@ -1001,13 +1054,13 @@ export const FacultyDashboard: React.FC = () => {
 
   const handleGoogleSignIn = () => {
     if (!selectedStudent) return;
-    window.location.href = `/api/auth/google/start?studentId=${selectedStudent.id}&purpose=NPTEL&emailType=${nptelEmailType}`;
+    window.location.href = `${API_BASE}/auth/google/start?studentId=${selectedStudent.id}&purpose=NPTEL&emailType=${nptelEmailType}`;
   };
 
   const handleSyncNptelConnection = async () => {
     if (!selectedStudent) return;
     try {
-      const res = await fetch(`/api/faculty/students/${selectedStudent.id}/nptel-connection/sync`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/faculty/students/${selectedStudent.id}/nptel-connection/sync`, { method: 'POST' });
       const data = await res.json();
       if (data.connection) setNptelConnection(data.connection);
       alert('NPTEL connection synchronized!');
@@ -1020,7 +1073,7 @@ export const FacultyDashboard: React.FC = () => {
     if (!selectedStudent) return;
     if (!confirm('Are you sure you want to disconnect this Google OAuth connection?')) return;
     try {
-      await fetch(`/api/faculty/students/${selectedStudent.id}/nptel-connection`, { method: 'DELETE' });
+      await fetch(`${API_BASE}/faculty/students/${selectedStudent.id}/nptel-connection`, { method: 'DELETE' });
       setNptelConnection(null);
       alert('Google OAuth connection disconnected.');
     } catch {
@@ -1203,7 +1256,7 @@ export const FacultyDashboard: React.FC = () => {
       .filter((r) => r.status !== 'UNMARKED');
 
     try {
-      const res = await fetch('/api/faculty/attendance', {
+      const res = await fetch(`${API_BASE}/faculty/attendance`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ date: attDate, records: recordsPayload })
@@ -1809,6 +1862,22 @@ export const FacultyDashboard: React.FC = () => {
                               </span>
                             </td>
                             <td className="py-3 px-3.5 text-right space-x-1.5 font-sans" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => handleViewStudent(stu)}
+                                className="bg-cyan-600/20 hover:bg-cyan-600 border border-cyan-500/50 hover:text-white text-cyan-300 font-semibold px-2.5 py-1 rounded-lg text-[11px] inline-flex items-center space-x-1 cursor-pointer"
+                                title="View Student Details"
+                              >
+                                <Eye className="w-3 h-3" />
+                                <span>View</span>
+                              </button>
+                              <button
+                                onClick={() => handleOpenEditStudent(stu)}
+                                className="bg-amber-600/20 hover:bg-amber-600 border border-amber-500/50 hover:text-white text-amber-300 font-semibold px-2.5 py-1 rounded-lg text-[11px] inline-flex items-center space-x-1 cursor-pointer"
+                                title="Edit Student Information"
+                              >
+                                <Pencil className="w-3 h-3" />
+                                <span>Edit</span>
+                              </button>
                               <button
                                 onClick={() => handleSelectStudent(stu)}
                                 className="bg-sky-600/20 hover:bg-sky-600 border border-sky-500/50 hover:text-white text-sky-300 font-semibold px-2.5 py-1 rounded-lg text-[11px] inline-flex items-center space-x-1 cursor-pointer"
@@ -3507,7 +3576,7 @@ export const FacultyDashboard: React.FC = () => {
                               {hasFile ? (
                                 <>
                                   <a
-                                    href={`/api/faculty/certificates/${c.id}/view`}
+                                    href={`${API_BASE}/faculty/certificates/${c.id}/view`}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="flex-1 bg-sky-950/80 hover:bg-sky-900 text-sky-300 border border-sky-800/80 px-2.5 py-1.5 rounded-lg text-center font-bold text-[11px] flex items-center justify-center space-x-1 transition-all"
@@ -3516,7 +3585,7 @@ export const FacultyDashboard: React.FC = () => {
                                     <span>View File</span>
                                   </a>
                                   <a
-                                    href={`/api/faculty/certificates/${c.id}/download`}
+                                    href={`${API_BASE}/faculty/certificates/${c.id}/download`}
                                     download
                                     className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 px-2.5 py-1.5 rounded-lg text-center font-bold text-[11px] flex items-center justify-center space-x-1 transition-all"
                                   >
@@ -5736,6 +5805,88 @@ export const FacultyDashboard: React.FC = () => {
                       <span>{editingPart ? 'Update Record' : 'Save Participation'}</span>
                     </>
                   )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* VIEW STUDENT DETAILS MODAL */}
+      {viewingStudent && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl p-6 shadow-2xl space-y-4 text-xs font-mono">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-white text-sm flex items-center space-x-2 font-sans">
+                <Eye className="w-4 h-4 text-cyan-400" />
+                <span>Student Details — {viewingStudent.name}</span>
+              </h3>
+              <button onClick={() => setViewingStudent(null)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
+            </div>
+
+            <div className="space-y-2.5 text-slate-300">
+              <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">Name:</span> <strong className="text-white font-sans">{viewingStudent.name}</strong></div>
+              <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">Register Number:</span> <strong className="text-cyan-400">{viewingStudent.registerNo || (viewingStudent as any).register_no}</strong></div>
+              <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">Mobile Number:</span> <strong>{viewingStudent.mobileNumber || (viewingStudent as any).mobile_number || 'N/A'}</strong></div>
+              <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">College Mail ID:</span> <strong className="text-emerald-400">{viewingStudent.collegeEmail || viewingStudent.email}</strong></div>
+              <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">Personal Mail ID:</span> <strong>{viewingStudent.personalEmail || (viewingStudent as any).personal_email || 'N/A'}</strong></div>
+              <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">Address:</span> <strong>{viewingStudent.address || 'N/A'}</strong></div>
+              <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">CGPA:</span> <strong className="text-amber-400 font-bold">{viewingStudent.cgpa}</strong></div>
+              <div className="flex justify-between pb-1.5"><span className="text-slate-500">Assigned Year / Sec:</span> <strong>{viewingStudent.year || assignedYear} / {viewingStudent.section || assignedSection}</strong></div>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-slate-800">
+              <button onClick={() => setViewingStudent(null)} className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-4 py-2 rounded-xl cursor-pointer">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT STUDENT DETAILS MODAL */}
+      {editingStudent && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl p-6 shadow-2xl space-y-4 text-xs font-mono">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-white text-sm flex items-center space-x-2 font-sans">
+                <Pencil className="w-4 h-4 text-amber-400" />
+                <span>Edit Student Details — {editingStudent.registerNo || (editingStudent as any).register_no}</span>
+              </h3>
+              <button onClick={() => setEditingStudent(null)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
+            </div>
+
+            {editError && <div className="bg-red-950 border border-red-800 text-red-300 p-3 rounded-xl">{editError}</div>}
+
+            <form onSubmit={handleSaveStudentEdit} className="space-y-3">
+              <div>
+                <label className="text-slate-400 block mb-1 font-bold">Name</label>
+                <input type="text" required value={editForm.name} onChange={(e) => setEditForm({...editForm, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white font-sans font-bold" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-400 block mb-1 font-bold">Mobile Number</label>
+                  <input type="text" value={editForm.mobileNumber} onChange={(e) => setEditForm({...editForm, mobileNumber: e.target.value})} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1 font-bold">CGPA</label>
+                  <input type="number" step="0.01" min="0" max="10" required value={editForm.cgpa} onChange={(e) => setEditForm({...editForm, cgpa: parseFloat(e.target.value) || 0})} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                </div>
+              </div>
+              <div>
+                <label className="text-slate-400 block mb-1 font-bold">College Mail ID</label>
+                <input type="email" required value={editForm.collegeEmail} onChange={(e) => setEditForm({...editForm, collegeEmail: e.target.value})} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+              </div>
+              <div>
+                <label className="text-slate-400 block mb-1 font-bold">Personal Mail ID</label>
+                <input type="email" value={editForm.personalEmail} onChange={(e) => setEditForm({...editForm, personalEmail: e.target.value})} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+              </div>
+              <div>
+                <label className="text-slate-400 block mb-1 font-bold">Address</label>
+                <textarea rows={2} value={editForm.address} onChange={(e) => setEditForm({...editForm, address: e.target.value})} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-slate-800 font-sans">
+                <button type="button" onClick={() => setEditingStudent(null)} className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-4 py-2 rounded-xl cursor-pointer">Cancel</button>
+                <button type="submit" disabled={isSavingEdit} className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold px-5 py-2 rounded-xl cursor-pointer shadow-lg disabled:opacity-50">
+                  {isSavingEdit ? 'Saving Changes...' : 'Save Changes'}
                 </button>
               </div>
             </form>

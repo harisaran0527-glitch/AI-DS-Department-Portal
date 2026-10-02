@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
-import { db } from '../db.js';
+import { db, normalizeYear, normalizeSection } from '../db.js';
 
 dotenv.config();
 
@@ -83,31 +83,26 @@ export async function verifyFacultySectionAccess(req: AuthRequest, res: Response
   const isCreatedByStaff = targetStudent.created_by_faculty_id === req.user.id;
   const isWorkspaceStaff = targetStudent.faculty_workspace_id === req.user.id;
 
-  // STRICT STAFF-WISE ISOLATION: If student belongs to another staff member's workspace, reject cross-staff access
-  const isOwnedByAnotherStaff =
-    (targetStudent.created_by_faculty_id && targetStudent.created_by_faculty_id !== req.user.id) ||
-    (targetStudent.faculty_workspace_id && targetStudent.faculty_workspace_id !== req.user.id);
-
-  if (isOwnedByAnotherStaff && !isCreatedByStaff && !isWorkspaceStaff) {
-    return res.status(403).json({
-      error: "Forbidden: You do not have permission to access or modify another staff member's assigned student workspace."
-    });
-  }
-
   // Derived from relational faculty_assignments
   const facultyAssignment = await db.getFacultyAssignment(req.user.id);
   const assignedYear = facultyAssignment ? facultyAssignment.year : req.user.assignedYear;
   const assignedSection = facultyAssignment ? facultyAssignment.section : req.user.assignedSection;
 
-  // Enforce Section match (or workspace ownership)
-  const isYearMatch = !assignedYear || assignedYear === 'ALL' || targetStudent.year === assignedYear;
-  const isSectionMatch = !assignedSection || assignedSection === 'ALL' || targetStudent.section === assignedSection;
+  const cleanAssignedYear = normalizeYear(assignedYear);
+  const cleanAssignedSec = normalizeSection(assignedSection);
+  const cleanStudentYear = normalizeYear(targetStudent.year);
+  const cleanStudentSec = normalizeSection(targetStudent.section);
 
-  if ((!isYearMatch || !isSectionMatch) && !isCreatedByStaff && !isWorkspaceStaff) {
-    return res.status(403).json({
-      error: `Forbidden: Access denied. Student is outside your assigned workspace (${assignedYear} Section ${assignedSection}).`
-    });
+  const isYearMatch = !cleanAssignedYear || cleanAssignedYear === 'ALL' || cleanStudentYear === cleanAssignedYear;
+  const isSectionMatch = !cleanAssignedSec || cleanAssignedSec === 'ALL' || cleanStudentSec === cleanAssignedSec;
+
+  if ((isYearMatch && isSectionMatch) || isCreatedByStaff || isWorkspaceStaff) {
+    return next();
   }
+
+  return res.status(403).json({
+    error: `Forbidden: Access denied. Student (${targetStudent.year} Section ${targetStudent.section}) is outside your assigned workspace (${assignedYear} Section ${assignedSection}).`
+  });
 
   next();
 }

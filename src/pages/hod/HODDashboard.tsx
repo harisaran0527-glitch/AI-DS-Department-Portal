@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { API } from '../../services/api';
+import { API, API_BASE } from '../../services/api';
 import type { UserSession, Student, ScoringConfig, AcademicYear, Section } from '../../types';
 import { DashboardLayout, type MenuItem } from '../../components/layout/DashboardLayout';
 import { ConfirmDeleteModal } from '../../components/common/ConfirmDeleteModal';
@@ -89,7 +89,7 @@ export const HODDashboard: React.FC = () => {
       } else if (deleteTarget.isRecord && deleteTarget.studentId && deleteTarget.recordType && deleteTarget.recordId) {
         await API.deletePerformanceRecordForHOD(deleteTarget.studentId, deleteTarget.recordType, deleteTarget.recordId);
         if (selectedHODStudent) {
-          const res = await fetch(`/api/hod/students/${selectedHODStudent.id}/360`, { credentials: 'include' });
+          const res = await fetch(`${API_BASE}/hod/students/${selectedHODStudent.id}/360`, { credentials: 'include' });
           const data = await res.json();
           setHod360Data(data);
         }
@@ -138,7 +138,7 @@ export const HODDashboard: React.FC = () => {
   const handleOpenHOD360 = async (stu: Student) => {
     setSelectedHODStudent(stu);
     try {
-      const res = await fetch(`/api/hod/students/${stu.id}/360`, { credentials: 'include' });
+      const res = await fetch(`${API_BASE}/hod/students/${stu.id}/360`, { credentials: 'include' });
       const data = await res.json();
       setHod360Data(data);
     } catch (err: any) {

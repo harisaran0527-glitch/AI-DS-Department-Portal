@@ -53,6 +53,49 @@ router.get('/faculty-list', async (req: AuthRequest, res: Response) => {
   return res.json({ count: enriched.length, faculty: enriched });
 });
 
+// PUT HOD Faculty Assignment (Assign Faculty -> Year + Section)
+router.put('/faculty-assignments/:id', async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const { year, section, role } = req.body || {};
+
+  const facultyUser = await db.getUserById(id);
+  if (!facultyUser || facultyUser.role !== 'FACULTY') {
+    return res.status(404).json({ error: 'Faculty account not found.' });
+  }
+
+  const yearToUse = String(year || facultyUser.year || '2nd Year').trim();
+  const sectionToUse = String(section || facultyUser.section || 'A').trim();
+  const roleToUse = String(role || facultyUser.faculty_role || 'Class Coordinator').trim();
+
+  await db.updateUserAssignment(id, yearToUse, sectionToUse, roleToUse);
+  if (req.user) {
+    await db.logAudit(req.user.id, req.user.email, req.user.role, 'HOD_ASSIGN_FACULTY', `FACULTY:${facultyUser.email} -> ${yearToUse} Sec ${sectionToUse}`);
+  }
+
+  return res.json({ message: `Successfully assigned Faculty ${facultyUser.name} to ${yearToUse} Section ${sectionToUse}.` });
+});
+
+router.put('/faculty/:id', async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const { year, section, role } = req.body || {};
+
+  const facultyUser = await db.getUserById(id);
+  if (!facultyUser || facultyUser.role !== 'FACULTY') {
+    return res.status(404).json({ error: 'Faculty account not found.' });
+  }
+
+  const yearToUse = String(year || facultyUser.year || '2nd Year').trim();
+  const sectionToUse = String(section || facultyUser.section || 'A').trim();
+  const roleToUse = String(role || facultyUser.faculty_role || 'Class Coordinator').trim();
+
+  await db.updateUserAssignment(id, yearToUse, sectionToUse, roleToUse);
+  if (req.user) {
+    await db.logAudit(req.user.id, req.user.email, req.user.role, 'HOD_ASSIGN_FACULTY', `FACULTY:${facultyUser.email} -> ${yearToUse} Sec ${sectionToUse}`);
+  }
+
+  return res.json({ message: `Successfully assigned Faculty ${facultyUser.name} to ${yearToUse} Section ${sectionToUse}.` });
+});
+
 // GET department students with hierarchy filters
 router.get('/students', async (req: AuthRequest, res: Response) => {
   const { year, section } = req.query;

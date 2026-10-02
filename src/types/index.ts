@@ -55,6 +55,9 @@ export interface Student {
   linkedin_url?: string;
   githubUrl?: string;
   github_url?: string;
+  mobileNumber?: string;
+  mobile_number?: string;
+  address?: string;
   isActive?: boolean;
 }
 

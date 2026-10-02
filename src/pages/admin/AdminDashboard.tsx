@@ -148,8 +148,8 @@ export const AdminDashboard: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.toLowerCase().endsWith('.csv') && !file.name.toLowerCase().endsWith('.txt')) {
-      alert('Invalid file format. Please select a valid .csv file.');
+    if (!file.name.toLowerCase().endsWith('.csv') && !file.name.toLowerCase().endsWith('.txt') && !file.name.toLowerCase().endsWith('.xlsx')) {
+      alert('Invalid file format. Please select a valid CSV or Excel file.');
       if (csvFileInputRef.current) csvFileInputRef.current.value = '';
       return;
     }
@@ -160,9 +160,9 @@ export const AdminDashboard: React.FC = () => {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      complete: (results) => {
+      complete: async (results) => {
         const rows = results.data as any[];
-        parseAndBuildCsvPreview(rows);
+        await parseAndBuildCsvPreview(rows);
       },
       error: (err) => {
         alert(`Failed to parse CSV file: ${err.message}`);
@@ -170,74 +170,49 @@ export const AdminDashboard: React.FC = () => {
     });
   };
 
-  const parseAndBuildCsvPreview = (rows: any[]) => {
-    let validCount = 0;
-    let dupCount = 0;
-    let invCount = 0;
-    const seenRegs = new Set<string>();
+  const parseAndBuildCsvPreview = async (rows: any[]) => {
+    try {
+      const previewData = await API.previewStudentExcelImport(rows);
+      
+      const mappedPreview = previewData.preview.map((p) => ({
+        rowIndex: p.rowNumber,
+        registerNo: p.parsedData.registerNo,
+        name: p.parsedData.name,
+        email: p.parsedData.collegeEmail,
+        mobileNumber: p.parsedData.mobileNumber,
+        personalEmail: p.parsedData.personalEmail,
+        address: p.parsedData.address,
+        cgpa: p.parsedData.cgpa,
+        status: p.status === 'ERROR' ? 'invalid' : p.status === 'UPDATE_EXISTING' ? 'duplicate' : 'valid',
+        statusMsg: p.errors.length > 0 ? p.errors.join(' | ') : (p.status === 'UPDATE_EXISTING' ? 'Existing student (will update record & password)' : 'Valid new student'),
+        errors: p.errors,
+        parsedData: p.parsedData
+      }));
 
-    const previewList = rows.map((r, index) => {
-      const regNo = (r['Register Number'] || r['registerNo'] || r['regNo'] || r['RegisterNo'] || Object.values(r)[0] || '').toString().trim();
-      const name = (r['Student Name'] || r['Name'] || r['name'] || r['StudentName'] || Object.values(r)[1] || '').toString().trim();
-      const email = (r['Email'] || r['email'] || (regNo ? `${regNo.toLowerCase()}@aids.edu` : '')).toString().trim();
-      const dept = (r['Department'] || r['department'] || 'AI & DS').toString().trim();
-      const year = (r['Year'] || r['year'] || '2nd Year').toString().trim();
-      const section = (r['Section'] || r['section'] || 'A').toString().trim();
-      const batch = (r['Batch'] || r['batch'] || '2023-2027').toString().trim();
-      const cgpa = parseFloat(r['CGPA'] || r['cgpa'] || 0) || 0;
-
-      let status = 'valid';
-      let statusMsg = 'Valid Student Record';
-
-      if (!regNo || !name) {
-        status = 'invalid';
-        statusMsg = 'Missing Register No or Name';
-        invCount++;
-      } else if (seenRegs.has(regNo.toLowerCase())) {
-        status = 'duplicate';
-        statusMsg = 'Duplicate Reg No in file';
-        dupCount++;
-      } else {
-        seenRegs.add(regNo.toLowerCase());
-        validCount++;
-      }
-
-      return {
-        rowIndex: index + 1,
-        registerNo: regNo,
-        name,
-        email,
-        department: dept,
-        year,
-        section,
-        batch,
-        cgpa,
-        status,
-        statusMsg
-      };
-    });
-
-    setCsvPreviewRows(previewList);
-    setCsvStats({
-      total: rows.length,
-      valid: validCount,
-      duplicates: dupCount,
-      invalid: invCount
-    });
+      setCsvPreviewRows(mappedPreview);
+      setCsvStats({
+        total: previewData.totalRows,
+        valid: previewData.validRowsCount,
+        duplicates: previewData.updateRowsCount,
+        invalid: previewData.errorRowsCount
+      });
+    } catch (err: any) {
+      alert(err.message || 'Failed to validate Excel import preview.');
+    }
   };
 
   const handleConfirmFileImport = async () => {
     const validStudents = csvPreviewRows
-      .filter((r) => r.status === 'valid')
-      .map((r) => ({
+      .filter((r) => r.status !== 'invalid')
+      .map((r) => r.parsedData || {
         registerNo: r.registerNo,
         name: r.name,
-        email: r.email,
-        year: r.year,
-        section: r.section,
-        batch: r.batch,
+        collegeEmail: r.email,
+        mobileNumber: r.mobileNumber,
+        personalEmail: r.personalEmail,
+        address: r.address,
         cgpa: r.cgpa
-      }));
+      });
 
     if (validStudents.length === 0) {
       alert('No valid student records found to import.');
@@ -245,14 +220,14 @@ export const AdminDashboard: React.FC = () => {
     }
 
     try {
-      const res = await API.importStudents(validStudents, defaultStudentPassword);
+      const res = await API.confirmStudentExcelImport(validStudents);
       setImportResult(res);
       setSelectedCsvFile(null);
       setCsvPreviewRows([]);
       if (csvFileInputRef.current) csvFileInputRef.current.value = '';
       fetchAdminData();
     } catch (err: any) {
-      alert(err.message || 'Failed to import CSV student records.');
+      alert(err.message || 'Failed to import student Excel records.');
     }
   };
 

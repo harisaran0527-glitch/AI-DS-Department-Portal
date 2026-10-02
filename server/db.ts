@@ -25,6 +25,25 @@ export function safeStringifyJson(val: any): string {
   return JSON.stringify(val);
 }
 
+export function normalizeSection(s?: string | null): string {
+  if (!s) return '';
+  const str = String(s).trim().toUpperCase();
+  if (str.startsWith('SECTION ')) return str.replace('SECTION ', '').trim();
+  if (str.startsWith('SEC ')) return str.replace('SEC ', '').trim();
+  if (str.startsWith('SEC.')) return str.replace('SEC.', '').trim();
+  return str;
+}
+
+export function normalizeYear(y?: string | null): string {
+  if (!y) return '';
+  const str = String(y).trim();
+  if (str === '1' || str === '1st' || str === 'I') return '1st Year';
+  if (str === '2' || str === '2nd' || str === 'II') return '2nd Year';
+  if (str === '3' || str === '3rd' || str === 'III') return '3rd Year';
+  if (str === '4' || str === '4th' || str === 'IV') return '4th Year';
+  return str;
+}
+
 const sqlite = sqliteDb;
 
 export async function initDatabaseSchema(): Promise<void> {
@@ -72,6 +91,8 @@ export async function initDatabaseSchema(): Promise<void> {
       created_by_faculty_id TEXT,
       faculty_workspace_id TEXT,
       personal_email TEXT,
+      mobile_number TEXT,
+      address TEXT,
       FOREIGN KEY (created_by_faculty_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
@@ -512,7 +533,9 @@ export async function initDatabaseSchema(): Promise<void> {
         `ALTER TABLE skilledge_records ADD COLUMN IF NOT EXISTS earned_delta INTEGER DEFAULT 0;`,
         `ALTER TABLE skilledge_records ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'VERIFIED';`,
         `ALTER TABLE skilledge_records ADD COLUMN IF NOT EXISTS last_synced_at TEXT;`,
-        `ALTER TABLE attachments ADD COLUMN IF NOT EXISTS file_data TEXT;`
+        `ALTER TABLE attachments ADD COLUMN IF NOT EXISTS file_data TEXT;`,
+        `ALTER TABLE students ADD COLUMN IF NOT EXISTS mobile_number TEXT;`,
+        `ALTER TABLE students ADD COLUMN IF NOT EXISTS address TEXT;`
       ];
       for (const colSql of alterCols) {
         try { await pgPool.query(colSql); } catch {}
@@ -524,6 +547,8 @@ export async function initDatabaseSchema(): Promise<void> {
       `ALTER TABLE students ADD COLUMN created_by_faculty_id TEXT;`,
       `ALTER TABLE students ADD COLUMN faculty_workspace_id TEXT;`,
       `ALTER TABLE students ADD COLUMN personal_email TEXT;`,
+      `ALTER TABLE students ADD COLUMN mobile_number TEXT;`,
+      `ALTER TABLE students ADD COLUMN address TEXT;`,
       `ALTER TABLE students ADD COLUMN entry_type TEXT DEFAULT 'Regular';`,
       `ALTER TABLE students ADD COLUMN linkedin_url TEXT;`,
       `ALTER TABLE students ADD COLUMN github_url TEXT;`,
@@ -677,12 +702,17 @@ export interface StudentRecord {
   isEliteStudent?: boolean;
   created_by_faculty_id?: string;
   faculty_workspace_id?: string;
+  mobile_number?: string | null;
+  mobileNumber?: string | null;
+  address?: string | null;
 }
 
 export function normalizeStudentRecord(stu: any): StudentRecord | null {
   if (!stu) return null;
   const collegeEmail = (stu.email || stu.collegeEmail || stu.college_email || '').trim();
   const personalEmail = (stu.personal_email || stu.personalEmail || '').trim();
+  const mobileNumber = (stu.mobile_number || stu.mobileNumber || '').trim();
+  const address = (stu.address || '').trim();
   const registerNo = (stu.register_no || stu.registerNo || '').trim();
   const entryType = stu.entry_type || stu.entryType || 'Regular';
   const linkedinUrl = (stu.linkedin_url || stu.linkedinUrl || '').trim();
@@ -700,6 +730,9 @@ export function normalizeStudentRecord(stu: any): StudentRecord | null {
     college_email: collegeEmail,
     personal_email: personalEmail || null,
     personalEmail: personalEmail || null,
+    mobile_number: mobileNumber || null,
+    mobileNumber: mobileNumber || null,
+    address: address || null,
     linkedin_url: linkedinUrl || null,
     linkedinUrl: linkedinUrl || null,
     github_url: githubUrl || null,
@@ -1092,16 +1125,48 @@ export class SQLiteDB {
 
   // STUDENT CRUD
   public async getStudentsForFaculty(facultyId: string, year?: string, section?: string): Promise<StudentRecord[]> {
-    let sql = 'SELECT * FROM students WHERE (created_by_faculty_id = ? OR faculty_workspace_id = ?)';
-    const params: any[] = [facultyId, facultyId];
-    if (year && year !== 'ALL') {
-      sql += ' AND year = ?';
-      params.push(year);
+    let targetYear = year;
+    let targetSection = section;
+
+    if (facultyId && (!targetYear || !targetSection)) {
+      const assignment = await this.getFacultyAssignment(facultyId);
+      if (assignment) {
+        if (!targetYear) targetYear = assignment.year;
+        if (!targetSection) targetSection = assignment.section;
+      }
     }
-    if (section && section !== 'ALL') {
-      sql += ' AND section = ?';
-      params.push(section);
+
+    const cleanYear = targetYear ? normalizeYear(targetYear) : '';
+    const cleanSec = targetSection ? normalizeSection(targetSection) : '';
+
+    let sql = 'SELECT * FROM students WHERE 1=1';
+    const params: any[] = [];
+
+    if (facultyId) {
+      if (cleanYear && cleanYear !== 'ALL' && cleanSec && cleanSec !== 'ALL') {
+        sql += ' AND (created_by_faculty_id = ? OR faculty_workspace_id = ? OR (LOWER(TRIM(year)) = LOWER(TRIM(?)) AND UPPER(TRIM(section)) = UPPER(TRIM(?))))';
+        params.push(facultyId, facultyId, cleanYear, cleanSec);
+      } else if (cleanYear && cleanYear !== 'ALL') {
+        sql += ' AND (created_by_faculty_id = ? OR faculty_workspace_id = ? OR LOWER(TRIM(year)) = LOWER(TRIM(?)))';
+        params.push(facultyId, facultyId, cleanYear);
+      } else if (cleanSec && cleanSec !== 'ALL') {
+        sql += ' AND (created_by_faculty_id = ? OR faculty_workspace_id = ? OR UPPER(TRIM(section)) = UPPER(TRIM(?)))';
+        params.push(facultyId, facultyId, cleanSec);
+      } else {
+        sql += ' AND (created_by_faculty_id = ? OR faculty_workspace_id = ?)';
+        params.push(facultyId, facultyId);
+      }
+    } else {
+      if (cleanYear && cleanYear !== 'ALL') {
+        sql += ' AND LOWER(TRIM(year)) = LOWER(TRIM(?))';
+        params.push(cleanYear);
+      }
+      if (cleanSec && cleanSec !== 'ALL') {
+        sql += ' AND UPPER(TRIM(section)) = UPPER(TRIM(?))';
+        params.push(cleanSec);
+      }
     }
+
     sql += ' ORDER BY current_rank ASC, overall_score DESC';
     const rows = await queryAll(sql, params);
     return rows.map((r) => normalizeStudentRecord(r)!);
@@ -1215,6 +1280,73 @@ export class SQLiteDB {
   public async getStudentByRegisterNo(regNo: string): Promise<StudentRecord | undefined> {
     const row = await queryOne('SELECT * FROM students WHERE register_no = ?', [regNo]);
     return row ? (normalizeStudentRecord(row) as StudentRecord) : undefined;
+  }
+
+  public async upsertStudentWithUserLogin(stu: {
+    registerNo: string;
+    name: string;
+    email: string;
+    mobileNumber?: string;
+    personalEmail?: string;
+    address?: string;
+    cgpa?: number;
+    year?: string;
+    section?: string;
+    batch?: string;
+    createdByFacultyId?: string;
+  }): Promise<StudentRecord> {
+    const cleanRegNo = stu.registerNo.trim();
+    const cleanEmail = stu.email.trim().toLowerCase();
+    const cleanName = stu.name.trim();
+    const cleanMobile = stu.mobileNumber ? stu.mobileNumber.trim() : null;
+    const cleanPersonalEmail = stu.personalEmail ? stu.personalEmail.trim().toLowerCase() : null;
+    const cleanAddress = stu.address ? stu.address.trim() : null;
+    const cleanCgpa = typeof stu.cgpa === 'number' ? Math.max(0, Math.min(10, stu.cgpa)) : 0;
+    const yearToUse = stu.year || '1st Year';
+    const sectionToUse = stu.section || 'A';
+    const batchToUse = stu.batch || '2024-2028';
+
+    let existing = await this.getStudentByRegisterNo(cleanRegNo);
+    if (!existing) {
+      const rowByEmail = await queryOne('SELECT * FROM students WHERE LOWER(email) = ?', [cleanEmail]);
+      if (rowByEmail) existing = normalizeStudentRecord(rowByEmail) as StudentRecord;
+    }
+
+    const studentId = existing ? existing.id : `stu-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
+    if (existing) {
+      await executeRun(`
+        UPDATE students
+        SET name = ?, email = ?, personal_email = ?, mobile_number = ?, address = ?, cgpa = ?, year = ?, section = ?, batch = ?
+        WHERE id = ?
+      `, [cleanName, cleanEmail, cleanPersonalEmail, cleanMobile, cleanAddress, cleanCgpa, yearToUse, sectionToUse, batchToUse, existing.id]);
+    } else {
+      await executeRun(`
+        INSERT INTO students (id, register_no, name, email, personal_email, mobile_number, address, department, year, section, batch, class_coordinator_name, cgpa, overall_score, current_rank, created_by_faculty_id, faculty_workspace_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'AI & DS', ?, ?, ?, 'Assigned Faculty', ?, 0, 99, ?, ?)
+      `, [studentId, cleanRegNo, cleanName, cleanEmail, cleanPersonalEmail, cleanMobile, cleanAddress, yearToUse, sectionToUse, batchToUse, cleanCgpa, stu.createdByFacultyId || null, stu.createdByFacultyId || null]);
+    }
+
+    // AUTOMATIC STUDENT LOGIN ACCOUNT CREATION / SYNC IN users TABLE
+    // Login Email = College Mail ID, Initial Password = Register Number (bcrypt hashed)
+    const existingUser = await queryOne("SELECT id, password_hash FROM users WHERE (LOWER(email) = ? OR LOWER(identifier) = ?) AND UPPER(role) = 'STUDENT'", [cleanEmail, cleanRegNo.toLowerCase()]);
+
+    if (!existingUser) {
+      const initialPasswordHash = await bcrypt.hash(cleanRegNo, 10);
+      const userId = `usr-stu-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      await executeRun(`
+        INSERT INTO users (id, email, identifier, name, role, password_hash, year, section, is_active, created_at)
+        VALUES (?, ?, ?, ?, 'STUDENT', ?, ?, ?, 1, ?)
+      `, [userId, cleanEmail, cleanRegNo, cleanName, initialPasswordHash, yearToUse, sectionToUse, new Date().toISOString()]);
+    } else {
+      await executeRun(`
+        UPDATE users
+        SET name = ?, email = ?, identifier = ?, year = ?, section = ?
+        WHERE id = ?
+      `, [cleanName, cleanEmail, cleanRegNo, yearToUse, sectionToUse, existingUser.id]);
+    }
+
+    return (await this.getStudentById(studentId))!;
   }
 
   public async createStudent(stu: {

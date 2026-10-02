@@ -89,6 +89,64 @@ router.get('/students', async (req: AuthRequest, res: Response) => {
   });
 });
 
+// GET Single Student Detail View by Faculty (Assigned Section Only)
+router.get('/students/:id', verifyFacultySectionAccess, async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
+  const student = await db.getStudentById(id);
+  if (!student) {
+    return res.status(404).json({ error: 'Student record not found.' });
+  }
+  return res.json({ student });
+});
+
+// PUT Edit Student Details by Faculty (Assigned Section Only)
+router.put('/students/:id', verifyFacultySectionAccess, async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
+  const student = await db.getStudentById(id);
+  if (!student) {
+    return res.status(404).json({ error: 'Student record not found.' });
+  }
+
+  const { name, mobileNumber, collegeEmail, personalEmail, address, cgpa, year, section, batch } = req.body || {};
+
+  const nameToUse = typeof name === 'string' && name.trim() ? name.trim() : student.name;
+  const mobileToUse = typeof mobileNumber === 'string' ? mobileNumber.trim() : (student.mobileNumber || '');
+  const emailToUse = typeof collegeEmail === 'string' && collegeEmail.trim() ? collegeEmail.trim().toLowerCase() : student.email;
+  const personalEmailToUse = typeof personalEmail === 'string' ? personalEmail.trim().toLowerCase() : (student.personalEmail || '');
+  const addressToUse = typeof address === 'string' ? address.trim() : (student.address || '');
+  const parsedCgpa = typeof cgpa === 'number' ? cgpa : (parseFloat(cgpa) || student.cgpa);
+  const cgpaToUse = Math.max(0, Math.min(10, parsedCgpa));
+
+  const updatedStudent = await db.upsertStudentWithUserLogin({
+    registerNo: student.register_no,
+    name: nameToUse,
+    email: emailToUse,
+    mobileNumber: mobileToUse || undefined,
+    personalEmail: personalEmailToUse || undefined,
+    address: addressToUse || undefined,
+    cgpa: cgpaToUse,
+    year: year || student.year,
+    section: section || student.section,
+    batch: batch || student.batch,
+    createdByFacultyId: student.created_by_faculty_id
+  });
+
+  if (req.user) {
+    await db.logAudit(
+      req.user.id,
+      req.user.email,
+      req.user.role,
+      'UPDATE_STUDENT',
+      `STUDENT:${student.register_no} (Edited by Faculty ${req.user.name})`
+    );
+  }
+
+  return res.json({
+    message: `Student details updated successfully for ${updatedStudent.name}.`,
+    student: updatedStudent
+  });
+});
+
 // GET workspace Elite Students
 router.get('/elite-students', async (req: AuthRequest, res: Response) => {
   const assignment = await db.getFacultyAssignment(req.user!.id);

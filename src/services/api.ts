@@ -1,30 +1,15 @@
 import type { Student, UserSession, TeamHead, Subject } from '../types';
 
-function getApiBaseUrl(): string {
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    // On any production domain (Vercel, custom domain, etc.), always use relative /api
-    if (host !== 'localhost' && host !== '127.0.0.1') {
-      return '/api';
-    }
-  }
-
+export function getApiBaseUrl(): string {
   const envBase = import.meta.env.VITE_API_BASE_URL;
-  if (envBase && typeof envBase === 'string') {
+  if (envBase && typeof envBase === 'string' && envBase.trim() !== '') {
     const trimmed = envBase.trim().replace(/\/$/, '');
-    if (typeof window !== 'undefined') {
-      const host = window.location.hostname;
-      if (host !== 'localhost' && host !== '127.0.0.1' && trimmed.includes('localhost')) {
-        return '/api';
-      }
-    }
     return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
   }
-
   return '/api';
 }
 
-const API_BASE = getApiBaseUrl();
+export const API_BASE = getApiBaseUrl();
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
@@ -124,6 +109,40 @@ export const API = {
     });
   },
 
+  previewStudentExcelImport: async (rows: any[]) => {
+    return request<{
+      totalRows: number;
+      validRowsCount: number;
+      updateRowsCount: number;
+      errorRowsCount: number;
+      canImport: boolean;
+      preview: Array<{
+        rowNumber: number;
+        status: 'VALID_NEW' | 'UPDATE_EXISTING' | 'ERROR';
+        errors: string[];
+        parsedData: {
+          name: string;
+          registerNo: string;
+          mobileNumber: string | null;
+          collegeEmail: string;
+          personalEmail: string | null;
+          address: string | null;
+          cgpa: number;
+        };
+      }>;
+    }>('/admin/students/import-preview', {
+      method: 'POST',
+      body: JSON.stringify({ rows })
+    });
+  },
+
+  confirmStudentExcelImport: async (students: any[], defaultYear?: string, defaultSection?: string, defaultBatch?: string) => {
+    return request<{ message: string; importedCount: number; students: any[] }>('/admin/students/import-confirm', {
+      method: 'POST',
+      body: JSON.stringify({ students, defaultYear, defaultSection, defaultBatch })
+    });
+  },
+
   changeAdminPassword: async (currentPassword: string, newPassword: string) => {
     return request<{ message: string }>('/admin/change-password', {
       method: 'POST',
@@ -173,6 +192,17 @@ export const API = {
   // Faculty
   getAssignedRoster: async () => {
     return request<{ assignedYear: string; assignedSection: string; count: number; students: Student[] }>('/faculty/students');
+  },
+
+  getFacultyStudentById: async (id: string) => {
+    return request<{ student: Student }>(`/faculty/students/${id}`);
+  },
+
+  updateFacultyStudentDetails: async (id: string, details: Partial<Student>) => {
+    return request<{ message: string; student: Student }>(`/faculty/students/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(details)
+    });
   },
 
   getStudent360ForFaculty: async (studentId: string) => {
@@ -435,7 +465,7 @@ export const API = {
     formData.append('weekNo', String(weekNo));
     formData.append('file', file);
 
-    const res = await fetch(`/api/faculty/students/${studentId}/nptel-proofs`, {
+    const res = await fetch(`${API_BASE}/faculty/students/${studentId}/nptel-proofs`, {
       method: 'POST',
       body: formData,
       credentials: 'include'

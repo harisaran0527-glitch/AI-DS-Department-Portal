@@ -117,7 +117,7 @@ router.post('/login', async (req, res) => {
   res.cookie('aids_session_token', token, {
     httpOnly: true,
     secure: Boolean(isSecure),
-    sameSite: 'lax',
+    sameSite: isSecure ? 'none' : 'lax',
     maxAge: 8 * 3600 * 1000
   });
 
@@ -170,6 +170,20 @@ router.post('/change-password', authenticateToken, async (req: AuthRequest, res:
   return res.json({ message: 'Password changed successfully.' });
 });
 
+function getFrontendUrl(req: Request): string {
+  if (process.env.FRONTEND_URL) {
+    return process.env.FRONTEND_URL.trim().replace(/\/$/, '');
+  }
+  const referer = req.headers.referer || req.headers.origin;
+  if (referer) {
+    try {
+      const url = new URL(referer as string);
+      return `${url.protocol}//${url.host}`;
+    } catch {}
+  }
+  return 'http://127.0.0.1:3000';
+}
+
 function generateOAuthState(data: { studentId: string; purpose: string; emailType: string; expectedEmail: string }): string {
   const timestamp = Date.now();
   const payload = JSON.stringify({ ...data, timestamp });
@@ -221,13 +235,13 @@ router.get('/google/start', async (req: Request, res: Response) => {
   if (emailType === 'PERSONAL') {
     expectedEmail = (student.personal_email || (student as any).personalEmail || '').trim();
     if (!expectedEmail) {
-      const redirectUrl = `http://127.0.0.1:3000/faculty?activeTab=nptel&studentId=${studentId}&error=${encodeURIComponent('Personal Mail ID not available for this student.')}`;
+      const redirectUrl = `${getFrontendUrl(req)}/faculty?activeTab=nptel&studentId=${studentId}&error=${encodeURIComponent('Personal Mail ID not available for this student.')}`;
       return res.redirect(redirectUrl);
     }
   } else {
     expectedEmail = (student.email || '').trim();
     if (!expectedEmail) {
-      const redirectUrl = `http://127.0.0.1:3000/faculty?activeTab=nptel&studentId=${studentId}&error=${encodeURIComponent('College Mail ID not available for this student.')}`;
+      const redirectUrl = `${getFrontendUrl(req)}/faculty?activeTab=nptel&studentId=${studentId}&error=${encodeURIComponent('College Mail ID not available for this student.')}`;
       return res.redirect(redirectUrl);
     }
   }
@@ -237,7 +251,7 @@ router.get('/google/start', async (req: Request, res: Response) => {
   const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://127.0.0.1:5000/api/auth/google/callback';
 
   if (!clientId || !clientSecret || clientId.trim() === '' || clientId.includes('YOUR_GOOGLE_CLIENT_ID') || clientId.includes('test-client') || clientId.includes('dummy-client')) {
-    const redirectUrl = `http://127.0.0.1:3000/faculty?error=${encodeURIComponent('Google OAuth is not configured in backend environment variables. Please configure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.')}`;
+    const redirectUrl = `${getFrontendUrl(req)}/faculty?error=${encodeURIComponent('Google OAuth is not configured in backend environment variables. Please configure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.')}`;
     return res.redirect(redirectUrl);
   }
 
@@ -266,14 +280,14 @@ router.get('/google/callback', async (req: Request, res: Response) => {
   const { code, state, error } = req.query;
 
   if (error || !code || !state) {
-    const redirectUrl = `http://127.0.0.1:3000/faculty?error=${encodeURIComponent('Google OAuth authorization was cancelled or failed.')}`;
+    const redirectUrl = `${getFrontendUrl(req)}/faculty?error=${encodeURIComponent('Google OAuth authorization was cancelled or failed.')}`;
     return res.redirect(redirectUrl);
   }
 
   // Cryptographically verify server-generated HMAC state & 15-min expiration
   const statePayload = verifyAndDecodeOAuthState(state as string);
   if (!statePayload) {
-    const redirectUrl = `http://127.0.0.1:3000/faculty?error=${encodeURIComponent('Invalid or expired OAuth state session token. Authorization rejected.')}`;
+    const redirectUrl = `${getFrontendUrl(req)}/faculty?error=${encodeURIComponent('Invalid or expired OAuth state session token. Authorization rejected.')}`;
     return res.redirect(redirectUrl);
   }
 
@@ -314,7 +328,7 @@ router.get('/google/callback', async (req: Request, res: Response) => {
     if (authorizedEmail !== targetExpected) {
       const label = emailType === 'PERSONAL' ? "student's selected Personal Mail ID" : "student's selected College Mail ID";
       const errorMsg = `The authorized Google account does not match this ${label}.`;
-      const errorUrl = `http://127.0.0.1:3000/faculty?activeTab=nptel&studentId=${studentId}&error=${encodeURIComponent(errorMsg)}`;
+      const errorUrl = `${getFrontendUrl(req)}/faculty?activeTab=nptel&studentId=${studentId}&error=${encodeURIComponent(errorMsg)}`;
       return res.redirect(errorUrl);
     }
 
@@ -331,10 +345,10 @@ router.get('/google/callback', async (req: Request, res: Response) => {
       });
     }
 
-    const successUrl = `http://127.0.0.1:3000/faculty?activeTab=nptel&studentId=${studentId}&status=nptel_connected`;
+    const successUrl = `${getFrontendUrl(req)}/faculty?activeTab=nptel&studentId=${studentId}&status=nptel_connected`;
     return res.redirect(successUrl);
   } catch (err: any) {
-    const redirectUrl = `http://127.0.0.1:3000/faculty?error=${encodeURIComponent(err.message || 'Google OAuth authorization failed.')}`;
+    const redirectUrl = `${getFrontendUrl(req)}/faculty?error=${encodeURIComponent(err.message || 'Google OAuth authorization failed.')}`;
     return res.redirect(redirectUrl);
   }
 });

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { API } from '../../services/api';
+import { API, API_BASE } from '../../services/api';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import {
   Upload,
@@ -169,7 +169,7 @@ export const ProofAttachmentControl: React.FC<ProofAttachmentControlProps> = ({
 
           <div className="flex items-center space-x-1.5 shrink-0 self-end sm:self-auto">
             <a
-              href={`/api/files/${attachment.id}`}
+              href={`${API_BASE}/files/${attachment.id}`}
               target="_blank"
               rel="noopener noreferrer"
               className="bg-slate-800 hover:bg-slate-700 text-cyan-400 px-2.5 py-1 rounded-md font-bold text-[11px] flex items-center space-x-1"
@@ -180,7 +180,7 @@ export const ProofAttachmentControl: React.FC<ProofAttachmentControlProps> = ({
             </a>
 
             <a
-              href={`/api/files/${attachment.id}/download`}
+              href={`${API_BASE}/files/${attachment.id}/download`}
               className="bg-slate-800 hover:bg-slate-700 text-emerald-400 px-2.5 py-1 rounded-md font-bold text-[11px] flex items-center space-x-1"
               title="Download Attachment"
             >

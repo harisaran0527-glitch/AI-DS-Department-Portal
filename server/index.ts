@@ -22,7 +22,8 @@ const allowedOrigins = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
   'http://localhost:5173',
-  'http://127.0.0.1:5173'
+  'http://127.0.0.1:5173',
+  'https://aids-department-portal.vercel.app'
 ];
 
 if (process.env.FRONTEND_URL) {
@@ -35,11 +36,13 @@ if (process.env.FRONTEND_URL) {
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(null, true); // Allow flexible cross-origin authentication
+      if (!origin) {
+        return callback(null, true);
       }
+      if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+        return callback(null, true);
+      }
+      return callback(new Error(`Origin ${origin} not allowed by CORS`));
     },
     credentials: true
   })
