@@ -133,12 +133,12 @@ export const StudentDashboard: React.FC = () => {
   const studentMenuItems: MenuItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'profile', label: 'My Profile', icon: GraduationCap },
+    { id: 'discipline', label: 'Discipline Records', icon: AlertTriangle },
     { id: 'connected-accounts', label: 'Connected Accounts', icon: LinkIcon },
     { id: 'academics', label: 'Academics', icon: BookOpen },
     { id: 'skilledge', label: 'SkillEdge', icon: Code },
     { id: 'nptel', label: 'NPTEL', icon: FileCheck },
     { id: 'attendance', label: 'Attendance', icon: Calendar },
-    { id: 'discipline', label: 'Discipline', icon: AlertTriangle },
     { id: 'certificates', label: 'Certificates', icon: FileText },
     { id: 'participation', label: 'Participation', icon: Users },
     { id: 'leetcode', label: 'LeetCode', icon: Code },

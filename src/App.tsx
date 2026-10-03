@@ -33,6 +33,8 @@ export const App: React.FC = () => {
           <Route path="/student/dashboard" element={<ProtectedRoute allowedRoles={['STUDENT']} loginRoute="/student"><StudentDashboard /></ProtectedRoute>} />
           <Route path="/faculty/dashboard" element={<ProtectedRoute allowedRoles={['FACULTY']} loginRoute="/faculty"><FacultyDashboard /></ProtectedRoute>} />
           <Route path="/faculty/discipline" element={<ProtectedRoute allowedRoles={['FACULTY', 'HOD', 'ADMIN']} loginRoute="/faculty"><DisciplineIssuePage /></ProtectedRoute>} />
+          <Route path="/discipline-issues" element={<ProtectedRoute allowedRoles={['FACULTY', 'HOD', 'ADMIN']} loginRoute="/faculty"><DisciplineIssuePage /></ProtectedRoute>} />
+          <Route path="/discipline" element={<ProtectedRoute allowedRoles={['FACULTY', 'HOD', 'ADMIN']} loginRoute="/faculty"><DisciplineIssuePage /></ProtectedRoute>} />
           <Route path="/hod/dashboard" element={<ProtectedRoute allowedRoles={['HOD']} loginRoute="/hod"><HODDashboard /></ProtectedRoute>} />
           <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={['ADMIN']} loginRoute="/admin"><AdminDashboard /></ProtectedRoute>} />
 

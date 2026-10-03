@@ -1543,11 +1543,6 @@ export const FacultyDashboard: React.FC = () => {
         setIsBestLeetCodePerformerExpanded(!isBestLeetCodePerformerExpanded);
         setActiveTab('best-leetcode-performer');
       }
-    },
-    {
-      id: 'discipline-issues',
-      label: 'Discipline Issues',
-      icon: ShieldAlert
     }
   ];
 
