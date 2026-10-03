@@ -704,8 +704,53 @@ router.delete('/hod/:id', async (req: AuthRequest, res: Response) => {
 
   await db.deleteHODUser(id);
   await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'DELETE_HOD', `HOD:${targetHOD.email}`);
+  return res.json({ message: 'HOD account deleted successfully.' });
+});
 
-  return res.json({ message: `HOD account ${targetHOD.name} deleted successfully.` });
+// ADMIN ATTENDANCE ENDPOINTS
+router.get('/attendance/daily', async (req: AuthRequest, res: Response) => {
+  const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
+  const year = req.query.year as string;
+  const section = req.query.section as string;
+  const records = await db.getClassDailyAttendanceByDate(date, undefined, year, section);
+  return res.json({ date, records });
+});
+
+router.get('/attendance/summary', async (req: AuthRequest, res: Response) => {
+  const year = req.query.year as string;
+  const section = req.query.section as string;
+  const summary = await db.getMonthlyAttendanceSummary(undefined, year, section);
+  return res.json({ summary });
+});
+
+router.post('/attendance/import-preview', async (req: AuthRequest, res: Response) => {
+  try {
+    const { rows } = req.body || {};
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: 'No attendance rows provided.' });
+    }
+    const preview = await db.previewBulkAttendanceImport(rows);
+    return res.json(preview);
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'Failed to preview bulk attendance import.' });
+  }
+});
+
+router.post('/attendance/import-confirm', async (req: AuthRequest, res: Response) => {
+  try {
+    const { records } = req.body || {};
+    if (!Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ error: 'No valid attendance records to confirm.' });
+    }
+    const result = await db.confirmBulkAttendanceImport(records, req.user!.email);
+    await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'ADMIN_BULK_IMPORT_ATTENDANCE', `RECORDS:${result.importedCount}:STUDENTS:${result.updatedStudentsCount}`);
+    return res.json({
+      message: 'Monthly bulk attendance imported successfully by Admin.',
+      ...result
+    });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'Failed to import bulk attendance.' });
+  }
 });
 
 export default router;

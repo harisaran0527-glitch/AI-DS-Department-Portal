@@ -1165,23 +1165,28 @@ router.get('/participation/:partId/download', async (req: AuthRequest, res: Resp
   return res.download(filePath, origName);
 });
 
-// CR ATTENDANCE STYLE ENDPOINTS
+// ATTENDANCE MODULE ENDPOINTS
 router.get('/attendance', async (req: AuthRequest, res: Response) => {
-  const date = (req.query.date as string) || '2026-07-13';
-  if (date < '2026-07-13') {
-    return res.status(400).json({ error: 'Attendance dates before 13 July 2026 are not valid or selectable.' });
-  }
-  const records = await db.getDailyAttendanceByDateForFaculty(req.user!.id, date);
+  const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
+  const records = await db.getClassDailyAttendanceByDate(date, req.user!.id);
   return res.json({ date, records });
+});
+
+router.get('/attendance/daily', async (req: AuthRequest, res: Response) => {
+  const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
+  const records = await db.getClassDailyAttendanceByDate(date, req.user!.id);
+  return res.json({ date, records });
+});
+
+router.get('/attendance/summary', async (req: AuthRequest, res: Response) => {
+  const summary = await db.getMonthlyAttendanceSummary(req.user!.id);
+  return res.json({ summary });
 });
 
 router.post('/attendance', async (req: AuthRequest, res: Response) => {
   const { date, records } = req.body;
   if (!date || !Array.isArray(records)) {
     return res.status(400).json({ error: 'Date and records array are required.' });
-  }
-  if (date < '2026-07-13') {
-    return res.status(400).json({ error: 'Attendance dates before 13 July 2026 are not valid or selectable.' });
   }
 
   // Verify workspace ownership for every student record
@@ -1195,9 +1200,50 @@ router.post('/attendance', async (req: AuthRequest, res: Response) => {
   try {
     await db.saveDailyAttendance(date, records, req.user!.email);
     await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'SAVE_DAILY_ATTENDANCE', `DATE:${date}:COUNT:${records.length}`);
-    return res.json({ message: 'Daily attendance saved successfully.', date, records: await db.getDailyAttendanceByDateForFaculty(req.user!.id, date) });
+    return res.json({ message: 'Daily attendance saved successfully.', date, records: await db.getClassDailyAttendanceByDate(date, req.user!.id) });
   } catch (err: any) {
     return res.status(400).json({ error: err.message || 'Failed to save attendance.' });
+  }
+});
+
+router.post('/attendance/import-preview', async (req: AuthRequest, res: Response) => {
+  try {
+    const { rows } = req.body || {};
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: 'No attendance rows provided.' });
+    }
+
+    const preview = await db.previewBulkAttendanceImport(rows, req.user!.id);
+    return res.json(preview);
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'Failed to preview bulk attendance import.' });
+  }
+});
+
+router.post('/attendance/import-confirm', async (req: AuthRequest, res: Response) => {
+  try {
+    const { records } = req.body || {};
+    if (!Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ error: 'No valid attendance records to confirm.' });
+    }
+
+    // Verify workspace ownership for every student in records
+    for (const r of records) {
+      const stu = await db.getStudentById(r.studentId);
+      if (stu && stu.created_by_faculty_id && stu.created_by_faculty_id !== req.user!.id && stu.faculty_workspace_id !== req.user!.id) {
+        return res.status(403).json({ error: 'Forbidden: Record contains student outside your assigned workspace.' });
+      }
+    }
+
+    const result = await db.confirmBulkAttendanceImport(records, req.user!.email);
+    await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'BULK_IMPORT_ATTENDANCE', `RECORDS:${result.importedCount}:STUDENTS:${result.updatedStudentsCount}`);
+
+    return res.json({
+      message: 'Monthly bulk attendance imported successfully.',
+      ...result
+    });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'Failed to import bulk attendance.' });
   }
 });
 

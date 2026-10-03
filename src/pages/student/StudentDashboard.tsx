@@ -729,6 +729,151 @@ export const StudentDashboard: React.FC = () => {
         </div>
         )}
 
+        {/* ATTENDANCE TAB (VIEW-ONLY FOR STUDENT) */}
+        {activeTab === 'attendance' && (
+          <div className="space-y-6">
+            <GeminiCategoryBestPerformerCard
+              categoryKey="attendance"
+              assignedYear={student.year}
+              assignedSection={student.section}
+            />
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 text-xs font-mono">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center space-x-2 font-sans">
+                    <Calendar className="w-5 h-5 text-emerald-400" />
+                    <span>My Attendance Record & History</span>
+                  </h3>
+                  <p className="text-slate-400 font-mono text-[11px] mt-0.5">
+                    View-only student portal. Attendance records are updated via official faculty monthly bulk imports and daily logs.
+                  </p>
+                </div>
+                <span className="bg-emerald-950 border border-emerald-800 text-emerald-300 text-[11px] px-3 py-1 rounded-full font-bold flex items-center space-x-1 shrink-0">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>READ-ONLY VIEW</span>
+                </span>
+              </div>
+
+              {/* OVERALL SUMMARY STAT METRIC CARDS */}
+              {(() => {
+                const totalWorking = _attendance?.totalWorkingDays ?? _attendance?.total_working_days ?? 0;
+                const presentDays = _attendance?.presentDays ?? _attendance?.present_days ?? 0;
+                const absentDays = _attendance?.absentDays ?? _attendance?.absent_days ?? 0;
+                const odDays = _attendance?.odDays ?? _attendance?.od_days ?? 0;
+                const mlDays = _attendance?.mlDays ?? _attendance?.ml_days ?? 0;
+                const pct = _attendance?.percentage ?? 0;
+
+                let pctBadgeStyle = 'bg-emerald-950 text-emerald-300 border-emerald-800';
+                if (pct < 65) pctBadgeStyle = 'bg-red-950 text-red-300 border-red-800';
+                else if (pct < 75) pctBadgeStyle = 'bg-amber-950 text-amber-300 border-amber-800';
+
+                return (
+                  <div className="space-y-4 font-mono">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                      <div className="bg-slate-950 border border-slate-800 p-3.5 rounded-xl">
+                        <div className="text-[10px] text-slate-400 uppercase font-bold">Total Working Days</div>
+                        <div className="text-xl font-black text-white mt-1">{totalWorking}</div>
+                      </div>
+                      <div className="bg-emerald-950/40 border border-emerald-800/60 p-3.5 rounded-xl">
+                        <div className="text-[10px] text-emerald-400 uppercase font-bold flex items-center justify-between">
+                          <span>Present</span>
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                        </div>
+                        <div className="text-xl font-black text-emerald-300 mt-1">{presentDays}</div>
+                      </div>
+                      <div className="bg-red-950/40 border border-red-800/60 p-3.5 rounded-xl">
+                        <div className="text-[10px] text-red-400 uppercase font-bold flex items-center justify-between">
+                          <span>Absent</span>
+                          <XCircle className="w-3.5 h-3.5 text-red-400" />
+                        </div>
+                        <div className="text-xl font-black text-red-300 mt-1">{absentDays}</div>
+                      </div>
+                      <div className="bg-amber-950/40 border border-amber-800/60 p-3.5 rounded-xl">
+                        <div className="text-[10px] text-amber-400 uppercase font-bold flex items-center justify-between">
+                          <span>On Duty (OD)</span>
+                          <Star className="w-3.5 h-3.5 text-amber-400" />
+                        </div>
+                        <div className="text-xl font-black text-amber-300 mt-1">{odDays}</div>
+                      </div>
+                      <div className="bg-sky-950/40 border border-sky-800/60 p-3.5 rounded-xl">
+                        <div className="text-[10px] text-sky-400 uppercase font-bold flex items-center justify-between">
+                          <span>Medical Leave</span>
+                          <FileText className="w-3.5 h-3.5 text-sky-400" />
+                        </div>
+                        <div className="text-xl font-black text-sky-300 mt-1">{mlDays}</div>
+                      </div>
+                      <div className="bg-slate-950 border border-slate-800 p-3.5 rounded-xl flex flex-col justify-between">
+                        <div className="text-[10px] text-slate-400 uppercase font-bold">Attendance %</div>
+                        <div className="mt-1">
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-sm font-extrabold border ${pctBadgeStyle}`}>
+                            {pct.toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar */}
+                    {totalWorking > 0 && (
+                      <div className="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden flex border border-slate-800">
+                        <div style={{ width: `${(presentDays / totalWorking) * 100}%` }} className="bg-emerald-500 h-full" title={`Present: ${presentDays}`} />
+                        <div style={{ width: `${(absentDays / totalWorking) * 100}%` }} className="bg-red-500 h-full" title={`Absent: ${absentDays}`} />
+                        <div style={{ width: `${(odDays / totalWorking) * 100}%` }} className="bg-amber-500 h-full" title={`OD: ${odDays}`} />
+                        <div style={{ width: `${(mlDays / totalWorking) * 100}%` }} className="bg-sky-500 h-full" title={`ML: ${mlDays}`} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* DAILY DATE-WISE ATTENDANCE LOG TABLE */}
+              <div className="space-y-3 font-mono">
+                <h4 className="font-bold text-white text-sm font-sans uppercase border-b border-slate-800 pb-2 flex justify-between items-center">
+                  <span>Daily Date-Wise History Logs</span>
+                  <span className="text-xs text-slate-400 font-mono font-normal">Individual Daily Records</span>
+                </h4>
+
+                {Array.isArray(_attendance?.historyLogs) && _attendance.historyLogs.length > 0 ? (
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden max-h-96 overflow-y-auto">
+                    <table className="w-full text-left font-sans text-xs">
+                      <thead className="bg-slate-900 text-slate-400 font-mono text-[10px] uppercase sticky top-0 border-b border-slate-800">
+                        <tr>
+                          <th className="py-3 px-4 font-bold w-12 text-center">#</th>
+                          <th className="py-3 px-4 font-bold">Attendance Date</th>
+                          <th className="py-3 px-4 font-bold text-center">Status</th>
+                          <th className="py-3 px-4 font-bold">Recorded By</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
+                        {_attendance.historyLogs.map((log: any, idx: number) => (
+                          <tr key={idx} className="hover:bg-slate-900/60">
+                            <td className="py-2.5 px-4 text-center text-slate-500">{idx + 1}</td>
+                            <td className="py-2.5 px-4 font-bold text-emerald-400">{log.date}</td>
+                            <td className="py-2.5 px-4 text-center">
+                              <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
+                                log.status === 'PRESENT' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+                                log.status === 'ABSENT' ? 'bg-red-950 text-red-300 border border-red-800' :
+                                log.status === 'OD' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                                'bg-sky-950 text-sky-300 border border-sky-800'
+                              }`}>
+                                {log.status}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-4 text-slate-400 text-[11px]">{log.recordedBy || 'Faculty'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 text-center text-slate-500 font-mono">
+                    No daily attendance logs recorded yet.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* SKILLEDGE TAB WITH DAILY AUTO-SYNC & HISTORY LOG */}
         {activeTab === 'skilledge' && (
           <div className="space-y-6">

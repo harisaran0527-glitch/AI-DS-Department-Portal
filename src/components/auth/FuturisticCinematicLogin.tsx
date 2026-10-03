@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API } from '../../services/api';
-import { User, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, ShieldCheck, Sparkles } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, ShieldCheck, Sparkles, ShieldAlert, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ForgotPasswordModal } from '../common/ForgotPasswordModal';
+import { ThemeToggle } from '../common/ThemeToggle';
 import { ParticleField } from './ParticleField';
 import type { Role } from '../../types';
 
@@ -162,9 +163,12 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                 SECURE ACCESS NODE
               </span>
             </div>
-            <span className="text-[10px] font-mono text-slate-300 bg-[#071A3D] px-2.5 py-0.5 rounded border border-[#1E4D8F]/60 font-semibold tracking-wider">
-              AVSEC-AI&DS v4.9
-            </span>
+            <div className="flex items-center space-x-2">
+              <ThemeToggle />
+              <span className="text-[10px] font-mono text-slate-300 bg-[#071A3D] px-2.5 py-0.5 rounded border border-[#1E4D8F]/60 font-semibold tracking-wider">
+                AVSEC-AI&DS v4.9
+              </span>
+            </div>
           </div>
 
           {/* BRANDING HEADER */}
@@ -371,6 +375,43 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
             AVS Engineering College • Department of AI & DS
           </div>
         </motion.div>
+
+        {/* SEPARATE DISCIPLINE ISSUE MODULE OPTION CARD FOR FACULTY */}
+        {portalRole === 'FACULTY' && (
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            className="mt-4 rounded-2xl p-4 bg-[#0B2559]/90 border border-rose-500/50 shadow-[0_15px_40px_rgba(244,63,94,0.15)] backdrop-blur-2xl"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                  <ShieldAlert className="w-5 h-5 animate-pulse" />
+                </div>
+                <div className="text-left">
+                  <div className="flex items-center space-x-1.5">
+                    <span className="w-2 h-2 rounded-full bg-rose-400 animate-ping" />
+                    <h4 className="text-xs font-bold text-white tracking-wide uppercase font-mono">
+                      DISCIPLINE ISSUE MODULE
+                    </h4>
+                  </div>
+                  <p className="text-[11px] text-[#D9E6FF]/80 font-sans mt-0.5">
+                    All-Student Access • Log & track campus rule violations
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/faculty/discipline')}
+                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold text-xs flex items-center space-x-1.5 shadow-lg shadow-rose-900/40 transition-all cursor-pointer hover:scale-105"
+              >
+                <span>Open Module</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </motion.div>
+        )}
       </div>
 
       {/* FORGOT PASSWORD MODAL */}

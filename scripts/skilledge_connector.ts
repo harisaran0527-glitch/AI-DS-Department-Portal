@@ -402,7 +402,7 @@ export async function executeCollegeEmailSynchronization(
   let duplicateCount = 0;
 
   for (const stu of portalStudents) {
-    const portalCollegeEmail = normalizeEmail(stu.email || stu.college_email || stu.personal_email);
+    const portalCollegeEmail = normalizeEmail(stu.email || stu.college_email || stu.personal_email || '');
     if (!portalCollegeEmail) {
       console.log(`⚠️  [No Email] Student "${stu.name}" (${stu.register_no}) has no college email configured.`);
       continue;

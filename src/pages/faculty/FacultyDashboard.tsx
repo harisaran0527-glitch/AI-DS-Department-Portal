@@ -11,6 +11,7 @@ import { BestEliteStudentsView } from '../../components/elite/BestEliteStudentsV
 import { GeminiTopRecognitionView } from '../../components/ranking/GeminiTopRecognitionView';
 import { GeminiCategoryBestPerformerCard } from '../../components/ranking/GeminiCategoryBestPerformerCard';
 import { GeminiFullLeetCodeDashboard } from '../../components/ranking/GeminiFullLeetCodeDashboard';
+import { DisciplineIssueModule } from '../../components/discipline/DisciplineIssueModule';
 import { getNptelUrlForStudent } from '../../services/nptelUrlHelper';
 import {
   Users,
@@ -45,15 +46,17 @@ import {
   CheckCircle2,
   Star,
   User,
-  History,
-  Clock,
   CheckCircle,
   XCircle,
   RotateCcw,
   Pencil,
   Download,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+  BarChart3,
+  ShieldAlert
 } from 'lucide-react';
 
 function formatDate(d?: string): string {
@@ -173,7 +176,7 @@ export const FacultyDashboard: React.FC = () => {
       const res = await API.updateFacultyStudentDetails(editingStudent.id, editForm);
       alert(res.message || 'Student details updated successfully.');
       setEditingStudent(null);
-      fetchFacultyData();
+      fetchRoster();
     } catch (err: any) {
       setEditError(err.message || 'Failed to update student details.');
     } finally {
@@ -248,17 +251,27 @@ export const FacultyDashboard: React.FC = () => {
   const [nptelProofWeek, setNptelProofWeek] = useState('Week 1');
   const [nptelProofFile, setNptelProofFile] = useState<File | null>(null);
 
-  // --- ATTENDANCE STATE (CR ATTENDANCE STYLE REDESIGN) ---
+  // --- ATTENDANCE STATE (CR ATTENDANCE WORKFLOW) ---
   const [attGroup, setAttGroup] = useState<'REGULAR' | 'LATERAL'>('REGULAR');
   const [attDate, setAttDate] = useState<string>(() => {
-    const today = new Date().toISOString().split('T')[0];
-    return today >= '2026-07-13' ? today : '2026-07-13';
+    return new Date().toISOString().split('T')[0];
   });
   const [attStudentStatuses, setAttStudentStatuses] = useState<Record<string, string>>({});
   const [attSearch, setAttSearch] = useState('');
-  const [attViewMode, setAttViewMode] = useState<'ROSTER' | 'HISTORY'>('ROSTER');
+  const [attViewMode, setAttViewMode] = useState<'DAILY' | 'SUMMARY' | 'BULK_IMPORT'>('DAILY');
+  const [monthlySummaryList, setMonthlySummaryList] = useState<any[]>([]);
+  const [isSummaryLoading, setIsSummaryLoading] = useState(false);
   const [attHistory, setAttHistory] = useState<any[]>([]);
   const [isAttSaving, setIsAttSaving] = useState(false);
+
+  // Bulk Import state
+  const [bulkInputText, setBulkInputText] = useState('');
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [isBulkPreviewing, setIsBulkPreviewing] = useState(false);
+  const [isBulkConfirming, setIsBulkConfirming] = useState(false);
+  const [bulkPreviewResult, setBulkPreviewResult] = useState<any | null>(null);
+  const [bulkImportError, setBulkImportError] = useState('');
+  const [bulkImportSuccess, setBulkImportSuccess] = useState('');
 
   // --- DISCIPLINE FORM STATE & FINE RULE ENGINE ---
   const [discCat, setDisciplineCat] = useState<'Late Comer' | 'Grooming' | 'ID Card' | 'Dress Code'>('Late Comer');
@@ -835,23 +848,108 @@ export const FacultyDashboard: React.FC = () => {
     } catch {}
   }, []);
 
+  const fetchMonthlySummary = React.useCallback(async () => {
+    setIsSummaryLoading(true);
+    try {
+      const res = await API.getMonthlyAttendanceSummary('FACULTY');
+      if (Array.isArray(res.summary)) {
+        setMonthlySummaryList(res.summary);
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch monthly summary', err);
+    } finally {
+      setIsSummaryLoading(false);
+    }
+  }, []);
+
+  const handleBulkPreview = async (parsedRows: any[]) => {
+    setIsBulkPreviewing(true);
+    setBulkImportError('');
+    setBulkImportSuccess('');
+    setBulkPreviewResult(null);
+
+    try {
+      const res = await API.previewAttendanceImport(parsedRows, 'FACULTY');
+      setBulkPreviewResult(res);
+    } catch (err: any) {
+      setBulkImportError(err.message || 'Failed to preview attendance import.');
+    } finally {
+      setIsBulkPreviewing(false);
+    }
+  };
+
+  const handleBulkFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBulkFile(file);
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        handleBulkPreview(results.data);
+      },
+      error: (err) => {
+        setBulkImportError(`CSV parsing error: ${err.message}`);
+      }
+    });
+  };
+
+  const handleBulkTextParse = () => {
+    if (!bulkInputText.trim()) {
+      setBulkImportError('Please paste attendance CSV or tabular text.');
+      return;
+    }
+    const results = Papa.parse(bulkInputText, { header: true, skipEmptyLines: true });
+    if (results.errors && results.errors.length > 0 && results.data.length === 0) {
+      setBulkImportError(`Text parsing error: ${results.errors[0].message}`);
+      return;
+    }
+    handleBulkPreview(results.data);
+  };
+
+  const handleConfirmBulkImport = async () => {
+    if (!bulkPreviewResult || !Array.isArray(bulkPreviewResult.validRecords) || bulkPreviewResult.validRecords.length === 0) {
+      setBulkImportError('No valid attendance records ready for import.');
+      return;
+    }
+    setIsBulkConfirming(true);
+    setBulkImportError('');
+    setBulkImportSuccess('');
+
+    try {
+      const res = await API.confirmAttendanceImport(bulkPreviewResult.validRecords, 'FACULTY');
+      setBulkImportSuccess(`Imported ${res.importedCount} daily attendance records for ${res.updatedStudentsCount} students!`);
+      setBulkPreviewResult(null);
+      setBulkInputText('');
+      setBulkFile(null);
+      
+      fetchRoster();
+      fetchMonthlySummary();
+    } catch (err: any) {
+      setBulkImportError(err.message || 'Failed to confirm bulk attendance import.');
+    } finally {
+      setIsBulkConfirming(false);
+    }
+  };
+
   // Fetch Daily Attendance whenever attDate changes
   useEffect(() => {
-    if (!attDate || attDate < '2026-07-13') return;
+    if (!attDate) return;
     fetch(`${API_BASE}/faculty/attendance?date=${attDate}`)
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data.records)) {
           const map: Record<string, string> = {};
           data.records.forEach((r: any) => {
-            map[r.student_id] = r.status;
+            map[r.studentId || r.student_id] = r.status;
           });
           setAttStudentStatuses(map);
         }
       })
       .catch(() => setAttStudentStatuses({}));
     fetchAttendanceHistory();
-  }, [attDate, fetchAttendanceHistory]);
+    fetchMonthlySummary();
+  }, [attDate, fetchAttendanceHistory, fetchMonthlySummary]);
 
   const reloadStudent360 = async () => {
     if (!selectedStudent) return;
@@ -1445,6 +1543,11 @@ export const FacultyDashboard: React.FC = () => {
         setIsBestLeetCodePerformerExpanded(!isBestLeetCodePerformerExpanded);
         setActiveTab('best-leetcode-performer');
       }
+    },
+    {
+      id: 'discipline-issues',
+      label: 'Discipline Issues',
+      icon: ShieldAlert
     }
   ];
 
@@ -1690,6 +1793,9 @@ export const FacultyDashboard: React.FC = () => {
       }
     >
       <div className="space-y-6 max-w-7xl mx-auto">
+        {activeTab === 'discipline-issues' && (
+          <DisciplineIssueModule userRole="FACULTY" />
+        )}
 
         {(activeTab === 'best-elite-student' || activeTab.startsWith('best-elite-')) && (
           <BestEliteStudentsView
@@ -2799,82 +2905,131 @@ export const FacultyDashboard: React.FC = () => {
             />
             <div className="bg-slate-900/95 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-2xl font-sans">
             {/* 1. CR ATTENDANCE HEADER & TOOLBAR */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-5 font-sans">
               <div className="space-y-1">
                 <div className="flex items-center space-x-2">
                   <span className="bg-indigo-950 border border-indigo-700/70 text-indigo-300 text-[10px] font-mono px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center space-x-1">
                     <ShieldCheck className="w-3 h-3 text-cyan-400" />
-                    <span>CR ATTENDANCE INTERFACE REFERENCE</span>
+                    <span>REGISTER NUMBER MATCHED WORKFLOW</span>
                   </span>
                   <span className="bg-emerald-950 border border-emerald-800 text-emerald-300 text-[10px] font-mono px-2.5 py-0.5 rounded-full font-bold">
-                    ISOLATED FACULTY WORKSPACE
+                    {assignedYear} - SECTION {assignedSection}
                   </span>
                 </div>
                 <h2 className="text-xl font-extrabold text-white flex items-center space-x-2 tracking-tight">
                   <Calendar className="w-6 h-6 text-emerald-400 shrink-0" />
-                  <span>Daily Class Representative Attendance Workspace</span>
+                  <span>Class Attendance Management</span>
                 </h2>
                 <p className="text-xs text-slate-400 font-mono">
-                  Mark, update, and manage student attendance with live statistics and SQLite backend synchronization.
+                  Daily date-wise attendance records & monthly bulk imports matched strictly by student Register Number.
                 </p>
               </div>
 
-              {/* CONTROLS: VIEW MODE & DATE SELECTOR */}
-              <div className="flex flex-wrap items-center gap-3">
-                {/* View Mode Toggle: Roster vs History */}
+              {/* VIEW MODE NAVIGATION TABS */}
+              <div className="flex flex-wrap items-center gap-2">
                 <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-mono">
                   <button
                     type="button"
-                    onClick={() => setAttViewMode('ROSTER')}
+                    onClick={() => setAttViewMode('DAILY')}
                     className={`px-3 py-1.5 rounded-lg transition-all font-bold flex items-center space-x-1.5 ${
-                      attViewMode === 'ROSTER' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                      attViewMode === 'DAILY' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
                     }`}
                   >
-                    <UserCheck className="w-3.5 h-3.5" />
-                    <span>Daily Roster</span>
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>Daily View</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => {
-                      setAttViewMode('HISTORY');
-                      fetchAttendanceHistory();
+                      setAttViewMode('SUMMARY');
+                      fetchMonthlySummary();
                     }}
                     className={`px-3 py-1.5 rounded-lg transition-all font-bold flex items-center space-x-1.5 ${
-                      attViewMode === 'HISTORY' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                      attViewMode === 'SUMMARY' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
                     }`}
                   >
-                    <History className="w-3.5 h-3.5" />
-                    <span>History Log</span>
+                    <BarChart3 className="w-3.5 h-3.5" />
+                    <span>Monthly Summary</span>
                   </button>
-                </div>
-
-                {/* Date Picker Control */}
-                <div className="flex items-center space-x-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
-                  <Clock className="w-4 h-4 text-emerald-400" />
-                  <span className="text-[11px] text-slate-400 font-mono font-semibold">Date:</span>
-                  <input
-                    type="date"
-                    value={attDate}
-                    min="2026-07-13"
-                    onChange={(e) => setAttDate(e.target.value)}
-                    className="bg-slate-900 border border-slate-800 px-2 py-1 rounded-lg text-white font-mono text-xs focus:outline-none focus:border-emerald-500"
-                  />
                   <button
                     type="button"
-                    onClick={() => {
-                      const today = new Date().toISOString().split('T')[0];
-                      setAttDate(today >= '2026-07-13' ? today : '2026-07-13');
-                    }}
-                    className="text-[10px] text-emerald-400 hover:underline font-mono bg-emerald-950/60 border border-emerald-800/60 px-2 py-1 rounded-md"
+                    onClick={() => setAttViewMode('BULK_IMPORT')}
+                    className={`px-3 py-1.5 rounded-lg transition-all font-bold flex items-center space-x-1.5 ${
+                      attViewMode === 'BULK_IMPORT' ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                    }`}
                   >
-                    Today
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Monthly Bulk Import</span>
                   </button>
                 </div>
               </div>
             </div>
 
-            {attViewMode === 'ROSTER' ? (
-              <div className="space-y-6">
+            {attViewMode === 'DAILY' ? (
+              <div className="space-y-6 font-mono">
+                {/* PROMINENT TOP DATE SELECTOR / DATE PICKER */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-950 p-4 rounded-xl border border-slate-800 font-mono text-xs shadow-lg">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const parts = attDate.split('-');
+                        if (parts.length === 3) {
+                          const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                          d.setDate(d.getDate() - 1);
+                          setAttDate(d.toISOString().split('T')[0]);
+                        }
+                      }}
+                      className="bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 px-3 py-2 rounded-lg font-bold flex items-center space-x-1 transition-all"
+                    >
+                      <ChevronLeft className="w-4 h-4 text-emerald-400" />
+                      <span>Previous</span>
+                    </button>
+
+                    <div className="flex items-center space-x-2 bg-slate-900 px-3.5 py-1.5 rounded-lg border border-slate-700 text-white">
+                      <Calendar className="w-4 h-4 text-emerald-400" />
+                      <span className="text-slate-400 text-[11px] font-semibold">Date:</span>
+                      <input
+                        type="date"
+                        value={attDate}
+                        onChange={(e) => setAttDate(e.target.value)}
+                        className="bg-transparent text-white font-mono text-xs focus:outline-none cursor-pointer"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const parts = attDate.split('-');
+                        if (parts.length === 3) {
+                          const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                          d.setDate(d.getDate() + 1);
+                          setAttDate(d.toISOString().split('T')[0]);
+                        }
+                      }}
+                      className="bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 px-3 py-2 rounded-lg font-bold flex items-center space-x-1 transition-all"
+                    >
+                      <span>Next</span>
+                      <ChevronRight className="w-4 h-4 text-emerald-400" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const today = new Date().toISOString().split('T')[0];
+                        setAttDate(today);
+                      }}
+                      className="bg-emerald-950 border border-emerald-800 hover:bg-emerald-900 text-emerald-300 px-3 py-2 rounded-lg font-bold text-xs"
+                    >
+                      Today
+                    </button>
+                  </div>
+
+                  <div className="text-slate-400 font-mono text-xs flex items-center space-x-2">
+                    <span>Viewing Attendance For: <strong className="text-emerald-400 font-bold text-sm ml-1">{attDate}</strong></span>
+                  </div>
+                </div>
+
                 {/* 2. ENTRY GROUP TABS & LIVE METRIC CARDS */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
                   {/* Category Selection Tabs */}
@@ -3249,75 +3404,382 @@ export const FacultyDashboard: React.FC = () => {
                   </button>
                 </div>
               </div>
-            ) : (
-              /* HISTORY LOG MODE */
-              <div className="space-y-4">
-                <div className="flex justify-between items-center bg-slate-950 p-4 rounded-xl border border-slate-800 font-mono text-xs">
+            ) : attViewMode === 'SUMMARY' ? (
+              /* MONTHLY SUMMARY VIEW */
+              <div className="space-y-4 font-mono">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs">
                   <div>
-                    <h3 className="text-sm font-bold text-white flex items-center space-x-2">
-                      <History className="w-4 h-4 text-indigo-400" />
-                      <span>Faculty Workspace Daily Attendance History</span>
+                    <h3 className="text-sm font-bold text-white flex items-center space-x-2 font-sans">
+                      <BarChart3 className="w-4 h-4 text-indigo-400" />
+                      <span>Monthly Attendance Summary — {assignedYear} Section {assignedSection}</span>
                     </h3>
-                    <p className="text-slate-400 text-[11px] mt-0.5">Historical records logged starting from July 13, 2026.</p>
+                    <p className="text-slate-400 text-[11px] mt-0.5">
+                      Cumulative student working days, attendance counts, and percentage matched strictly by Register Number.
+                    </p>
                   </div>
 
                   <button
                     type="button"
-                    onClick={fetchAttendanceHistory}
-                    className="bg-slate-900 text-indigo-300 border border-indigo-700/60 hover:bg-slate-800 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center space-x-1"
+                    onClick={fetchMonthlySummary}
+                    disabled={isSummaryLoading}
+                    className="bg-slate-900 text-indigo-300 border border-indigo-700/60 hover:bg-slate-800 px-3.5 py-2 rounded-lg text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer"
                   >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Refresh Logs</span>
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSummaryLoading ? 'animate-spin text-indigo-400' : ''}`} />
+                    <span>Refresh Summary</span>
                   </button>
                 </div>
 
-                <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
-                  <table className="w-full text-left font-sans text-xs">
-                    <thead>
-                      <tr className="bg-slate-900 text-slate-400 font-mono text-[11px] uppercase tracking-wider border-b border-slate-800">
-                        <th className="py-3 px-4 font-bold">Date</th>
-                        <th className="py-3 px-4 font-bold text-center">Present</th>
-                        <th className="py-3 px-4 font-bold text-center">Absent</th>
-                        <th className="py-3 px-4 font-bold text-center">On Duty</th>
-                        <th className="py-3 px-4 font-bold text-center">Leave</th>
-                        <th className="py-3 px-4 font-bold text-center">Total Marked</th>
-                        <th className="py-3 px-4 font-bold text-right">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/60">
-                      {attHistory.length === 0 ? (
-                        <tr>
-                          <td colSpan={7} className="py-12 text-center text-slate-500 font-mono">
-                            No saved daily attendance logs found. Save attendance in Roster view to create history records.
-                          </td>
+                <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left font-sans text-xs">
+                      <thead>
+                        <tr className="bg-slate-900/90 text-slate-400 font-mono text-[11px] uppercase tracking-wider border-b border-slate-800">
+                          <th className="py-3.5 px-4 font-bold w-12 text-center">#</th>
+                          <th className="py-3.5 px-4 font-bold">Register Number</th>
+                          <th className="py-3.5 px-4 font-bold">Student Name</th>
+                          <th className="py-3.5 px-4 font-bold text-center">Working Days</th>
+                          <th className="py-3.5 px-4 font-bold text-center">Present</th>
+                          <th className="py-3.5 px-4 font-bold text-center">Absent</th>
+                          <th className="py-3.5 px-4 font-bold text-center">On Duty</th>
+                          <th className="py-3.5 px-4 font-bold text-center">Leave / ML</th>
+                          <th className="py-3.5 px-4 font-bold text-center">Attendance %</th>
                         </tr>
-                      ) : (
-                        attHistory.map((item) => (
-                          <tr key={item.date} className="hover:bg-slate-900/60 font-mono text-xs">
-                            <td className="py-3 px-4 font-bold text-emerald-400">{item.date}</td>
-                            <td className="py-3 px-4 text-center text-emerald-300 font-bold">{item.presentCount || 0}</td>
-                            <td className="py-3 px-4 text-center text-red-400 font-bold">{item.absentCount || 0}</td>
-                            <td className="py-3 px-4 text-center text-amber-400 font-bold">{item.odCount || 0}</td>
-                            <td className="py-3 px-4 text-center text-sky-400 font-bold">{item.mlCount || 0}</td>
-                            <td className="py-3 px-4 text-center text-slate-300 font-bold">{item.totalMarked || 0}</td>
-                            <td className="py-3 px-4 text-right">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setAttDate(item.date);
-                                  setAttViewMode('ROSTER');
-                                }}
-                                className="bg-emerald-950 text-emerald-300 border border-emerald-700/80 hover:bg-emerald-900 px-3 py-1 rounded-lg font-bold text-[11px]"
-                              >
-                                Load & Edit Date
-                              </button>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 font-mono">
+                        {monthlySummaryList.length === 0 ? (
+                          <tr>
+                            <td colSpan={9} className="py-12 text-center text-slate-500 font-mono">
+                              {isSummaryLoading ? (
+                                <div className="flex items-center justify-center space-x-2 text-indigo-400">
+                                  <Loader2 className="w-5 h-5 animate-spin" />
+                                  <span>Calculating monthly summary...</span>
+                                </div>
+                              ) : (
+                                'No attendance records logged yet for this section. Use Daily View or Monthly Bulk Import to log attendance.'
+                              )}
                             </td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                        ) : (
+                          monthlySummaryList.map((stu: any, idx: number) => {
+                            const pct = typeof stu.percentage === 'number' ? stu.percentage : parseFloat(stu.percentage || '0');
+                            let badgeStyle = 'bg-emerald-950 text-emerald-300 border-emerald-800';
+                            if (pct < 65) badgeStyle = 'bg-red-950 text-red-300 border-red-800';
+                            else if (pct < 75) badgeStyle = 'bg-amber-950 text-amber-300 border-amber-800';
+
+                            return (
+                              <tr key={stu.studentId || idx} className="hover:bg-slate-900/60 transition-colors">
+                                <td className="py-3 px-4 text-center text-slate-500 font-bold">{idx + 1}</td>
+                                <td className="py-3 px-4 font-bold text-cyan-400">{stu.registerNo}</td>
+                                <td className="py-3 px-4 text-white font-sans font-bold">{stu.studentName}</td>
+                                <td className="py-3 px-4 text-center text-slate-300 font-bold">{stu.totalWorkingDays || 0}</td>
+                                <td className="py-3 px-4 text-center text-emerald-400 font-bold">{stu.presentDays || 0}</td>
+                                <td className="py-3 px-4 text-center text-red-400 font-bold">{stu.absentDays || 0}</td>
+                                <td className="py-3 px-4 text-center text-amber-400 font-bold">{stu.odDays || 0}</td>
+                                <td className="py-3 px-4 text-center text-sky-400 font-bold">{stu.mlDays || 0}</td>
+                                <td className="py-3 px-4 text-center">
+                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full font-bold text-xs border ${badgeStyle}`}>
+                                    {pct.toFixed(1)}%
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
+              </div>
+            ) : (
+              /* MONTHLY BULK ATTENDANCE IMPORT VIEW */
+              <div className="space-y-6 font-mono">
+                {/* INSTRUCTIONS CARD */}
+                <div className="bg-slate-950 border border-slate-800 p-5 rounded-xl space-y-3">
+                  <div className="flex items-center space-x-2 text-amber-400 font-sans font-bold text-sm">
+                    <FileSpreadsheet className="w-5 h-5 text-amber-400 shrink-0" />
+                    <span>Monthly Bulk Attendance Import Rules & Requirements</span>
+                  </div>
+                  <ul className="text-xs text-slate-300 space-y-1.5 list-disc pl-5 font-mono">
+                    <li><strong className="text-white">Strict Register Number Key:</strong> Attendance records are matched strictly using the student's <strong>REGISTER NUMBER</strong> (`register_no`). Names/Emails in CSV are ignored for matching.</li>
+                    <li><strong className="text-white">Preserve Daily Dates:</strong> Bulk data includes individual daily dates (e.g. Row format: <code className="text-cyan-400">Register Number, Date, Status</code> or Matrix format: <code className="text-cyan-400">Register Number, 2026-09-01, 2026-09-02...</code>).</li>
+                    <li><strong className="text-white">Validation List:</strong> Any Register Number not existing in your assigned section database will be flagged in an <strong>Unmatched Register Numbers</strong> validation list and will NOT be assigned to another student.</li>
+                    <li><strong className="text-white">Duplicate Detection:</strong> Duplicate entries for the same student and date in the uploaded dataset will be detected and reported.</li>
+                  </ul>
+                </div>
+
+                {/* FILE UPLOAD & TEXT PASTE INPUTS */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* CSV File Upload Dropzone */}
+                  <div className="bg-slate-950 border border-slate-800 p-5 rounded-xl space-y-3 flex flex-col justify-between">
+                    <div>
+                      <h4 className="font-bold text-white text-xs font-sans uppercase mb-1">Option 1: Upload CSV File</h4>
+                      <p className="text-[11px] text-slate-400">Select or drop a `.csv` file containing monthly attendance data.</p>
+                    </div>
+
+                    <div className="border-2 border-dashed border-slate-800 hover:border-amber-500/50 p-6 rounded-xl text-center transition-all bg-slate-900/30 space-y-2">
+                      <Upload className="w-8 h-8 text-amber-400 mx-auto" />
+                      <div className="text-xs text-slate-300 font-bold font-sans">
+                        {bulkFile ? bulkFile.name : 'Choose CSV File or drag and drop'}
+                      </div>
+                      <input
+                        type="file"
+                        accept=".csv,.txt"
+                        onChange={handleBulkFileChange}
+                        className="hidden"
+                        id="bulk-att-csv-input"
+                      />
+                      <label
+                        htmlFor="bulk-att-csv-input"
+                        className="inline-block bg-amber-950 text-amber-300 border border-amber-800 hover:bg-amber-900 font-bold text-xs px-4 py-2 rounded-lg cursor-pointer transition-all font-sans"
+                      >
+                        {bulkFile ? 'Change CSV File' : 'Browse CSV File'}
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Textarea Copy-Paste */}
+                  <div className="bg-slate-950 border border-slate-800 p-5 rounded-xl space-y-3 flex flex-col justify-between">
+                    <div>
+                      <h4 className="font-bold text-white text-xs font-sans uppercase mb-1">Option 2: Paste Raw Tabular / CSV Text</h4>
+                      <p className="text-[11px] text-slate-400">Paste attendance data directly from Excel or Google Sheets.</p>
+                    </div>
+
+                    <textarea
+                      rows={4}
+                      placeholder={`Register Number, Date, Status\n23AD001, 2026-09-01, PRESENT\n23AD002, 2026-09-01, ABSENT\n23AD003, 2026-09-01, OD`}
+                      value={bulkInputText}
+                      onChange={(e) => setBulkInputText(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                    />
+
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={handleBulkTextParse}
+                        disabled={isBulkPreviewing || !bulkInputText.trim()}
+                        className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold font-sans text-xs px-5 py-2 rounded-lg cursor-pointer transition-all disabled:opacity-50 flex items-center space-x-1.5"
+                      >
+                        {isBulkPreviewing ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                            <span>Validating Data...</span>
+                          </>
+                        ) : (
+                          <>
+                            <FileCheck className="w-4 h-4 text-slate-950" />
+                            <span>Parse & Validate Text Data</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ERROR & SUCCESS MESSAGES */}
+                {bulkImportError && (
+                  <div className="bg-red-950/80 border border-red-800 text-red-300 p-4 rounded-xl flex items-start space-x-2 text-xs">
+                    <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="font-bold block text-sm font-sans">Import Validation Error</strong>
+                      <p className="mt-0.5">{bulkImportError}</p>
+                    </div>
+                  </div>
+                )}
+
+                {bulkImportSuccess && (
+                  <div className="bg-emerald-950/80 border border-emerald-800 text-emerald-300 p-4 rounded-xl flex items-start space-x-2 text-xs">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="font-bold block text-sm font-sans">Import Success!</strong>
+                      <p className="mt-0.5">{bulkImportSuccess}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* PREVIEW & VALIDATION RESULTS */}
+                {bulkPreviewResult && (
+                  <div className="space-y-6">
+                    {/* STATS OVERVIEW */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                      <div className="bg-slate-950 border border-slate-800 p-3.5 rounded-xl">
+                        <div className="text-[10px] text-slate-400 uppercase font-bold">Total Rows</div>
+                        <div className="text-xl font-black text-white mt-1">{bulkPreviewResult.summary.totalRowsProcessed}</div>
+                      </div>
+                      <div className="bg-emerald-950/40 border border-emerald-800/60 p-3.5 rounded-xl">
+                        <div className="text-[10px] text-emerald-400 uppercase font-bold">Valid Records</div>
+                        <div className="text-xl font-black text-emerald-300 mt-1">{bulkPreviewResult.summary.totalValidDailyRecords}</div>
+                      </div>
+                      <div className="bg-cyan-950/40 border border-cyan-800/60 p-3.5 rounded-xl">
+                        <div className="text-[10px] text-cyan-400 uppercase font-bold">Matched Students</div>
+                        <div className="text-xl font-black text-cyan-300 mt-1">{bulkPreviewResult.summary.totalMatchedStudents}</div>
+                      </div>
+                      <div className="bg-red-950/40 border border-red-800/60 p-3.5 rounded-xl">
+                        <div className="text-[10px] text-red-400 uppercase font-bold">Unmatched Reg Nos</div>
+                        <div className="text-xl font-black text-red-300 mt-1">{bulkPreviewResult.summary.totalUnmatchedRegNos}</div>
+                      </div>
+                      <div className="bg-amber-950/40 border border-amber-800/60 p-3.5 rounded-xl">
+                        <div className="text-[10px] text-amber-400 uppercase font-bold">Duplicates</div>
+                        <div className="text-xl font-black text-amber-300 mt-1">{bulkPreviewResult.summary.totalDuplicateEntries}</div>
+                      </div>
+                      <div className="bg-slate-950 border border-slate-800 p-3.5 rounded-xl">
+                        <div className="text-[10px] text-slate-400 uppercase font-bold">Invalid Rows</div>
+                        <div className="text-xl font-black text-slate-400 mt-1">{bulkPreviewResult.summary.totalInvalidRows}</div>
+                      </div>
+                    </div>
+
+                    {/* VALIDATION ALERT 1: UNMATCHED REGISTER NUMBERS LIST */}
+                    {Array.isArray(bulkPreviewResult.unmatchedRegisterNumbers) && bulkPreviewResult.unmatchedRegisterNumbers.length > 0 && (
+                      <div className="bg-red-950/40 border border-red-800/80 p-5 rounded-xl space-y-3">
+                        <div className="flex items-center space-x-2 text-red-400 font-sans font-bold text-sm">
+                          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+                          <span>Unmatched Register Numbers Validation List ({bulkPreviewResult.unmatchedRegisterNumbers.length})</span>
+                        </div>
+                        <p className="text-xs text-red-300/90 font-mono">
+                          The following Register Numbers in the uploaded file do not exist in the student database or your assigned section workspace.
+                          Attendance for these Register Numbers will <strong>NOT</strong> be imported or assigned to another student.
+                        </p>
+                        <div className="bg-slate-950 border border-red-900/60 rounded-xl overflow-hidden max-h-56 overflow-y-auto">
+                          <table className="w-full text-left text-xs font-mono">
+                            <thead className="bg-red-950/80 text-red-300 border-b border-red-900/60 text-[10px] uppercase">
+                              <tr>
+                                <th className="py-2 px-3">Row #</th>
+                                <th className="py-2 px-3">Register Number</th>
+                                <th className="py-2 px-3">Date</th>
+                                <th className="py-2 px-3">Status</th>
+                                <th className="py-2 px-3">Validation Reason</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-red-900/40 text-[11px]">
+                              {bulkPreviewResult.unmatchedRegisterNumbers.map((u: any, i: number) => (
+                                <tr key={i} className="hover:bg-red-950/20">
+                                  <td className="py-2 px-3 text-slate-400">Row {u.row}</td>
+                                  <td className="py-2 px-3 font-bold text-red-300">{u.registerNo}</td>
+                                  <td className="py-2 px-3 text-slate-300">{u.date || 'N/A'}</td>
+                                  <td className="py-2 px-3 text-slate-300">{u.status || 'N/A'}</td>
+                                  <td className="py-2 px-3 text-red-400">{u.reason}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* VALIDATION ALERT 2: DUPLICATE REGISTER NUMBERS LIST */}
+                    {Array.isArray(bulkPreviewResult.duplicateRegisterNumbers) && bulkPreviewResult.duplicateRegisterNumbers.length > 0 && (
+                      <div className="bg-amber-950/40 border border-amber-800/80 p-5 rounded-xl space-y-3">
+                        <div className="flex items-center space-x-2 text-amber-400 font-sans font-bold text-sm">
+                          <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
+                          <span>Duplicate Register Numbers Detected ({bulkPreviewResult.duplicateRegisterNumbers.length})</span>
+                        </div>
+                        <p className="text-xs text-amber-300/90 font-mono">
+                          Multiple attendance entries for the same Register Number and Date were found in the uploaded file. Only the first entry will be saved.
+                        </p>
+                        <div className="bg-slate-950 border border-amber-900/60 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+                          <table className="w-full text-left text-xs font-mono">
+                            <thead className="bg-amber-950/80 text-amber-300 border-b border-amber-900/60 text-[10px] uppercase">
+                              <tr>
+                                <th className="py-2 px-3">Row #</th>
+                                <th className="py-2 px-3">Register Number</th>
+                                <th className="py-2 px-3">Date</th>
+                                <th className="py-2 px-3">Reason</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-amber-900/40 text-[11px]">
+                              {bulkPreviewResult.duplicateRegisterNumbers.map((d: any, i: number) => (
+                                <tr key={i} className="hover:bg-amber-950/20">
+                                  <td className="py-2 px-3 text-slate-400">Row {d.row}</td>
+                                  <td className="py-2 px-3 font-bold text-amber-300">{d.registerNo}</td>
+                                  <td className="py-2 px-3 text-slate-300">{d.date}</td>
+                                  <td className="py-2 px-3 text-amber-400">{d.reason}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* VALID RECORDS PREVIEW TABLE */}
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <h4 className="font-bold text-emerald-400 font-sans text-sm flex items-center space-x-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span>Valid Daily Attendance Records Ready for Import ({bulkPreviewResult.validRecords.length})</span>
+                        </h4>
+                        <span className="text-[11px] text-slate-400">Primary Key: Register Number</span>
+                      </div>
+
+                      <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden max-h-80 overflow-y-auto">
+                        <table className="w-full text-left font-sans text-xs">
+                          <thead className="bg-slate-900 text-slate-400 font-mono text-[10px] uppercase sticky top-0 border-b border-slate-800">
+                            <tr>
+                              <th className="py-3 px-4 font-bold w-12 text-center">#</th>
+                              <th className="py-3 px-4 font-bold">Register Number</th>
+                              <th className="py-3 px-4 font-bold">Student Name</th>
+                              <th className="py-3 px-4 font-bold text-center">Attendance Date</th>
+                              <th className="py-3 px-4 font-bold text-center">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
+                            {bulkPreviewResult.validRecords.map((r: any, idx: number) => (
+                              <tr key={idx} className="hover:bg-slate-900/60">
+                                <td className="py-2.5 px-4 text-center text-slate-500">{idx + 1}</td>
+                                <td className="py-2.5 px-4 font-bold text-cyan-400">{r.registerNo}</td>
+                                <td className="py-2.5 px-4 text-white font-sans font-bold">{r.studentName}</td>
+                                <td className="py-2.5 px-4 text-center text-emerald-400 font-bold">{r.date}</td>
+                                <td className="py-2.5 px-4 text-center">
+                                  <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
+                                    r.status === 'PRESENT' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+                                    r.status === 'ABSENT' ? 'bg-red-950 text-red-300 border border-red-800' :
+                                    r.status === 'OD' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                                    'bg-sky-950 text-sky-300 border border-sky-800'
+                                  }`}>
+                                    {r.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* CONFIRM ACTION BUTTONS */}
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBulkPreviewResult(null);
+                          setBulkFile(null);
+                          setBulkInputText('');
+                        }}
+                        className="w-full sm:w-auto bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-300 font-bold font-sans text-xs px-5 py-3 rounded-xl transition-all"
+                      >
+                        Reset / Cancel Import
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={isBulkConfirming || bulkPreviewResult.validRecords.length === 0}
+                        onClick={handleConfirmBulkImport}
+                        className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-slate-950 font-extrabold font-sans text-xs px-8 py-3 rounded-xl shadow-xl transition-all disabled:opacity-50 flex items-center justify-center space-x-2 cursor-pointer"
+                      >
+                        {isBulkConfirming ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                            <span>Importing Records...</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 text-slate-950" />
+                            <span>Confirm & Save {bulkPreviewResult.validRecords.length} Daily Attendance Records</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

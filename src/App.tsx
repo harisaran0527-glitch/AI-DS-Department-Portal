@@ -7,6 +7,7 @@ import { AdminLogin } from './pages/logins/AdminLogin';
 
 import { StudentDashboard } from './pages/student/StudentDashboard';
 import { FacultyDashboard } from './pages/faculty/FacultyDashboard';
+import { DisciplineIssuePage } from './pages/faculty/DisciplineIssuePage';
 import { HODDashboard } from './pages/hod/HODDashboard';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
@@ -31,6 +32,7 @@ export const App: React.FC = () => {
           {/* Dashboard Routes with Protected Role Access */}
           <Route path="/student/dashboard" element={<ProtectedRoute allowedRoles={['STUDENT']} loginRoute="/student"><StudentDashboard /></ProtectedRoute>} />
           <Route path="/faculty/dashboard" element={<ProtectedRoute allowedRoles={['FACULTY']} loginRoute="/faculty"><FacultyDashboard /></ProtectedRoute>} />
+          <Route path="/faculty/discipline" element={<ProtectedRoute allowedRoles={['FACULTY', 'HOD', 'ADMIN']} loginRoute="/faculty"><DisciplineIssuePage /></ProtectedRoute>} />
           <Route path="/hod/dashboard" element={<ProtectedRoute allowedRoles={['HOD']} loginRoute="/hod"><HODDashboard /></ProtectedRoute>} />
           <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={['ADMIN']} loginRoute="/admin"><AdminDashboard /></ProtectedRoute>} />
 

@@ -15,7 +15,6 @@ import {
   Code,
   Star,
   Users2,
-  Trash2,
   BarChart3,
   ShieldCheck,
   Calendar,
@@ -23,7 +22,8 @@ import {
   BookOpen,
   User,
   FileCheck,
-  FileText
+  FileText,
+  ShieldAlert
 } from 'lucide-react';
 
 import { ForgotPasswordModal } from '../../components/common/ForgotPasswordModal';
@@ -33,6 +33,7 @@ import { BestEliteStudentsView } from '../../components/elite/BestEliteStudentsV
 import { GeminiTopRecognitionView } from '../../components/ranking/GeminiTopRecognitionView';
 import { GeminiCategoryBestPerformerCard } from '../../components/ranking/GeminiCategoryBestPerformerCard';
 import { GeminiFullLeetCodeDashboard } from '../../components/ranking/GeminiFullLeetCodeDashboard';
+import { DisciplineIssueModule } from '../../components/discipline/DisciplineIssueModule';
 
 export const HODDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -196,6 +197,7 @@ export const HODDashboard: React.FC = () => {
     { id: 'elite-student', label: 'Elite Student Candidate', icon: Trophy },
     { id: 'best-team-head', label: 'Best Team Head Candidate', icon: Star },
     { id: 'best-rep', label: 'Best Representative Candidate', icon: Award },
+    { id: 'discipline-issues', label: 'Discipline Issues', icon: ShieldAlert },
     { id: 'scoring-config', label: 'Scoring Configuration', icon: Sliders },
     { id: 'finalized-awards', label: 'Finalized Awards', icon: CheckCircle }
   ];
@@ -253,6 +255,11 @@ export const HODDashboard: React.FC = () => {
             ))}
           </div>
         </div>
+
+        {/* DISCIPLINE ISSUES MODULE */}
+        {activeTab === 'discipline-issues' && (
+          <DisciplineIssueModule userRole="HOD" />
+        )}
 
         {/* DEPARTMENT FACULTY ROSTER & INDIVIDUAL WORKSPACES */}
         {activeTab === 'faculty' && (

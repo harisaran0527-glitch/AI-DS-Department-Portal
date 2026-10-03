@@ -502,6 +502,8 @@ export async function initDatabaseSchema(): Promise<void> {
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS time TEXT;`,
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS fine_amount REAL DEFAULT 0;`,
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS action_taken TEXT;`,
+        `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS rule_violated TEXT;`,
+        `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS fine_details TEXT;`,
         `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS company_name TEXT;`,
         `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS proof_file_path TEXT;`,
         `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS created_at TEXT;`,
@@ -558,6 +560,8 @@ export async function initDatabaseSchema(): Promise<void> {
       `ALTER TABLE discipline_records ADD COLUMN time TEXT;`,
       `ALTER TABLE discipline_records ADD COLUMN fine_amount REAL DEFAULT 0;`,
       `ALTER TABLE discipline_records ADD COLUMN action_taken TEXT;`,
+      `ALTER TABLE discipline_records ADD COLUMN rule_violated TEXT;`,
+      `ALTER TABLE discipline_records ADD COLUMN fine_details TEXT;`,
       `ALTER TABLE certificate_records ADD COLUMN company_name TEXT;`,
       `ALTER TABLE certificate_records ADD COLUMN proof_file_path TEXT;`,
       `ALTER TABLE certificate_records ADD COLUMN created_at TEXT;`,
@@ -808,6 +812,7 @@ export interface NPTELRecord {
 export interface AttendanceRecord {
   id: string;
   student_id: string;
+  studentId?: string;
   totalWorkingDays: number;
   presentDays: number;
   absentDays: number;
@@ -1172,6 +1177,10 @@ export class SQLiteDB {
     return rows.map((r) => normalizeStudentRecord(r)!);
   }
 
+  public async getAllStudents(): Promise<StudentRecord[]> {
+    return await this.getStudents('ALL', 'ALL');
+  }
+
   public async getStudents(year?: string, section?: string, facultyId?: string): Promise<StudentRecord[]> {
     if (facultyId) {
       return await this.getStudentsForFaculty(facultyId, year, section);
@@ -1277,9 +1286,11 @@ export class SQLiteDB {
     return row ? (normalizeStudentRecord(row) as StudentRecord) : undefined;
   }
 
-  public async getStudentByRegisterNo(regNo: string): Promise<StudentRecord | undefined> {
-    const row = await queryOne('SELECT * FROM students WHERE register_no = ?', [regNo]);
-    return row ? (normalizeStudentRecord(row) as StudentRecord) : undefined;
+  public async getStudentByRegisterNo(regNo: string): Promise<StudentRecord | null> {
+    const cleanRegNo = (regNo || '').trim();
+    if (!cleanRegNo) return null;
+    const row = await queryOne('SELECT * FROM students WHERE LOWER(register_no) = LOWER(?)', [cleanRegNo]);
+    return row ? (normalizeStudentRecord(row) as StudentRecord) : null;
   }
 
   public async upsertStudentWithUserLogin(stu: {
@@ -1482,18 +1493,28 @@ export class SQLiteDB {
       status: n.status
     }));
 
+    const dailyAttendanceLogs = await queryAll(
+      'SELECT date, status, recorded_by, recorded_at FROM daily_attendance_records WHERE student_id = ? ORDER BY date DESC',
+      [studentId]
+    );
+
     let attendance: AttendanceRecord | undefined = undefined;
-    if (attRaw) {
+    if (attRaw || dailyAttendanceLogs.length > 0) {
       attendance = {
-        id: attRaw.id,
-        student_id: attRaw.student_id,
-        totalWorkingDays: attRaw.total_working_days,
-        presentDays: attRaw.present_days,
-        absentDays: attRaw.absent_days,
-        odDays: attRaw.od_days,
-        mlDays: attRaw.ml_days,
-        percentage: attRaw.percentage,
-        lastUpdated: attRaw.last_updated
+        id: attRaw ? attRaw.id : `att-${studentId}`,
+        student_id: studentId,
+        studentId: studentId,
+        totalWorkingDays: attRaw ? attRaw.total_working_days : dailyAttendanceLogs.length,
+        presentDays: attRaw ? attRaw.present_days : dailyAttendanceLogs.filter((d: any) => d.status === 'PRESENT').length,
+        absentDays: attRaw ? attRaw.absent_days : dailyAttendanceLogs.filter((d: any) => d.status === 'ABSENT').length,
+        odDays: attRaw ? attRaw.od_days : dailyAttendanceLogs.filter((d: any) => d.status === 'OD').length,
+        mlDays: attRaw ? attRaw.ml_days : dailyAttendanceLogs.filter((d: any) => d.status === 'ML').length,
+        percentage: attRaw ? attRaw.percentage : (dailyAttendanceLogs.length > 0 ? parseFloat((((dailyAttendanceLogs.filter((d: any) => d.status === 'PRESENT' || d.status === 'OD' || d.status === 'ML').length) / dailyAttendanceLogs.length) * 100).toFixed(2)) : 0),
+        lastUpdated: attRaw ? attRaw.last_updated : new Date().toISOString(),
+        historyLogs: dailyAttendanceLogs.map((d: any) => ({
+          date: d.date,
+          status: d.status
+        }))
       };
     }
 
@@ -1996,6 +2017,147 @@ export class SQLiteDB {
     };
   }
 
+  public async addDisciplineIssue(data: {
+    studentId: string;
+    date: string;
+    time: string;
+    category: string;
+    ruleViolated: string;
+    actionTaken: string;
+    fineAmount: number;
+    fineDetails?: string;
+    remark: string;
+    recordedBy: string;
+  }): Promise<any> {
+    const id = `disc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const date = data.date || new Date().toISOString().split('T')[0];
+    const time = data.time || new Date().toTimeString().split(' ')[0];
+    const fine = Number(data.fineAmount) || 0;
+
+    await executeRun(`
+      INSERT INTO discipline_records (
+        id, student_id, date, time, category, rule_violated, remark, warning_action, action_taken, fine_amount, fine_details, recorded_by
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      id,
+      data.studentId,
+      date,
+      time,
+      data.category || 'Discipline Issue',
+      data.ruleViolated || '',
+      data.remark || '',
+      data.actionTaken || '',
+      data.actionTaken || '',
+      fine,
+      data.fineDetails || '',
+      data.recordedBy || 'Faculty'
+    ]);
+
+    return {
+      id,
+      student_id: data.studentId,
+      date,
+      time,
+      category: data.category,
+      rule_violated: data.ruleViolated,
+      remark: data.remark,
+      action_taken: data.actionTaken,
+      fine_amount: fine,
+      fine_details: data.fineDetails,
+      recorded_by: data.recordedBy
+    };
+  }
+
+  public async getAllDisciplineIssues(filters?: {
+    search?: string;
+    registerNo?: string;
+    year?: string;
+    section?: string;
+    issue?: string;
+  }): Promise<any[]> {
+    let sql = `
+      SELECT 
+        d.id,
+        d.student_id,
+        d.date,
+        d.time,
+        d.category,
+        d.rule_violated,
+        d.remark,
+        d.warning_action,
+        d.action_taken,
+        d.fine_amount,
+        d.fine_details,
+        d.recorded_by,
+        s.register_no,
+        s.name as student_name,
+        s.email as college_email,
+        s.year,
+        s.section,
+        s.department
+      FROM discipline_records d
+      JOIN students s ON d.student_id = s.id
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+
+    if (filters?.registerNo) {
+      sql += ` AND LOWER(s.register_no) = LOWER(?)`;
+      params.push(filters.registerNo.trim());
+    }
+
+    if (filters?.year && filters.year !== 'ALL') {
+      sql += ` AND s.year = ?`;
+      params.push(filters.year);
+    }
+
+    if (filters?.section && filters.section !== 'ALL') {
+      sql += ` AND s.section = ?`;
+      params.push(filters.section);
+    }
+
+    if (filters?.issue && filters.issue !== 'ALL') {
+      sql += ` AND d.category = ?`;
+      params.push(filters.issue);
+    }
+
+    if (filters?.search && filters.search.trim() !== '') {
+      const q = `%${filters.search.trim().toLowerCase()}%`;
+      sql += ` AND (LOWER(s.register_no) LIKE ? OR LOWER(s.name) LIKE ? OR LOWER(d.category) LIKE ? OR LOWER(d.rule_violated) LIKE ? OR LOWER(d.remark) LIKE ? OR LOWER(d.action_taken) LIKE ?)`;
+      params.push(q, q, q, q, q, q);
+    }
+
+    sql += ` ORDER BY d.date DESC, d.time DESC, d.id DESC`;
+
+    const rows = await queryAll(sql, params);
+    return rows.map((r) => ({
+      id: r.id,
+      studentId: r.student_id,
+      registerNo: r.register_no,
+      studentName: r.student_name,
+      collegeEmail: r.college_email,
+      year: r.year,
+      section: r.section,
+      department: r.department,
+      date: r.date,
+      time: r.time || '',
+      issue: r.category,
+      category: r.category,
+      ruleViolated: r.rule_violated || '',
+      actionTaken: r.action_taken || r.warning_action || '',
+      fineAmount: Number(r.fine_amount) || 0,
+      fineDetails: r.fine_details || '',
+      remarks: r.remark || '',
+      recordedBy: r.recorded_by
+    }));
+  }
+
+  public async deleteDisciplineIssue(id: string): Promise<boolean> {
+    const res = await executeRun('DELETE FROM discipline_records WHERE id = ?', [id]);
+    return res.changes > 0;
+  }
+
   public async saveDisciplineRecords(studentId: string, records: any[]): Promise<void> {
     if (!Array.isArray(records)) return;
     await executeRun('DELETE FROM discipline_records WHERE student_id = ?', [studentId]);
@@ -2487,9 +2649,6 @@ export class SQLiteDB {
 
   // CR ATTENDANCE STYLE DAILY RECORD METHODS
   public async saveDailyAttendance(date: string, records: { studentId: string; status: string }[], recordedBy: string): Promise<void> {
-    if (date < '2026-07-13') {
-      throw new Error('Attendance dates before 13 July 2026 are not valid or selectable.');
-    }
     const now = new Date().toISOString();
 
     for (const r of records) {
@@ -2524,6 +2683,344 @@ export class SQLiteDB {
       JOIN students s ON d.student_id = s.id
       WHERE d.date = ?
     `, [date]);
+  }
+
+  public async getClassDailyAttendanceByDate(date: string, facultyId?: string, year?: string, section?: string): Promise<any[]> {
+    let studentQuery = `SELECT id, register_no, name, year, section, entry_type FROM students WHERE 1=1`;
+    const params: any[] = [];
+    if (facultyId) {
+      studentQuery += ` AND (created_by_faculty_id = ? OR faculty_workspace_id = ?)`;
+      params.push(facultyId, facultyId);
+    }
+    if (year && year !== 'ALL') {
+      studentQuery += ` AND year = ?`;
+      params.push(year);
+    }
+    if (section && section !== 'ALL') {
+      studentQuery += ` AND section = ?`;
+      params.push(section);
+    }
+    studentQuery += ` ORDER BY register_no ASC`;
+
+    const students = await queryAll(studentQuery, params);
+
+    const dailyRecords = await queryAll(
+      `SELECT d.* FROM daily_attendance_records d WHERE d.date = ?`,
+      [date]
+    );
+    const statusMap = new Map<string, any>();
+    dailyRecords.forEach((r) => statusMap.set(r.student_id, r));
+
+    return students.map((s) => {
+      const rec = statusMap.get(s.id);
+      return {
+        studentId: s.id,
+        registerNo: s.register_no,
+        name: s.name,
+        year: s.year,
+        section: s.section,
+        entryType: s.entry_type || 'Regular',
+        date,
+        status: rec ? rec.status : 'UNMARKED',
+        recordedBy: rec ? rec.recorded_by : null,
+        recordedAt: rec ? rec.recorded_at : null
+      };
+    });
+  }
+
+  public async getMonthlyAttendanceSummary(facultyId?: string, year?: string, section?: string): Promise<any[]> {
+    let query = `
+      SELECT s.id as student_id, s.register_no, s.name, s.year, s.section, s.entry_type,
+             COALESCE(a.total_working_days, 0) as total_working_days,
+             COALESCE(a.present_days, 0) as present_days,
+             COALESCE(a.absent_days, 0) as absent_days,
+             COALESCE(a.od_days, 0) as od_days,
+             COALESCE(a.ml_days, 0) as ml_days,
+             COALESCE(a.percentage, 0) as percentage,
+             a.last_updated
+      FROM students s
+      LEFT JOIN attendance_records a ON s.id = a.student_id
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+    if (facultyId) {
+      query += ` AND (s.created_by_faculty_id = ? OR s.faculty_workspace_id = ?)`;
+      params.push(facultyId, facultyId);
+    }
+    if (year && year !== 'ALL') {
+      query += ` AND s.year = ?`;
+      params.push(year);
+    }
+    if (section && section !== 'ALL') {
+      query += ` AND s.section = ?`;
+      params.push(section);
+    }
+    query += ` ORDER BY s.register_no ASC`;
+    return await queryAll(query, params);
+  }
+
+  public async previewBulkAttendanceImport(rows: any[], facultyId?: string): Promise<{
+    summary: {
+      totalRowsProcessed: number;
+      totalValidDailyRecords: number;
+      totalMatchedStudents: number;
+      totalUnmatchedRegNos: number;
+      totalDuplicateEntries: number;
+      totalInvalidRows: number;
+    };
+    validRecords: Array<{ studentId: string; registerNo: string; studentName: string; date: string; status: string; year: string; section: string }>;
+    unmatchedRegisterNumbers: Array<{ registerNo: string; row: number; date?: string; status?: string; reason: string }>;
+    duplicateRegisterNumbers: Array<{ registerNo: string; date: string; row: number; reason: string }>;
+    invalidRows: Array<{ row: number; registerNo?: string; date?: string; status?: string; reason: string }>;
+  }> {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      throw new Error('No attendance rows provided in input.');
+    }
+
+    let studentPool: any[] = [];
+    if (facultyId) {
+      studentPool = await queryAll(
+        'SELECT id, register_no, name, year, section FROM students WHERE created_by_faculty_id = ? OR faculty_workspace_id = ?',
+        [facultyId, facultyId]
+      );
+    } else {
+      studentPool = await queryAll('SELECT id, register_no, name, year, section FROM students');
+    }
+
+    // STRICT MATCHING KEY: REGISTER NUMBER ONLY (trimmed & uppercase)
+    const dbStudentMap = new Map<string, any>();
+    studentPool.forEach((s) => {
+      if (s.register_no) {
+        dbStudentMap.set(s.register_no.trim().toUpperCase(), s);
+      }
+    });
+
+    const validRecords: Array<{ studentId: string; registerNo: string; studentName: string; date: string; status: string; year: string; section: string }> = [];
+    const unmatchedRegisterNumbers: Array<{ registerNo: string; row: number; date?: string; status?: string; reason: string }> = [];
+    const duplicateRegisterNumbers: Array<{ registerNo: string; date: string; row: number; reason: string }> = [];
+    const invalidRows: Array<{ row: number; registerNo?: string; date?: string; status?: string; reason: string }> = [];
+
+    const seenFileEntries = new Map<string, number>();
+    const seenFileRegNosInMatrix = new Set<string>();
+    const matchedStudentIds = new Set<string>();
+
+    const normalizeDate = (raw: string): string | null => {
+      if (!raw) return null;
+      const cleaned = String(raw).trim();
+      if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(cleaned)) {
+        const parts = cleaned.split(/[-/]/);
+        return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      }
+      if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(cleaned)) {
+        const parts = cleaned.split(/[-/]/);
+        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      }
+      const d = new Date(cleaned);
+      if (!isNaN(d.getTime())) {
+        return d.toISOString().split('T')[0];
+      }
+      return null;
+    };
+
+    const normalizeStatus = (raw: string): string | null => {
+      if (!raw) return null;
+      const s = String(raw).trim().toUpperCase();
+      if (['P', 'PRESENT', '1', 'YES'].includes(s)) return 'PRESENT';
+      if (['A', 'ABSENT', '0', 'NO'].includes(s)) return 'ABSENT';
+      if (['OD', 'ON DUTY', 'ON_DUTY', 'ONDUTY'].includes(s)) return 'OD';
+      if (['ML', 'LEAVE', 'MEDICAL LEAVE', 'L', 'MEDICAL_LEAVE'].includes(s)) return 'ML';
+      if (['LA', 'LONG ABSENT', 'LONG_ABSENT'].includes(s)) return 'LONG_ABSENT';
+      return null;
+    };
+
+    rows.forEach((r, idx) => {
+      const rowNum = idx + 1;
+      if (!r || typeof r !== 'object') {
+        invalidRows.push({ row: rowNum, reason: 'Empty or invalid row object.' });
+        return;
+      }
+
+      // STRICTLY USE REGISTER NUMBER ONLY
+      const rawRegNo = r['Register Number'] || r['Register No'] || r.registerNo || r.register_no || r.regNo || r['REG_NO'] || r['Reg No'];
+      if (!rawRegNo || String(rawRegNo).trim() === '') {
+        invalidRows.push({ row: rowNum, reason: 'Missing Register Number column.' });
+        return;
+      }
+
+      const regNoClean = String(rawRegNo).trim();
+      const regNoKey = regNoClean.toUpperCase();
+      const matchedStudent = dbStudentMap.get(regNoKey);
+
+      const rawDate = r['Date'] || r['Attendance Date'] || r.date || r['DATE'];
+      const rawStatus = r['Status'] || r['Attendance Status'] || r.status || r['STATUS'];
+
+      if (rawDate !== undefined && rawStatus !== undefined) {
+        // ROW-BASED FORMAT
+        const normDate = normalizeDate(String(rawDate));
+        const normStatus = normalizeStatus(String(rawStatus));
+
+        if (!normDate) {
+          invalidRows.push({ row: rowNum, registerNo: regNoClean, date: String(rawDate), status: String(rawStatus), reason: `Invalid date format: ${rawDate}` });
+          return;
+        }
+
+        if (!normStatus) {
+          invalidRows.push({ row: rowNum, registerNo: regNoClean, date: normDate, status: String(rawStatus), reason: `Invalid attendance status: ${rawStatus}` });
+          return;
+        }
+
+        if (!matchedStudent) {
+          unmatchedRegisterNumbers.push({
+            registerNo: regNoClean,
+            row: rowNum,
+            date: normDate,
+            status: normStatus,
+            reason: facultyId ? 'Register Number not found in your assigned workspace/class.' : 'Register Number does not exist in student database.'
+          });
+          return;
+        }
+
+        const comboKey = `${regNoKey}_${normDate}`;
+        if (seenFileEntries.has(comboKey)) {
+          duplicateRegisterNumbers.push({
+            registerNo: regNoClean,
+            date: normDate,
+            row: rowNum,
+            reason: `Duplicate entry for Register Number ${regNoClean} on date ${normDate} (First seen at row ${seenFileEntries.get(comboKey)}).`
+          });
+          return;
+        }
+        seenFileEntries.set(comboKey, rowNum);
+
+        matchedStudentIds.add(matchedStudent.id);
+        validRecords.push({
+          studentId: matchedStudent.id,
+          registerNo: matchedStudent.register_no,
+          studentName: matchedStudent.name,
+          date: normDate,
+          status: normStatus,
+          year: matchedStudent.year,
+          section: matchedStudent.section
+        });
+
+      } else {
+        // MATRIX FORMAT
+        if (seenFileRegNosInMatrix.has(regNoKey)) {
+          duplicateRegisterNumbers.push({
+            registerNo: regNoClean,
+            date: 'ALL',
+            row: rowNum,
+            reason: `Duplicate Register Number ${regNoClean} row in matrix upload file.`
+          });
+        } else {
+          seenFileRegNosInMatrix.add(regNoKey);
+        }
+
+        if (!matchedStudent) {
+          unmatchedRegisterNumbers.push({
+            registerNo: regNoClean,
+            row: rowNum,
+            reason: facultyId ? 'Register Number not found in your assigned workspace/class.' : 'Register Number does not exist in student database.'
+          });
+          return;
+        }
+
+        let dateCountInRow = 0;
+        Object.keys(r).forEach((colName) => {
+          const colDateNorm = normalizeDate(colName);
+          if (colDateNorm) {
+            const colStatusNorm = normalizeStatus(String(r[colName]));
+            if (colStatusNorm) {
+              dateCountInRow++;
+              const comboKey = `${regNoKey}_${colDateNorm}`;
+              if (seenFileEntries.has(comboKey)) {
+                duplicateRegisterNumbers.push({
+                  registerNo: regNoClean,
+                  date: colDateNorm,
+                  row: rowNum,
+                  reason: `Duplicate attendance value for Register Number ${regNoClean} on date ${colDateNorm}.`
+                });
+              } else {
+                seenFileEntries.set(comboKey, rowNum);
+                matchedStudentIds.add(matchedStudent.id);
+                validRecords.push({
+                  studentId: matchedStudent.id,
+                  registerNo: matchedStudent.register_no,
+                  studentName: matchedStudent.name,
+                  date: colDateNorm,
+                  status: colStatusNorm,
+                  year: matchedStudent.year,
+                  section: matchedStudent.section
+                });
+              }
+            }
+          }
+        });
+
+        if (dateCountInRow === 0 && !seenFileRegNosInMatrix.has(regNoKey)) {
+          invalidRows.push({
+            row: rowNum,
+            registerNo: regNoClean,
+            reason: 'No valid date columns or daily statuses found in row.'
+          });
+        }
+      }
+    });
+
+    return {
+      summary: {
+        totalRowsProcessed: rows.length,
+        totalValidDailyRecords: validRecords.length,
+        totalMatchedStudents: matchedStudentIds.size,
+        totalUnmatchedRegNos: unmatchedRegisterNumbers.length,
+        totalDuplicateEntries: duplicateRegisterNumbers.length,
+        totalInvalidRows: invalidRows.length
+      },
+      validRecords,
+      unmatchedRegisterNumbers,
+      duplicateRegisterNumbers,
+      invalidRows
+    };
+  }
+
+  public async confirmBulkAttendanceImport(
+    records: Array<{ studentId: string; date: string; status: string }>,
+    recordedBy: string
+  ): Promise<{ importedCount: number; updatedStudentsCount: number }> {
+    if (!Array.isArray(records) || records.length === 0) {
+      throw new Error('No valid records to import.');
+    }
+
+    const now = new Date().toISOString();
+    const affectedStudentIds = new Set<string>();
+
+    for (const r of records) {
+      if (!r.studentId || !r.date || !r.status) continue;
+
+      const existing = await queryOne('SELECT id FROM daily_attendance_records WHERE student_id = ? AND date = ?', [r.studentId, r.date]);
+      if (existing) {
+        await executeRun(
+          'UPDATE daily_attendance_records SET status = ?, recorded_by = ?, recorded_at = ? WHERE id = ?',
+          [r.status, recordedBy, now, existing.id]
+        );
+      } else {
+        const id = `attd-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+        await executeRun(
+          'INSERT INTO daily_attendance_records (id, student_id, date, status, recorded_by, recorded_at) VALUES (?, ?, ?, ?, ?, ?)',
+          [id, r.studentId, r.date, r.status, recordedBy, now]
+        );
+      }
+      affectedStudentIds.add(r.studentId);
+    }
+
+    for (const stuId of affectedStudentIds) {
+      await this.recalculateStudentAttendancePercentage(stuId);
+    }
+
+    return {
+      importedCount: records.length,
+      updatedStudentsCount: affectedStudentIds.size
+    };
   }
 
   public async getAttendanceHistoryForFaculty(facultyId: string): Promise<any[]> {

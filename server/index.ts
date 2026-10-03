@@ -13,6 +13,7 @@ import filesRoutes from './routes/files.js';
 import subjectsRoutes from './routes/subjects.js';
 import rankingsRoutes from './routes/rankings.js';
 import skilledgeRoutes from './routes/skilledge.js';
+import disciplineRoutes from './routes/discipline.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -61,6 +62,7 @@ app.use('/api/files', filesRoutes);
 app.use('/api/subjects', subjectsRoutes);
 app.use('/api/rankings', rankingsRoutes);
 app.use('/api/skilledge', skilledgeRoutes);
+app.use('/api/discipline', disciplineRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

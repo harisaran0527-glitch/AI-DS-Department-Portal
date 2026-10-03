@@ -604,5 +604,108 @@ export const API = {
     if (section && section !== 'ALL') params.append('section', section);
     const queryString = params.toString() ? `?${params.toString()}` : '';
     return request<any>(`/rankings/leetcode-full${queryString}`);
+  },
+
+  // Attendance API Methods
+  previewAttendanceImport: async (rows: any[], role: 'FACULTY' | 'ADMIN' = 'FACULTY') => {
+    const endpoint = role === 'ADMIN' ? '/admin/attendance/import-preview' : '/faculty/attendance/import-preview';
+    return request<{
+      summary: {
+        totalRowsProcessed: number;
+        totalValidDailyRecords: number;
+        totalMatchedStudents: number;
+        totalUnmatchedRegNos: number;
+        totalDuplicateEntries: number;
+        totalInvalidRows: number;
+      };
+      validRecords: Array<{ studentId: string; registerNo: string; studentName: string; date: string; status: string; year: string; section: string }>;
+      unmatchedRegisterNumbers: Array<{ registerNo: string; row: number; date?: string; status?: string; reason: string }>;
+      duplicateRegisterNumbers: Array<{ registerNo: string; date: string; row: number; reason: string }>;
+      invalidRows: Array<{ row: number; registerNo?: string; date?: string; status?: string; reason: string }>;
+    }>(endpoint, {
+      method: 'POST',
+      body: JSON.stringify({ rows })
+    });
+  },
+
+  confirmAttendanceImport: async (records: Array<{ studentId: string; date: string; status: string }>, role: 'FACULTY' | 'ADMIN' = 'FACULTY') => {
+    const endpoint = role === 'ADMIN' ? '/admin/attendance/import-confirm' : '/faculty/attendance/import-confirm';
+    return request<{ message: string; importedCount: number; updatedStudentsCount: number }>(endpoint, {
+      method: 'POST',
+      body: JSON.stringify({ records })
+    });
+  },
+
+  getDailyAttendance: async (date: string, role: 'FACULTY' | 'ADMIN' = 'FACULTY', year?: string, section?: string) => {
+    const params = new URLSearchParams();
+    params.append('date', date);
+    if (year && year !== 'ALL') params.append('year', year);
+    if (section && section !== 'ALL') params.append('section', section);
+    const endpoint = role === 'ADMIN' ? `/admin/attendance/daily?${params.toString()}` : `/faculty/attendance/daily?${params.toString()}`;
+    return request<{ date: string; records: any[] }>(endpoint);
+  },
+
+  getMonthlyAttendanceSummary: async (role: 'FACULTY' | 'ADMIN' = 'FACULTY', year?: string, section?: string) => {
+    const params = new URLSearchParams();
+    if (year && year !== 'ALL') params.append('year', year);
+    if (section && section !== 'ALL') params.append('section', section);
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    const endpoint = role === 'ADMIN' ? `/admin/attendance/summary${queryString}` : `/faculty/attendance/summary${queryString}`;
+    return request<{ summary: any[] }>(endpoint);
+  },
+
+  // Discipline Issue Module API Methods
+  lookupDisciplineStudent: async (regNo: string) => {
+    return request<{
+      found: boolean;
+      student?: {
+        id: string;
+        registerNo: string;
+        name: string;
+        email: string;
+        year: string;
+        section: string;
+        department: string;
+      };
+      error?: string;
+    }>(`/discipline/lookup-student/${encodeURIComponent(regNo)}`);
+  },
+
+  searchDisciplineStudents: async (query: string) => {
+    return request<{ students: any[] }>(`/discipline/students/search?q=${encodeURIComponent(query)}`);
+  },
+
+  getDisciplineRecords: async (params?: { registerNo?: string; year?: string; section?: string; issue?: string; search?: string }) => {
+    const qParams = new URLSearchParams();
+    if (params?.registerNo) qParams.append('registerNo', params.registerNo);
+    if (params?.year && params.year !== 'ALL') qParams.append('year', params.year);
+    if (params?.section && params.section !== 'ALL') qParams.append('section', params.section);
+    if (params?.issue && params.issue !== 'ALL') qParams.append('issue', params.issue);
+    if (params?.search) qParams.append('search', params.search);
+    const queryString = qParams.toString() ? `?${qParams.toString()}` : '';
+    return request<{ records: any[] }>(`/discipline/records${queryString}`);
+  },
+
+  createDisciplineRecord: async (recordData: {
+    registerNo: string;
+    issue: string;
+    ruleViolated?: string;
+    actionTaken?: string;
+    fineAmount?: number;
+    fineDetails?: string;
+    remarks?: string;
+    date?: string;
+    time?: string;
+  }) => {
+    return request<{ message: string; record: any }>('/discipline/records', {
+      method: 'POST',
+      body: JSON.stringify(recordData)
+    });
+  },
+
+  deleteDisciplineRecord: async (id: string) => {
+    return request<{ message: string }>(`/discipline/records/${id}`, {
+      method: 'DELETE'
+    });
   }
 };
