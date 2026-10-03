@@ -1521,14 +1521,21 @@ export class SQLiteDB {
     const certificates: CertificateRecord[] = certsRaw.map((c) => ({
       id: c.id,
       student_id: c.student_id,
+      studentId: c.student_id,
       courseName: c.course_name,
+      course_name: c.course_name,
       platform: c.platform,
       category: c.category,
       issueDate: c.issue_date,
+      issue_date: c.issue_date,
       certificateId: c.certificate_id,
+      certificate_id: c.certificate_id,
       filePath: c.file_path,
+      file_path: c.file_path,
       originalFileName: c.original_file_name,
-      uploadedAt: c.uploaded_at
+      original_file_name: c.original_file_name,
+      uploadedAt: c.uploaded_at,
+      uploaded_at: c.uploaded_at
     }));
 
     const participation: ParticipationRecord[] = partRaw.map((p) => ({

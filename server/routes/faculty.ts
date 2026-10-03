@@ -71,7 +71,7 @@ const certUpload = multer({
   }
 });
 
-router.use(authenticateToken, requireRole('FACULTY'));
+router.use(authenticateToken, requireRole('FACULTY', 'HOD', 'ADMIN', 'STUDENT'));
 
 // GET assigned roster ONLY based on authenticated backend identity derived from faculty_assignments table
 router.get('/students', async (req: AuthRequest, res: Response) => {
@@ -697,6 +697,14 @@ async function checkFacultyStudentFileAccess(req: AuthRequest, student: any): Pr
 
   if (req.user.role === 'HOD' || req.user.role === 'ADMIN') {
     return true;
+  }
+
+  if (req.user.role === 'STUDENT') {
+    return Boolean(
+      (req.user.studentId && req.user.studentId === student.id) ||
+      (req.user.registerNo && req.user.registerNo === student.register_no) ||
+      (req.user.email && req.user.email.toLowerCase() === (student.college_email || student.email || '').toLowerCase())
+    );
   }
 
   if (req.user.role !== 'FACULTY') {
