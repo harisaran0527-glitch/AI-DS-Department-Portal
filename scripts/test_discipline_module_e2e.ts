@@ -1,92 +1,91 @@
-import { initDatabaseSchema, db } from '../server/db.js';
+import { db } from '../server/db.js';
 
-async function runDisciplineE2ETests() {
+async function runDisciplineE2EVerification() {
   console.log('🧪 Starting End-to-End Discipline Issue Module Verification...');
 
-  // 1. Initialize Database Schema
-  await initDatabaseSchema();
-  console.log('✅ Database schema initialized successfully.');
+  try {
+    // 1. Fetch a test student
+    const students = await db.getAllStudents();
+    if (!students || students.length === 0) {
+      throw new Error('No students found in database for discipline testing.');
+    }
+    const testStudent = students[0];
+    console.log(`📌 Test Student: ${testStudent.name} (${testStudent.register_no}) - ${testStudent.year} Sec ${testStudent.section}`);
 
-  // 2. Fetch existing student for testing or create seed student
-  const allStudents = await db.getAllStudents();
-  if (allStudents.length === 0) {
-    console.error('❌ Error: No students found in database to run discipline test.');
+    // 3. Test Student Details Auto-fetch by Register Number
+    const foundStudent = await db.getStudentByRegisterNo(testStudent.register_no || '');
+    if (!foundStudent || foundStudent.id !== testStudent.id) {
+      throw new Error(`Failed to auto-fetch student by Register Number: ${testStudent.register_no}`);
+    }
+    console.log(`✅ Req 4 Passed: Auto-fetched student details (Name: "${foundStudent.name}", Email: "${foundStudent.email}", Year: "${foundStudent.year}", Section: "${foundStudent.section}")`);
+
+    // 4. Test Invalid Register Number Validation
+    const invalidStudent = await db.getStudentByRegisterNo('INVALID_REG_NO_999999999');
+    if (invalidStudent) {
+      throw new Error('Invalid Register Number unexpectedly matched a student!');
+    }
+    console.log('✅ Req 8 Passed: Invalid Register Number properly returned no match.');
+
+    // 5. Create a Discipline Issue Record attached securely to student.id
+    const issueDate = new Date().toISOString().split('T')[0];
+    const issueTime = new Date().toTimeString().split(' ')[0];
+    const createdRecord = await db.addDisciplineIssue({
+      studentId: testStudent.id,
+      date: issueDate,
+      time: issueTime,
+      category: 'Mobile Phone Confiscation',
+      ruleViolated: 'Use of Electronic Gadgets in Academic Zone',
+      actionTaken: 'Device confiscated & parent informed',
+      fineAmount: 500,
+      fineDetails: 'Paid via College Counter Receipt #REC-8842',
+      remark: 'Repeated violation during lecture hour',
+      recordedBy: 'Dr. Faculty Admin'
+    });
+
+    if (!createdRecord || !createdRecord.id) {
+      throw new Error('Failed to create discipline issue record.');
+    }
+    console.log(`✅ Req 9 Passed: Discipline issue created with ID "${createdRecord.id}" and securely attached to student "${testStudent.id}".`);
+
+    // 6. Test Department-Wide Discipline Queries (Faculty & HOD View)
+    const allDisciplineIssues = await db.getAllDisciplineIssues({ registerNo: testStudent.register_no });
+    const targetIssue = allDisciplineIssues.find((i: any) => i.id === createdRecord.id);
+    if (!targetIssue || targetIssue.fineAmount !== 500 || targetIssue.ruleViolated !== 'Use of Electronic Gadgets in Academic Zone') {
+      throw new Error('Created discipline record missing or incorrect in department-wide query.');
+    }
+    console.log('✅ Req 10 & 11 Passed: Department-wide discipline records queried successfully with full student details.');
+
+    // 7. Test Student Portal Reflection (CRITICAL)
+    const student360 = await db.getStudent360(testStudent.id);
+    if (!student360 || !Array.isArray(student360.discipline)) {
+      throw new Error('Discipline records array missing in Student 360 profile.');
+    }
+    const studentReflectedIssue = student360.discipline.find((d: any) => d.id === createdRecord.id);
+    if (!studentReflectedIssue) {
+      throw new Error('Discipline record created by staff did NOT reflect in Student Portal profile!');
+    }
+    if (
+      studentReflectedIssue.fine_amount !== 500 &&
+      studentReflectedIssue.fineAmount !== 500
+    ) {
+      throw new Error('Student Portal reflected record has mismatched fine amount or metadata.');
+    }
+    console.log('✅ Req 6 Passed: Discipline issue automatically reflected in student\'s own Student Portal profile!');
+
+    // 8. Clean up test record
+    const deleted = await db.deleteDisciplineIssue(createdRecord.id);
+    if (!deleted) {
+      console.warn('⚠️ Warning: Could not delete test discipline issue record during cleanup.');
+    } else {
+      console.log('✅ Test record cleaned up successfully.');
+    }
+
+    console.log('\n🎉 ALL DISCIPLINE ISSUE MODULE E2E VERIFICATION TESTS PASSED SUCCESSFULLY!');
+    process.exit(0);
+  } catch (err: any) {
+    console.error('❌ E2E Verification Failed:', err.message || err);
     process.exit(1);
   }
-
-  const targetStudent = allStudents[0];
-  console.log(`📌 Selected test student: ${targetStudent.name} (${targetStudent.registerNo}) - ${targetStudent.year} Sec ${targetStudent.section}`);
-
-  // 3. Test Student Lookup by Register Number (Req 2, 4)
-  const regNo = targetStudent.registerNo || targetStudent.register_no || '';
-  const lookupResult = await db.getStudentByRegisterNo(regNo);
-  if (!lookupResult) {
-    console.error(`❌ Error: Failed to lookup student by register number ${targetStudent.registerNo}`);
-    process.exit(1);
-  }
-  if (
-    lookupResult.name !== targetStudent.name ||
-    lookupResult.year !== targetStudent.year ||
-    lookupResult.section !== targetStudent.section
-  ) {
-    console.error('❌ Error: Auto-fetched student details do not match database record.');
-    process.exit(1);
-  }
-  console.log(`✅ Req 4 Passed: Auto-fetched student details (Name: "${lookupResult.name}", Email: "${lookupResult.email}", Year: "${lookupResult.year}", Section: "${lookupResult.section}")`);
-
-  // 4. Test Invalid Register Number Lookup (Req 8)
-  const invalidLookup = await db.getStudentByRegisterNo('INVALID_999999999');
-  if (invalidLookup !== null) {
-    console.error('❌ Error: Invalid register number returned a match when it should be null.');
-    process.exit(1);
-  }
-  console.log('✅ Req 8 Passed: Invalid Register Number properly returned no match.');
-
-  // 5. Test Creating a Discipline Record (Req 3, 5, 7, 9)
-  const now = new Date();
-  const testDate = now.toISOString().split('T')[0];
-  const testTime = now.toTimeString().split(' ')[0];
-
-  const created = await db.addDisciplineIssue({
-    studentId: targetStudent.id,
-    date: testDate,
-    time: testTime,
-    category: 'Dress Code / ID Card Violation',
-    ruleViolated: 'Rule 1: Mandatory Formal Dress Code & ID Card Display',
-    actionTaken: 'Verbal warning issued and parent notified',
-    fineAmount: 100,
-    fineDetails: 'Fine receipt #DISC-1001 paid to department office',
-    remark: 'Student promised compliance for future lab sessions',
-    recordedBy: 'Discipline Coordinator (test.faculty@aids.edu)'
-  });
-
-  if (!created || !created.id) {
-    console.error('❌ Error: Failed to create discipline issue record.');
-    process.exit(1);
-  }
-  console.log(`✅ Req 9 Passed: Discipline issue created with ID "${created.id}" and securely attached to student "${targetStudent.registerNo}".`);
-
-  // 6. Test Fetching & Searching Discipline Records (Req 10, 11)
-  const records = await db.getAllDisciplineIssues({ registerNo: targetStudent.registerNo });
-  const matched = records.find((r) => r.id === created.id);
-  if (!matched) {
-    console.error('❌ Error: Created discipline record not found in query results.');
-    process.exit(1);
-  }
-  if (matched.fineAmount !== 100 || matched.ruleViolated !== 'Rule 1: Mandatory Formal Dress Code & ID Card Display') {
-    console.error('❌ Error: Record fields do not match inserted values.');
-    process.exit(1);
-  }
-  console.log('✅ Req 10 & 11 Passed: Discipline records queried successfully with full student details.');
-
-  // 7. Clean up test record
-  await db.deleteDisciplineIssue(created.id);
-  console.log('✅ Test record cleaned up successfully.');
-
-  console.log('\n🎉 ALL DISCIPLINE ISSUE MODULE E2E VERIFICATION TESTS PASSED SUCCESSFULLY!');
 }
 
-runDisciplineE2ETests().catch((err) => {
-  console.error('❌ E2E Test Exception:', err);
-  process.exit(1);
-});
+runDisciplineE2EVerification();
