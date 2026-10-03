@@ -1556,6 +1556,7 @@ export const AdminDashboard: React.FC = () => {
                         <th className="py-2 px-2">Student Name</th>
                         <th className="py-2 px-2">Email</th>
                         <th className="py-2 px-2">Year/Sec</th>
+                        <th className="py-2 px-2">CGPA</th>
                         <th className="py-2 px-2">Status</th>
                       </tr>
                     </thead>
@@ -1567,6 +1568,7 @@ export const AdminDashboard: React.FC = () => {
                           <td className="py-2 px-2 text-slate-200">{r.name || 'N/A'}</td>
                           <td className="py-2 px-2 text-slate-400">{r.email}</td>
                           <td className="py-2 px-2 text-slate-400">{r.year} {r.section}</td>
+                          <td className="py-2 px-2 text-amber-300 font-bold font-mono font-semibold">{(r.cgpa !== null && r.cgpa !== undefined && r.cgpa !== '' && !isNaN(Number(r.cgpa))) ? Number(r.cgpa).toFixed(2) : 'Not Available'}</td>
                           <td className="py-2 px-2">
                             {r.status === 'valid' && <span className="text-emerald-400 font-bold">Valid</span>}
                             {r.status === 'duplicate' && <span className="text-amber-400 font-bold">Duplicate</span>}

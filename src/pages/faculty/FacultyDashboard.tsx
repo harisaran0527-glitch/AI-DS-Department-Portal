@@ -1680,7 +1680,7 @@ export const FacultyDashboard: React.FC = () => {
             {selectedStudent.cgpa !== undefined && (
               <div>
                 <span className="text-slate-400 text-[11px]">CGPA: </span>
-                <span className="text-amber-300 font-bold">{selectedStudent.cgpa.toFixed(2)}</span>
+                <span className="text-amber-300 font-bold">{(selectedStudent.cgpa !== null && selectedStudent.cgpa !== undefined && selectedStudent.cgpa !== '') ? Number(selectedStudent.cgpa).toFixed(2) : 'Not Available'}</span>
               </div>
             )}
           </div>
@@ -4818,7 +4818,7 @@ export const FacultyDashboard: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1">
                     <div className="text-[10px] text-slate-400">OVERALL CGPA</div>
-                    <div className="text-3xl font-black text-amber-400">{selectedStudent.cgpa ? selectedStudent.cgpa.toFixed(2) : '8.85'}</div>
+                    <div className="text-3xl font-black text-amber-400">{(selectedStudent.cgpa !== null && selectedStudent.cgpa !== undefined && selectedStudent.cgpa !== '') ? Number(selectedStudent.cgpa).toFixed(2) : 'Not Available'}</div>
                   </div>
                   <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1">
                     <div className="text-[10px] text-emerald-400">ARREAR STATUS</div>
@@ -6287,7 +6287,7 @@ export const FacultyDashboard: React.FC = () => {
               <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">College Mail ID:</span> <strong className="text-emerald-400">{viewingStudent.collegeEmail || viewingStudent.email}</strong></div>
               <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">Personal Mail ID:</span> <strong>{viewingStudent.personalEmail || (viewingStudent as any).personal_email || 'N/A'}</strong></div>
               <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">Address:</span> <strong>{viewingStudent.address || 'N/A'}</strong></div>
-              <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">CGPA:</span> <strong className="text-amber-400 font-bold">{viewingStudent.cgpa}</strong></div>
+              <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">CGPA:</span> <strong className="text-amber-400 font-bold">{(viewingStudent.cgpa !== null && viewingStudent.cgpa !== undefined && viewingStudent.cgpa !== '') ? Number(viewingStudent.cgpa).toFixed(2) : 'Not Available'}</strong></div>
               <div className="flex justify-between pb-1.5"><span className="text-slate-500">Assigned Year / Sec:</span> <strong>{viewingStudent.year || assignedYear} / {viewingStudent.section || assignedSection}</strong></div>
             </div>
 
@@ -6323,8 +6323,8 @@ export const FacultyDashboard: React.FC = () => {
                   <input type="text" value={editForm.mobileNumber} onChange={(e) => setEditForm({...editForm, mobileNumber: e.target.value})} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
                 </div>
                 <div>
-                  <label className="text-slate-400 block mb-1 font-bold">CGPA</label>
-                  <input type="number" step="0.01" min="0" max="10" required value={editForm.cgpa} onChange={(e) => setEditForm({...editForm, cgpa: parseFloat(e.target.value) || 0})} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                  <label className="text-slate-400 block mb-1 font-bold">CGPA (Optional)</label>
+                  <input type="number" step="0.01" min="0" max="10" value={editForm.cgpa ?? ''} onChange={(e) => setEditForm({...editForm, cgpa: e.target.value === '' ? null : (parseFloat(e.target.value) || null)})} placeholder="Leave blank if N/A" className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
                 </div>
               </div>
               <div>

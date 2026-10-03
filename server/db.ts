@@ -84,7 +84,7 @@ export async function initDatabaseSchema(): Promise<void> {
       section TEXT NOT NULL,
       batch TEXT NOT NULL,
       class_coordinator_name TEXT NOT NULL DEFAULT 'Assigned Faculty',
-      cgpa REAL NOT NULL DEFAULT 0.0,
+      cgpa REAL DEFAULT NULL,
       overall_score REAL NOT NULL DEFAULT 0.0,
       current_rank INTEGER NOT NULL DEFAULT 99,
       is_representative INTEGER NOT NULL DEFAULT 0,
@@ -488,9 +488,14 @@ export async function initDatabaseSchema(): Promise<void> {
   if (isPostgresActive()) {
     const { pgPool } = await import('./postgresAdapter.js');
     if (pgPool) {
-      await pgPool.query(ddl);
+      const ddlStatements = ddl.split(';').map(s => s.trim()).filter(Boolean);
+      for (const stmt of ddlStatements) {
+        try { await pgPool.query(stmt); } catch (_err) {}
+      }
       const alterCols = [
         `ALTER TABLE students ADD COLUMN IF NOT EXISTS created_by_faculty_id TEXT;`,
+        `ALTER TABLE students ALTER COLUMN cgpa DROP NOT NULL;`,
+        `ALTER TABLE students ALTER COLUMN cgpa SET DEFAULT NULL;`,
         `ALTER TABLE students ADD COLUMN IF NOT EXISTS faculty_workspace_id TEXT;`,
         `ALTER TABLE students ADD COLUMN IF NOT EXISTS personal_email TEXT;`,
         `ALTER TABLE students ADD COLUMN IF NOT EXISTS entry_type TEXT DEFAULT 'Regular';`,
@@ -504,6 +509,9 @@ export async function initDatabaseSchema(): Promise<void> {
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS action_taken TEXT;`,
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS rule_violated TEXT;`,
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS fine_details TEXT;`,
+        `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS assigned_faculty_id TEXT;`,
+        `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS assigned_staff_name TEXT;`,
+        `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS created_at TEXT;`,
         `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS company_name TEXT;`,
         `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS proof_file_path TEXT;`,
         `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS created_at TEXT;`,
@@ -690,7 +698,7 @@ export interface StudentRecord {
   batch: string;
   class_coordinator_name: string;
   classCoordinatorName?: string;
-  cgpa: number;
+  cgpa: number | null;
   overall_score: number;
   overallScore?: number;
   current_rank: number;
@@ -749,7 +757,7 @@ export function normalizeStudentRecord(stu: any): StudentRecord | null {
     batch: stu.batch,
     class_coordinator_name: stu.class_coordinator_name || stu.classCoordinatorName || 'Assigned Faculty',
     classCoordinatorName: stu.class_coordinator_name || stu.classCoordinatorName || 'Assigned Faculty',
-    cgpa: stu.cgpa || 0,
+    cgpa: (stu.cgpa !== undefined && stu.cgpa !== null && stu.cgpa !== '' && String(stu.cgpa).trim().toUpperCase() !== 'N/A' && String(stu.cgpa).trim().toUpperCase() !== 'NULL' && !isNaN(Number(stu.cgpa))) ? Number(stu.cgpa) : null,
     overall_score: stu.overall_score !== undefined ? stu.overall_score : (stu.overallScore || 0),
     overallScore: stu.overall_score !== undefined ? stu.overall_score : (stu.overallScore || 0),
     current_rank: stu.current_rank !== undefined ? stu.current_rank : (stu.currentRank || 99),
@@ -1312,7 +1320,7 @@ export class SQLiteDB {
     const cleanMobile = stu.mobileNumber ? stu.mobileNumber.trim() : null;
     const cleanPersonalEmail = stu.personalEmail ? stu.personalEmail.trim().toLowerCase() : null;
     const cleanAddress = stu.address ? stu.address.trim() : null;
-    const cleanCgpa = typeof stu.cgpa === 'number' ? Math.max(0, Math.min(10, stu.cgpa)) : 0;
+    const cleanCgpa = (stu.cgpa !== undefined && stu.cgpa !== null && stu.cgpa !== '' && String(stu.cgpa).trim().toUpperCase() !== 'N/A' && String(stu.cgpa).trim().toUpperCase() !== 'NULL' && !isNaN(Number(stu.cgpa))) ? Math.max(0, Math.min(10, Number(stu.cgpa))) : null;
     const yearToUse = stu.year || '1st Year';
     const sectionToUse = stu.section || 'A';
     const batchToUse = stu.batch || '2024-2028';
@@ -1370,11 +1378,12 @@ export class SQLiteDB {
     section: string;
     batch: string;
     classCoordinatorName?: string;
-    cgpa?: number;
+    cgpa?: number | null;
     overallScore?: number;
     createdByFacultyId?: string;
     facultyWorkspaceId?: string;
   }): Promise<void> {
+    const parsedCgpa = (stu.cgpa !== undefined && stu.cgpa !== null && stu.cgpa !== '' && String(stu.cgpa).trim().toUpperCase() !== 'N/A' && String(stu.cgpa).trim().toUpperCase() !== 'NULL' && !isNaN(Number(stu.cgpa))) ? Math.max(0, Math.min(10, Number(stu.cgpa))) : null;
     await executeRun(`
       INSERT INTO students (id, register_no, name, email, personal_email, department, year, section, batch, class_coordinator_name, cgpa, overall_score, current_rank, created_by_faculty_id, faculty_workspace_id)
       VALUES (?, ?, ?, ?, ?, 'AI & DS', ?, ?, ?, ?, ?, ?, 99, ?, ?)
@@ -1388,15 +1397,16 @@ export class SQLiteDB {
       stu.section,
       stu.batch,
       stu.classCoordinatorName || 'Assigned Faculty',
-      stu.cgpa || 0,
+      parsedCgpa,
       stu.overallScore || 0,
       stu.createdByFacultyId || null,
       stu.facultyWorkspaceId || stu.createdByFacultyId || null
     ]);
   }
 
-  public async updateStudentCGPA(studentId: string, cgpa: number): Promise<void> {
-    await executeRun('UPDATE students SET cgpa = ? WHERE id = ?', [cgpa, studentId]);
+  public async updateStudentCGPA(studentId: string, cgpa: number | null): Promise<void> {
+    const parsedCgpa = (cgpa !== undefined && cgpa !== null && cgpa !== '' && String(cgpa).trim().toUpperCase() !== 'N/A' && String(cgpa).trim().toUpperCase() !== 'NULL' && !isNaN(Number(cgpa))) ? Math.max(0, Math.min(10, Number(cgpa))) : null;
+    await executeRun('UPDATE students SET cgpa = ? WHERE id = ?', [parsedCgpa, studentId]);
   }
 
   public async updateStudentScoreAndRank(studentId: string, overallScore: number, currentRank: number): Promise<void> {
@@ -2035,17 +2045,20 @@ export class SQLiteDB {
     fineDetails?: string;
     remark: string;
     recordedBy: string;
+    assignedFacultyId?: string | null;
+    assignedStaffName?: string;
   }): Promise<any> {
     const id = `disc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const date = data.date || new Date().toISOString().split('T')[0];
     const time = data.time || new Date().toTimeString().split(' ')[0];
     const fine = Number(data.fineAmount) || 0;
+    const createdAt = new Date().toISOString();
 
     await executeRun(`
       INSERT INTO discipline_records (
-        id, student_id, date, time, category, rule_violated, remark, warning_action, action_taken, fine_amount, fine_details, recorded_by
+        id, student_id, date, time, category, rule_violated, remark, warning_action, action_taken, fine_amount, fine_details, recorded_by, assigned_faculty_id, assigned_staff_name, created_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       id,
       data.studentId,
@@ -2058,7 +2071,10 @@ export class SQLiteDB {
       data.actionTaken || '',
       fine,
       data.fineDetails || '',
-      data.recordedBy || 'Faculty'
+      data.recordedBy || data.assignedStaffName || 'Faculty',
+      data.assignedFacultyId || null,
+      data.assignedStaffName || 'No Staff Assigned',
+      createdAt
     ]);
 
     return {
@@ -2072,7 +2088,10 @@ export class SQLiteDB {
       action_taken: data.actionTaken,
       fine_amount: fine,
       fine_details: data.fineDetails,
-      recorded_by: data.recordedBy
+      recorded_by: data.recordedBy,
+      assigned_faculty_id: data.assignedFacultyId || null,
+      assigned_staff_name: data.assignedStaffName || 'No Staff Assigned',
+      created_at: createdAt
     };
   }
 
@@ -2082,6 +2101,8 @@ export class SQLiteDB {
     year?: string;
     section?: string;
     issue?: string;
+    facultyId?: string;
+    role?: string;
   }): Promise<any[]> {
     let sql = `
       SELECT 
@@ -2097,6 +2118,9 @@ export class SQLiteDB {
         d.fine_amount,
         d.fine_details,
         d.recorded_by,
+        d.assigned_faculty_id,
+        d.assigned_staff_name,
+        d.created_at,
         s.register_no,
         s.name as student_name,
         s.email as college_email,
@@ -2129,10 +2153,24 @@ export class SQLiteDB {
       params.push(filters.issue);
     }
 
+    if (filters?.facultyId && filters.role === 'FACULTY') {
+      const assignment = await this.getFacultyAssignment(filters.facultyId);
+      const assignedYear = assignment ? normalizeYear(assignment.year) : '';
+      const assignedSection = assignment ? normalizeSection(assignment.section) : '';
+
+      sql += ` AND (
+        d.assigned_faculty_id = ?
+        OR s.created_by_faculty_id = ?
+        OR s.faculty_workspace_id = ?
+        OR (LOWER(TRIM(s.year)) = LOWER(TRIM(?)) AND UPPER(TRIM(s.section)) = UPPER(TRIM(?)))
+      )`;
+      params.push(filters.facultyId, filters.facultyId, filters.facultyId, assignedYear, assignedSection);
+    }
+
     if (filters?.search && filters.search.trim() !== '') {
       const q = `%${filters.search.trim().toLowerCase()}%`;
-      sql += ` AND (LOWER(s.register_no) LIKE ? OR LOWER(s.name) LIKE ? OR LOWER(d.category) LIKE ? OR LOWER(d.rule_violated) LIKE ? OR LOWER(d.remark) LIKE ? OR LOWER(d.action_taken) LIKE ?)`;
-      params.push(q, q, q, q, q, q);
+      sql += ` AND (LOWER(s.register_no) LIKE ? OR LOWER(s.name) LIKE ? OR LOWER(d.category) LIKE ? OR LOWER(d.rule_violated) LIKE ? OR LOWER(d.remark) LIKE ? OR LOWER(d.action_taken) LIKE ? OR LOWER(d.assigned_staff_name) LIKE ?)`;
+      params.push(q, q, q, q, q, q, q);
     }
 
     sql += ` ORDER BY d.date DESC, d.time DESC, d.id DESC`;
@@ -2156,7 +2194,10 @@ export class SQLiteDB {
       fineAmount: Number(r.fine_amount) || 0,
       fineDetails: r.fine_details || '',
       remarks: r.remark || '',
-      recordedBy: r.recorded_by
+      recordedBy: r.recorded_by,
+      assignedFacultyId: r.assigned_faculty_id || null,
+      assignedStaffName: r.assigned_staff_name || 'No Staff Assigned',
+      createdAt: r.created_at || r.date
     }));
   }
 
@@ -3187,6 +3228,9 @@ export class SQLiteDB {
     const studentId = `stu-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const entryType = studentData.entryType || studentData.entry_type || 'Regular';
 
+    const rawCgpa = studentData.cgpa;
+    const parsedFacultyCgpa = (rawCgpa !== undefined && rawCgpa !== null && rawCgpa !== '' && String(rawCgpa).trim().toUpperCase() !== 'N/A' && String(rawCgpa).trim().toUpperCase() !== 'NULL' && !isNaN(Number(rawCgpa))) ? Math.max(0, Math.min(10, Number(rawCgpa))) : null;
+
     await executeRun(`
       INSERT INTO users (id, name, email, password_hash, role, identifier, year, section, is_active, created_at)
       VALUES (?, ?, ?, ?, 'STUDENT', ?, ?, ?, 1, ?)
@@ -3205,7 +3249,7 @@ export class SQLiteDB {
       section,
       studentData.batch || '2023-2027',
       coordinatorName,
-      parseFloat(studentData.cgpa) || 0,
+      parsedFacultyCgpa,
       entryType,
       facultyUserId,
       facultyUserId

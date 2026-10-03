@@ -94,6 +94,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
     email: string;
     year: string;
     section: string;
+    assignedStaffName?: string;
   } | null>(null);
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [lookupError, setLookupError] = useState('');
@@ -888,7 +889,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
                 )}
               </div>
 
-              {/* REQUIREMENT 4 & 6: AUTO-FILLED READONLY STUDENT FIELDS */}
+              {/* REQUIREMENT 4, 5 & 6: AUTO-FILLED READONLY STUDENT & ASSIGNED STAFF FIELDS */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800">
                 <div className="space-y-1">
                   <label className="text-[11px] font-mono text-slate-400">Student Name (Auto-Fetched)</label>
@@ -935,6 +936,21 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
                     value={studentMatch ? studentMatch.section : ''}
                     placeholder="Auto-filled from database"
                     className="w-full bg-slate-900/60 border border-slate-800 text-slate-300 px-3 py-2 rounded-lg text-xs font-semibold cursor-not-allowed outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="text-[11px] font-mono text-slate-400 flex items-center space-x-1">
+                    <User className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Assigned Staff Name (Auto-Fetched from DB Assignment - Readonly)</span>
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    tabIndex={-1}
+                    value={studentMatch ? (studentMatch.assignedStaffName || 'No Staff Assigned') : ''}
+                    placeholder="Auto-filled from existing database assignment"
+                    className="w-full bg-slate-900/60 border border-slate-800 text-amber-300 px-3 py-2 rounded-lg text-xs font-mono font-bold cursor-not-allowed outline-none"
                   />
                 </div>
               </div>

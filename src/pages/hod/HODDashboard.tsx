@@ -362,7 +362,7 @@ export const HODDashboard: React.FC = () => {
                       <td className="py-3 px-3 font-mono text-slate-300">{stu.registerNo}</td>
                       <td className="py-3 px-3 font-bold text-white">{stu.name}</td>
                       <td className="py-3 px-3 font-mono text-slate-400">{stu.year} - {stu.section}</td>
-                      <td className="py-3 px-3 text-center font-bold text-emerald-400">{stu.cgpa ? stu.cgpa.toFixed(2) : '0.00'}</td>
+                      <td className="py-3 px-3 text-center font-bold text-emerald-400">{(stu.cgpa !== null && stu.cgpa !== undefined && stu.cgpa !== '') ? Number(stu.cgpa).toFixed(2) : 'Not Available'}</td>
                       <td className="py-3 px-3 text-center font-extrabold text-amber-400">{stu.overallScore ? stu.overallScore.toFixed(1) : '0.0'}</td>
                       <td className="py-3 px-3 text-center font-bold text-indigo-400">#{stu.currentRank || 1}</td>
                       <td className="py-3 px-3 text-right">

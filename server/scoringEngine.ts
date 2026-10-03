@@ -29,8 +29,14 @@ export function calculateCategoryScores(
   participationList: ParticipationRecord[] = []
 ) {
   // Academic Score (0-100)
-  const rawCgpa = parseFloat((student?.cgpa ?? 0) as any) || 0;
-  let academicScore = (rawCgpa / 10) * 100;
+  const hasCgpa = student?.cgpa !== null && student?.cgpa !== undefined && !isNaN(Number(student?.cgpa));
+  let academicScore = 70;
+  if (hasCgpa) {
+    academicScore = (Number(student.cgpa) / 10) * 100;
+  } else if (academics && academics.length > 0) {
+    const avgSgpa = academics.reduce((acc, a) => acc + (a.sgpa || a.cgpa || 0), 0) / academics.length;
+    if (avgSgpa > 0) academicScore = (avgSgpa / 10) * 100;
+  }
   const pendingArrears = (arrears || []).filter((a) => a.status === 'PENDING').length;
   const clearedArrears = (arrears || []).filter((a) => a.status === 'CLEARED').length;
   academicScore = Math.max(0, Math.min(100, academicScore - pendingArrears * 8 + clearedArrears * 2));
@@ -157,12 +163,14 @@ export async function computeTeamHeadScore(student: StudentRecord, projects: Pro
   const teams = allTeams.filter((t) => t.team_head_student_id === student.id);
   const teamProjects = projects.filter((p) => p.isTeam && (p.studentRole || '').toLowerCase().includes('lead'));
   const totalHeadProjects = teams.length + teamProjects.length;
-  let score = totalHeadProjects * 35 + (student.cgpa / 10) * 30 + (student.overall_score || 0) * 0.35;
+  const cgpaVal = (student.cgpa !== null && student.cgpa !== undefined && !isNaN(Number(student.cgpa))) ? Number(student.cgpa) : 7.0;
+  let score = totalHeadProjects * 35 + (cgpaVal / 10) * 30 + (student.overall_score || 0) * 0.35;
   return Math.min(100, Math.round(score * 10) / 10);
 }
 
 export async function computeRepresentativeScore(student: StudentRecord, attendanceScore: number): Promise<number> {
   const repEval = await db.getRepresentativeEvaluation(student.id);
+  const cgpaVal = (student.cgpa !== null && student.cgpa !== undefined && !isNaN(Number(student.cgpa))) ? Number(student.cgpa) : 7.0;
   if (repEval) {
     const avgScore = (
       repEval.communication_score +
@@ -177,12 +185,12 @@ export async function computeRepresentativeScore(student: StudentRecord, attenda
       repEval.event_coordination_score +
       repEval.responsibility_completion_score
     ) / 11;
-    const score = avgScore * 7 + (student.cgpa / 10) * 20 + attendanceScore * 0.1;
+    const score = avgScore * 7 + (cgpaVal / 10) * 20 + attendanceScore * 0.1;
     return Math.min(100, Math.round(score * 10) / 10);
   }
 
   if (!student.is_representative && !(student as any).isRepresentative) return 0;
-  const score = 50 + (student.cgpa / 10) * 30 + attendanceScore * 0.2;
+  const score = 50 + (cgpaVal / 10) * 30 + attendanceScore * 0.2;
   return Math.min(100, Math.round(score * 10) / 10);
 }
 

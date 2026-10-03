@@ -5,6 +5,7 @@ import { User, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, ShieldCheck, Sparkl
 import { motion, AnimatePresence } from 'framer-motion';
 import { ForgotPasswordModal } from '../common/ForgotPasswordModal';
 import { ParticleField } from './ParticleField';
+import { DisciplineIssueModule } from '../discipline/DisciplineIssueModule';
 import type { Role } from '../../types';
 
 interface FuturisticCinematicLoginProps {
@@ -21,6 +22,9 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
   destinationRoute = '/hod/dashboard'
 }) => {
   const navigate = useNavigate();
+
+  // Standalone Discipline Module Modal / Fullscreen view State
+  const [isStandaloneDisciplineOpen, setIsStandaloneDisciplineOpen] = useState(false);
 
   // Parallax mouse position tracking for desktop
   const mousePos = useRef({ x: 0, y: 0 });
@@ -110,19 +114,22 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
     }
   };
 
-  const handleOpenDisciplineModule = async () => {
-    sessionStorage.setItem('redirect_after_login', '/faculty/discipline');
-    try {
-      const res = await API.getMe();
-      if (res && res.user && (res.user.role === 'FACULTY' || res.user.role === 'HOD' || res.user.role === 'ADMIN')) {
-        navigate('/faculty/discipline');
-        return;
-      }
-    } catch {}
-
-    setErrorMessage('Faculty login required. Please enter your credentials above to access the Discipline Module.');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  const handleOpenDisciplineModule = () => {
+    setIsStandaloneDisciplineOpen(true);
   };
+
+  if (isStandaloneDisciplineOpen) {
+    return (
+      <div className="min-h-screen bg-[#061229] p-4 md:p-8 text-white font-sans relative z-20">
+        <div className="max-w-7xl mx-auto">
+          <DisciplineIssueModule
+            userRole="FACULTY"
+            onBack={() => setIsStandaloneDisciplineOpen(false)}
+          />
+        </div>
+      </div>
+    );
+  }
 
   const isHod = portalRole === 'HOD';
 

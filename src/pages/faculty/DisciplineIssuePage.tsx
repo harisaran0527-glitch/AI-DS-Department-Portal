@@ -13,19 +13,17 @@ export const DisciplineIssuePage: React.FC = () => {
   useEffect(() => {
     API.getMe()
       .then((res) => {
-        if (!res.user || (res.user.role !== 'FACULTY' && res.user.role !== 'HOD' && res.user.role !== 'ADMIN')) {
-          navigate('/faculty');
-          return;
+        if (res?.user) {
+          setSession(res.user);
         }
-        setSession(res.user);
       })
       .catch(() => {
-        navigate('/faculty');
+        // Allow standalone module access gracefully
       })
       .finally(() => {
         setIsLoading(false);
       });
-  }, [navigate]);
+  }, []);
 
   if (isLoading) {
     return (
@@ -35,16 +33,16 @@ export const DisciplineIssuePage: React.FC = () => {
     );
   }
 
-  if (!session) return null;
-
   return (
     <div className="min-h-screen bg-[#061229] p-4 md:p-8 text-white font-sans">
       <div className="max-w-7xl mx-auto">
         <DisciplineIssueModule
-          userRole={session.role}
+          userRole={session?.role || 'FACULTY'}
           onBack={() => {
-            if (session.role === 'HOD') navigate('/hod/dashboard');
-            else navigate('/faculty/dashboard');
+            if (session?.role === 'HOD') navigate('/hod/dashboard');
+            else if (session?.role === 'ADMIN') navigate('/admin/dashboard');
+            else if (session?.role === 'FACULTY') navigate('/faculty/dashboard');
+            else navigate('/faculty');
           }}
         />
       </div>

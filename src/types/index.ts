@@ -43,7 +43,7 @@ export interface Student {
   section: Section;
   batch: string; // e.g. "2023-2027"
   classCoordinatorName: string;
-  cgpa: number;
+  cgpa: number | null;
   overallScore: number;
   currentRank: number;
   avatarUrl?: string;

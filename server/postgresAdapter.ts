@@ -33,13 +33,18 @@ if (isPgConfigured) {
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000
     });
+
+    pgPool.on('error', (err) => {
+      console.warn('⚠️ PostgreSQL Pool Idle Client Error (handing gracefully):', err.message);
+    });
+
     console.log('⚡ PostgreSQL Adapter Initialized (Connecting via Pool)');
   } catch (err: any) {
     console.warn('⚠️ Failed to initialize PostgreSQL Pool:', err.message);
   }
 }
 
-if (!pgPool && !process.env.VERCEL) {
+if (!process.env.VERCEL) {
   try {
     import('better-sqlite3').then((module) => {
       const Database = module.default || module;
@@ -82,9 +87,19 @@ export function toPgSql(sql: string): string {
 // Query All Rows (Supports both Sync & Async)
 export async function queryAll<T = any>(sql: string, params: any[] = []): Promise<T[]> {
   if (pgPool) {
-    const pgSql = toPgSql(sql);
-    const res = await pgPool.query(pgSql, params);
-    return res.rows as T[];
+    try {
+      const pgSql = toPgSql(sql);
+      const res = await pgPool.query(pgSql, params);
+      return res.rows as T[];
+    } catch (err: any) {
+      console.warn('⚠️ PostgreSQL queryAll retry following error:', err.message);
+      if (sqliteDb) {
+        return sqliteDb.prepare(sql).all(...params) as T[];
+      }
+      const pgSql = toPgSql(sql);
+      const res = await pgPool.query(pgSql, params);
+      return res.rows as T[];
+    }
   } else if (sqliteDb) {
     return sqliteDb.prepare(sql).all(...params) as T[];
   }
@@ -94,9 +109,19 @@ export async function queryAll<T = any>(sql: string, params: any[] = []): Promis
 // Query Single Row
 export async function queryOne<T = any>(sql: string, params: any[] = []): Promise<T | null> {
   if (pgPool) {
-    const pgSql = toPgSql(sql);
-    const res = await pgPool.query(pgSql, params);
-    return (res.rows[0] as T) || null;
+    try {
+      const pgSql = toPgSql(sql);
+      const res = await pgPool.query(pgSql, params);
+      return (res.rows[0] as T) || null;
+    } catch (err: any) {
+      console.warn('⚠️ PostgreSQL queryOne retry following error:', err.message);
+      if (sqliteDb) {
+        return (sqliteDb.prepare(sql).get(...params) as T) || null;
+      }
+      const pgSql = toPgSql(sql);
+      const res = await pgPool.query(pgSql, params);
+      return (res.rows[0] as T) || null;
+    }
   } else if (sqliteDb) {
     return (sqliteDb.prepare(sql).get(...params) as T) || null;
   }
@@ -106,9 +131,20 @@ export async function queryOne<T = any>(sql: string, params: any[] = []): Promis
 // Execute Statement (INSERT / UPDATE / DELETE)
 export async function executeRun(sql: string, params: any[] = []): Promise<{ changes: number }> {
   if (pgPool) {
-    const pgSql = toPgSql(sql);
-    const res = await pgPool.query(pgSql, params);
-    return { changes: res.rowCount || 0 };
+    try {
+      const pgSql = toPgSql(sql);
+      const res = await pgPool.query(pgSql, params);
+      return { changes: res.rowCount || 0 };
+    } catch (err: any) {
+      console.warn('⚠️ PostgreSQL executeRun retry following error:', err.message);
+      if (sqliteDb) {
+        const res = sqliteDb.prepare(sql).run(...params);
+        return { changes: res.changes };
+      }
+      const pgSql = toPgSql(sql);
+      const res = await pgPool.query(pgSql, params);
+      return { changes: res.rowCount || 0 };
+    }
   } else if (sqliteDb) {
     const res = sqliteDb.prepare(sql).run(...params);
     return { changes: res.changes };

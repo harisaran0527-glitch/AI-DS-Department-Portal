@@ -361,7 +361,7 @@ export const HodFacultyWorkspaceView: React.FC<HodFacultyWorkspaceViewProps> = (
                             </span>
                           </td>
                           <td className="py-3 px-3 text-center font-bold text-emerald-400">
-                            {stu.cgpa ? stu.cgpa.toFixed(2) : '0.00'}
+                            {(stu.cgpa !== null && stu.cgpa !== undefined && stu.cgpa !== '') ? Number(stu.cgpa).toFixed(2) : 'Not Available'}
                           </td>
                           <td className="py-3 px-3 text-center font-bold">
                             {stu.arrearsCount > 0 ? (
@@ -471,7 +471,7 @@ export const HodFacultyWorkspaceView: React.FC<HodFacultyWorkspaceViewProps> = (
                 <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-4 font-mono">
                   <div className="flex justify-between items-center border-b border-slate-800/80 pb-3">
                     <h4 className="font-bold text-emerald-400 uppercase text-sm">Academic Record & Marksheet Proof</h4>
-                    <span className="text-slate-400">CGPA: <strong className="text-emerald-400 text-base">{inspectStudent.cgpa ? inspectStudent.cgpa.toFixed(2) : '0.00'}</strong></span>
+                    <span className="text-slate-400">CGPA: <strong className="text-emerald-400 text-base">{(inspectStudent.cgpa !== null && inspectStudent.cgpa !== undefined && inspectStudent.cgpa !== '') ? Number(inspectStudent.cgpa).toFixed(2) : 'Not Available'}</strong></span>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div className="bg-slate-900 p-3 rounded-xl border border-slate-800">

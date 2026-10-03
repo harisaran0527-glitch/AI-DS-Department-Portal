@@ -208,8 +208,7 @@ export async function getTopRecognitionRankings(
   // Formula: computeOverallScore(breakdown, scoringConfig)
   const bestStudentSorted = [...evaluatedPool].sort((a, b) => {
     if (b.overallScore !== a.overallScore) return b.overallScore - a.overallScore;
-    if ((b.student.cgpa || 0) !== (a.student.cgpa || 0)) return (b.student.cgpa || 0) - (a.student.cgpa || 0);
-    return (b.breakdown.skillEdge || 0) - (a.breakdown.skillEdge || 0);
+    return (b.student.cgpa ?? -1) - (a.student.cgpa ?? -1);
   });
 
   // --- CATEGORY B: BEST TEAM HEAD ---
@@ -227,7 +226,7 @@ export async function getTopRecognitionRankings(
     const aTeams = allTeams.filter((t) => t.team_head_student_id === a.student.id).length;
     const bTeams = allTeams.filter((t) => t.team_head_student_id === b.student.id).length;
     if (bTeams !== aTeams) return bTeams - aTeams;
-    return (b.student.cgpa || 0) - (a.student.cgpa || 0);
+    return (b.student.cgpa ?? -1) - (a.student.cgpa ?? -1);
   });
 
   // --- CATEGORY C: BEST ELITE STUDENT ---
@@ -240,7 +239,7 @@ export async function getTopRecognitionRankings(
     const bSe = a.full360.skillEdge?.totalRewardPoints || 0;
     const aSe = a.full360.skillEdge?.totalRewardPoints || 0;
     if (bSe !== aSe) return bSe - aSe;
-    return (b.student.cgpa || 0) - (a.student.cgpa || 0);
+    return (b.student.cgpa ?? -1) - (a.student.cgpa ?? -1);
   });
 
   // --- CATEGORY D: BEST LEETCODE PERFORMER ---
@@ -489,25 +488,30 @@ Rules:
   // 2. Deterministic AI Engine Rationale (Explicit tag indicating fallback mode when key is absent/unreachable)
   const tag = isApiActive ? '[Gemini Analysis]' : '[Rule Engine Fallback]';
 
+  const formatCgpa = (cgpa: any): string => {
+    if (cgpa === null || cgpa === undefined || cgpa === '' || isNaN(Number(cgpa))) return 'Not Available';
+    return Number(cgpa).toFixed(2);
+  };
+
   if (categoryKey === 'BEST_STUDENT') {
     if (rank === 1) {
-      return `Awarded 1st Place because ${student.name} (${student.registerNo || student.register_no}) achieved top overall composite score of ${item.overallScore.toFixed(1)}/100, outperforming the field with CGPA of ${student.cgpa.toFixed(2)}, SkillEdge completion of ${breakdown.skillEdge}%, and ${breakdown.attendance}% attendance. ${tag}`;
+      return `Awarded 1st Place because ${student.name} (${student.registerNo || student.register_no}) achieved top overall composite score of ${item.overallScore.toFixed(1)}/100, outperforming the field with CGPA of ${formatCgpa(student.cgpa)}, SkillEdge completion of ${breakdown.skillEdge}%, and ${breakdown.attendance}% attendance. ${tag}`;
     } else {
-      return `Awarded 2nd Place because ${student.name} (${student.registerNo || student.register_no}) demonstrated outstanding multi-module performance with overall composite score of ${item.overallScore.toFixed(1)}/100, ${student.cgpa.toFixed(2)} CGPA, and verified course certifications. ${tag}`;
+      return `Awarded 2nd Place because ${student.name} (${student.registerNo || student.register_no}) demonstrated outstanding multi-module performance with overall composite score of ${item.overallScore.toFixed(1)}/100, ${formatCgpa(student.cgpa)} CGPA, and verified course certifications. ${tag}`;
     }
   }
 
   if (categoryKey === 'BEST_TEAM_HEAD') {
     if (rank === 1) {
-      return `Awarded 1st Place because ${student.name} (${student.registerNo || student.register_no}) leads ${teams.length || 1} project teams with team score of ${item.teamHeadScore.toFixed(1)}/100, demonstrating exceptional technical leadership and academic balance (${student.cgpa.toFixed(2)} CGPA). ${tag}`;
+      return `Awarded 1st Place because ${student.name} (${student.registerNo || student.register_no}) leads ${teams.length || 1} project teams with team score of ${item.teamHeadScore.toFixed(1)}/100, demonstrating exceptional technical leadership and academic balance (${formatCgpa(student.cgpa)} CGPA). ${tag}`;
     } else {
-      return `Awarded 2nd Place because ${student.name} (${student.registerNo || student.register_no}) holds a strong team head score of ${item.teamHeadScore.toFixed(1)}/100 with verified team project contributions and ${student.cgpa.toFixed(2)} CGPA. ${tag}`;
+      return `Awarded 2nd Place because ${student.name} (${student.registerNo || student.register_no}) holds a strong team head score of ${item.teamHeadScore.toFixed(1)}/100 with verified team project contributions and ${formatCgpa(student.cgpa)} CGPA. ${tag}`;
     }
   }
 
   if (categoryKey === 'BEST_ELITE_STUDENT') {
     if (rank === 1) {
-      return `Awarded 1st Place Elite Student because ${student.name} (${student.registerNo || student.register_no}) ranks #1 among designated Elite Students with Elite score of ${item.eliteScore.toFixed(1)}/100, combining ${student.cgpa.toFixed(2)} CGPA, ${breakdown.leetCode}/100 LeetCode, and ${breakdown.skillEdge}% SkillEdge. ${tag}`;
+      return `Awarded 1st Place Elite Student because ${student.name} (${student.registerNo || student.register_no}) ranks #1 among designated Elite Students with Elite score of ${item.eliteScore.toFixed(1)}/100, combining ${formatCgpa(student.cgpa)} CGPA, ${breakdown.leetCode}/100 LeetCode, and ${breakdown.skillEdge}% SkillEdge. ${tag}`;
     } else {
       return `Awarded 2nd Place Elite Student because ${student.name} (${student.registerNo || student.register_no}) secured 2nd position among designated Elite Students with Elite score of ${item.eliteScore.toFixed(1)}/100 and verified multi-disciplinary project portfolios. ${tag}`;
     }

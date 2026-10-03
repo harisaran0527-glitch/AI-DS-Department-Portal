@@ -127,7 +127,7 @@ export const API = {
           collegeEmail: string;
           personalEmail: string | null;
           address: string | null;
-          cgpa: number;
+          cgpa: number | null;
         };
       }>;
     }>('/admin/students/import-preview', {

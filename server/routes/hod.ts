@@ -407,9 +407,9 @@ router.get('/faculty/:facultyId', async (req: AuthRequest, res: Response) => {
   const student360List = await Promise.all(assignedRoster.map((s) => db.getStudent360(s.id)));
 
   // Compute workspace summary metrics
-  const totalStudents = assignedRoster.length;
-  const avgCgpa = totalStudents > 0
-    ? assignedRoster.reduce((acc, s) => acc + (s.cgpa || 0), 0) / totalStudents
+  const studentsWithCgpa = assignedRoster.filter((s) => s.cgpa !== null && s.cgpa !== undefined && !isNaN(Number(s.cgpa)));
+  const avgCgpa = studentsWithCgpa.length > 0
+    ? studentsWithCgpa.reduce((acc, s) => acc + Number(s.cgpa), 0) / studentsWithCgpa.length
     : 0;
 
   const avgSkillEdge = totalStudents > 0

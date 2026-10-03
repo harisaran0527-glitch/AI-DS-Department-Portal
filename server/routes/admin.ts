@@ -96,9 +96,8 @@ router.post('/students/import-preview', async (req: AuthRequest, res: Response) 
       const personalEmail = String(r['Personal Mail ID'] || r['Personal Email ID'] || r['Personal Email'] || r.personalEmail || r.personal_email || '').trim().toLowerCase();
       const address = String(r['Address'] || r.address || '').trim();
       
-      const rawCgpa = r['CGPA'] !== undefined ? r['CGPA'] : (r.cgpa !== undefined ? r.cgpa : 0);
-      const parsedCgpa = parseFloat(rawCgpa);
-      const cgpa = isNaN(parsedCgpa) ? 0 : parsedCgpa;
+      const rawCgpa = r['CGPA'] !== undefined ? r['CGPA'] : (r.cgpa !== undefined ? r.cgpa : undefined);
+      let cgpa: number | null = null;
 
       if (!name) errors.push('Missing required student Name.');
       if (!registerNo) errors.push('Missing required Register Number.');
@@ -112,9 +111,15 @@ router.post('/students/import-preview', async (req: AuthRequest, res: Response) 
         errors.push('Invalid Personal Mail ID format (missing @).');
       }
 
-      if (r['CGPA'] !== undefined || r.cgpa !== undefined) {
-        if (isNaN(parsedCgpa) || parsedCgpa < 0 || parsedCgpa > 10) {
-          errors.push('CGPA must be a valid number between 0.00 and 10.00.');
+      if (rawCgpa !== undefined && rawCgpa !== null) {
+        const str = String(rawCgpa).trim();
+        if (str !== '' && str.toUpperCase() !== 'N/A' && str.toUpperCase() !== 'NULL' && str.toUpperCase() !== 'NOT AVAILABLE') {
+          const parsedCgpa = parseFloat(str);
+          if (isNaN(parsedCgpa) || parsedCgpa < 0 || parsedCgpa > 10) {
+            errors.push('CGPA must be a valid number between 0.00 and 10.00 or left blank.');
+          } else {
+            cgpa = parsedCgpa;
+          }
         }
       }
 
@@ -201,18 +206,28 @@ router.post('/students/import-confirm', async (req: AuthRequest, res: Response) 
 
       if (!reg || !mail || !name) continue;
 
-      const updatedStudent = await db.upsertStudentWithUserLogin({
-        registerNo: reg,
-        name,
-        email: mail,
-        mobileNumber: s.mobileNumber || s.mobile_number || s['Mobile Number'] || s['Mobile No'],
-        personalEmail: s.personalEmail || s.personal_email || s['Personal Mail ID'] || s['Personal Email ID'],
-        address: s.address || s['Address'],
-        cgpa: typeof s.cgpa === 'number' ? s.cgpa : parseFloat(s.cgpa) || 0,
-        year: s.year || yearToUse,
-        section: s.section || sectionToUse,
-        batch: s.batch || batchToUse
-      });
+        const rawCgpa = s.cgpa !== undefined ? s.cgpa : (s['CGPA'] !== undefined ? s['CGPA'] : undefined);
+        let cgpaVal: number | null = null;
+        if (rawCgpa !== undefined && rawCgpa !== null) {
+          const str = String(rawCgpa).trim();
+          if (str !== '' && str.toUpperCase() !== 'N/A' && str.toUpperCase() !== 'NULL' && str.toUpperCase() !== 'NOT AVAILABLE') {
+            const parsed = parseFloat(str);
+            if (!isNaN(parsed)) cgpaVal = parsed;
+          }
+        }
+
+        const updatedStudent = await db.upsertStudentWithUserLogin({
+          registerNo: reg,
+          name,
+          email: mail,
+          mobileNumber: s.mobileNumber || s.mobile_number || s['Mobile Number'] || s['Mobile No'],
+          personalEmail: s.personalEmail || s.personal_email || s['Personal Mail ID'] || s['Personal Email ID'],
+          address: s.address || s['Address'],
+          cgpa: cgpaVal,
+          year: s.year || yearToUse,
+          section: s.section || sectionToUse,
+          batch: s.batch || batchToUse
+        });
 
       importedList.push(updatedStudent);
     }

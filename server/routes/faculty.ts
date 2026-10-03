@@ -114,8 +114,15 @@ router.put('/students/:id', verifyFacultySectionAccess, async (req: AuthRequest,
   const emailToUse = typeof collegeEmail === 'string' && collegeEmail.trim() ? collegeEmail.trim().toLowerCase() : student.email;
   const personalEmailToUse = typeof personalEmail === 'string' ? personalEmail.trim().toLowerCase() : (student.personalEmail || '');
   const addressToUse = typeof address === 'string' ? address.trim() : (student.address || '');
-  const parsedCgpa = typeof cgpa === 'number' ? cgpa : (parseFloat(cgpa) || student.cgpa);
-  const cgpaToUse = Math.max(0, Math.min(10, parsedCgpa));
+  let cgpaToUse = student.cgpa;
+  if (cgpa !== undefined) {
+    if (cgpa === null || cgpa === '' || String(cgpa).toUpperCase() === 'N/A' || String(cgpa).toUpperCase() === 'NULL' || String(cgpa).toUpperCase() === 'NOT AVAILABLE') {
+      cgpaToUse = null;
+    } else {
+      const parsed = parseFloat(cgpa);
+      if (!isNaN(parsed)) cgpaToUse = Math.max(0, Math.min(10, parsed));
+    }
+  }
 
   const updatedStudent = await db.upsertStudentWithUserLogin({
     registerNo: student.register_no,
@@ -298,7 +305,8 @@ router.put('/students/:studentId/360', verifyFacultySectionAccess, async (req: A
 
   // Numeric scalar fields
   if (cgpa !== undefined) {
-    await db.updateStudentCGPA(studentId, parseFloat(cgpa) || 0);
+    const val = (cgpa === null || cgpa === '' || String(cgpa).toUpperCase() === 'N/A' || String(cgpa).toUpperCase() === 'NULL' || String(cgpa).toUpperCase() === 'NOT AVAILABLE' || isNaN(parseFloat(cgpa))) ? null : Math.max(0, Math.min(10, parseFloat(cgpa)));
+    await db.updateStudentCGPA(studentId, val);
   }
 
   if (presentDays !== undefined && totalDays !== undefined) {
@@ -440,7 +448,7 @@ router.post('/students', requireClassCoordinator, async (req: AuthRequest, res: 
       year,
       section,
       entryType,
-      cgpa: parseFloat(cgpa) || 0
+      cgpa: (cgpa !== undefined && cgpa !== null && cgpa !== '' && String(cgpa).toUpperCase() !== 'N/A' && String(cgpa).toUpperCase() !== 'NULL' && !isNaN(parseFloat(cgpa))) ? parseFloat(cgpa) : null
     });
 
     return res.status(201).json({
@@ -493,7 +501,7 @@ router.post('/students/import', requireClassCoordinator, async (req: AuthRequest
         portalPassword: pass,
         year: s.year || s['Year'],
         section: s.section || s['Section'],
-        cgpa: parseFloat(s.cgpa) || 0
+        cgpa: (s.cgpa !== undefined && s.cgpa !== null && s.cgpa !== '' && String(s.cgpa).toUpperCase() !== 'N/A' && String(s.cgpa).toUpperCase() !== 'NULL' && !isNaN(parseFloat(s.cgpa))) ? parseFloat(s.cgpa) : null
       });
       createdList.push(created);
       if (isTemp) {

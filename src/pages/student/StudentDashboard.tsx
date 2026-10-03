@@ -200,7 +200,7 @@ export const StudentDashboard: React.FC = () => {
           <div className="flex items-center gap-4 w-full md:w-auto">
             <div className="bg-slate-950 border border-slate-800 px-4 py-2.5 rounded-xl text-center flex-1 md:flex-none">
               <div className="text-[10px] text-slate-400 uppercase font-mono tracking-wider font-semibold">Cumulative CGPA</div>
-              <div className="text-xl font-extrabold text-emerald-400 font-mono mt-0.5">{student.cgpa ? student.cgpa.toFixed(2) : '0.00'}</div>
+              <div className="text-xl font-extrabold text-emerald-400 font-mono mt-0.5">{(student.cgpa !== null && student.cgpa !== undefined && student.cgpa !== '') ? Number(student.cgpa).toFixed(2) : 'Not Available'}</div>
             </div>
 
             <div className="bg-slate-950 border border-slate-800 px-4 py-2.5 rounded-xl text-center flex-1 md:flex-none">
@@ -1118,7 +1118,7 @@ export const StudentDashboard: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono">
                 <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-1">
                   <span className="text-slate-400 text-[11px]">Cumulative Grade Point Average (CGPA):</span>
-                  <div className="text-2xl font-extrabold text-emerald-400">{student.cgpa ? student.cgpa.toFixed(2) : '0.00'}</div>
+                  <div className="text-2xl font-extrabold text-emerald-400">{(student.cgpa !== null && student.cgpa !== undefined && student.cgpa !== '') ? Number(student.cgpa).toFixed(2) : 'Not Available'}</div>
                 </div>
                 <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-1">
                   <span className="text-slate-400 text-[11px]">Overall Composite Score:</span>
