@@ -691,7 +691,9 @@ html.light ::-webkit-scrollbar-thumb:hover {
 
 .field-inner {
   position: relative;
-  padding: 18px 14px 8px 42px;
+  padding: 12px 14px 12px 42px;
+  display: flex;
+  items-center: center;
 }
 
 .field-icon {
@@ -710,24 +712,7 @@ html.light ::-webkit-scrollbar-thumb:hover {
 }
 
 .field label {
-  position: absolute;
-  left: 42px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 11.5px;
-  letter-spacing: 0.12em;
-  color: #94A3B8;
-  pointer-events: none;
-  text-transform: uppercase;
-  transition: transform 0.3s ease, font-size 0.3s ease, color 0.3s ease;
-  font-family: monospace;
-}
-.field.lifted label {
-  transform: translateY(-19px) scale(0.84);
-  transform-origin: left center;
-  font-size: 10px;
-  letter-spacing: 0.2em;
-  color: #22D3EE;
+  display: none !important;
 }
 
 .field input {
@@ -737,14 +722,27 @@ html.light ::-webkit-scrollbar-thumb:hover {
   background: transparent !important;
   color: #FFFFFF !important;
   font-size: 13.5px;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.03em;
   padding: 0 36px 0 0;
   box-sizing: border-box;
   caret-color: #22D3EE;
-  min-height: 20px;
+  min-height: 24px;
 }
+
 .field input::placeholder {
-  color: transparent !important;
+  color: rgba(148, 163, 184, 0.65) !important;
+  font-size: 13px;
+}
+
+html.light .field {
+  background: #FFFFFF !important;
+  border-color: #CBD5E1 !important;
+}
+html.light .field input {
+  color: #0F172A !important;
+}
+html.light .field input::placeholder {
+  color: #94A3B8 !important;
 }
 
 .caret-glow {

@@ -4,7 +4,6 @@ import { API } from '../../services/api';
 import { User, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, ShieldCheck, Sparkles, ShieldAlert, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ForgotPasswordModal } from '../common/ForgotPasswordModal';
-import { ThemeToggle } from '../common/ThemeToggle';
 import { ParticleField } from './ParticleField';
 import type { Role } from '../../types';
 
@@ -77,7 +76,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
     if (authStatus === 'loading') return;
 
     if (!identifier.trim() || !password.trim()) {
-      setErrorMessage('// Credentials required to initiate portal authentication');
+      setErrorMessage('Credentials required to initiate portal authentication');
       setTimeout(() => setErrorMessage(''), 3000);
       return;
     }
@@ -104,8 +103,20 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
       }
     } catch (err: any) {
       setAuthStatus('error');
-      setErrorMessage(err.message || `// Invalid ${roleSubtitle} credentials. Verify your login details.`);
+      setErrorMessage(err.message || `Invalid ${roleSubtitle} credentials. Verify your login details.`);
     }
+  };
+
+  const handleOpenDisciplineModule = async () => {
+    try {
+      const res = await API.getMe();
+      if (res && res.user && (res.user.role === 'FACULTY' || res.user.role === 'HOD' || res.user.role === 'ADMIN')) {
+        navigate('/faculty/discipline');
+        return;
+      }
+    } catch {}
+    setErrorMessage('Please initiate login to access the Discipline Issue Module');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const isHod = portalRole === 'HOD';
@@ -155,7 +166,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
           <div className="corner bl" />
           <div className="corner br" />
 
-          {/* TOP STATUS BAR */}
+          {/* TOP STATUS BAR (ThemeToggle Removed per Requirement 1) */}
           <div className="flex items-center justify-between border-b border-[#1E4D8F]/50 pb-3.5">
             <div className="flex items-center space-x-2">
               <span className="w-2 h-2 rounded-full bg-[#22D3EE] animate-pulse shadow-[0_0_10px_#22D3EE]" />
@@ -164,7 +175,6 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
               </span>
             </div>
             <div className="flex items-center space-x-2">
-              <ThemeToggle />
               <span className="text-[10px] font-mono text-slate-300 bg-[#071A3D] px-2.5 py-0.5 rounded border border-[#1E4D8F]/60 font-semibold tracking-wider">
                 AVSEC-AI&DS v4.9
               </span>
@@ -189,7 +199,6 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                   alt="AVS Engineering College Logo"
                   className="h-9 w-auto object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.6)]"
                   onError={(e) => {
-                    // Fallback to text icon if image unavailable
                     (e.target as HTMLElement).style.display = 'none';
                   }}
                 />
@@ -208,8 +217,8 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
               </h1>
               <p className="text-xs text-[#D9E6FF]/80 font-mono mt-1">
                 {isHod
-                  ? '// Department Governance & Executive Operations'
-                  : '// Faculty Academic & Research Management'}
+                  ? 'Department Governance & Executive Operations'
+                  : 'Faculty Academic & Research Management'}
               </p>
             </div>
           </div>
@@ -265,7 +274,6 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                     <div className="field-icon">
                       <User className="w-4 h-4" />
                     </div>
-                    <label>// Email / User Identifier</label>
                     <input
                       type="text"
                       required
@@ -273,7 +281,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                       onChange={(e) => setIdentifier(e.target.value)}
                       onFocus={() => setFocusedField('identifier')}
                       onBlur={() => setFocusedField(null)}
-                      placeholder={placeholderIdentifier}
+                      placeholder={placeholderIdentifier || "Enter your college email or ID"}
                       autoComplete="username"
                     />
                     <div className="caret-glow" />
@@ -294,7 +302,6 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                     <div className="field-icon">
                       <Lock className="w-4 h-4" />
                     </div>
-                    <label>// Access Key / Password</label>
                     <input
                       type={showPassword ? 'text' : 'password'}
                       required
@@ -302,7 +309,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                       onChange={(e) => setPassword(e.target.value)}
                       onFocus={() => setFocusedField('password')}
                       onBlur={() => setFocusedField(null)}
-                      placeholder="Enter security password"
+                      placeholder="Enter your password"
                       autoComplete="current-password"
                     />
                     <button
@@ -403,7 +410,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
               </div>
               <button
                 type="button"
-                onClick={() => navigate('/faculty/discipline')}
+                onClick={handleOpenDisciplineModule}
                 className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold text-xs flex items-center space-x-1.5 shadow-lg shadow-rose-900/40 transition-all cursor-pointer hover:scale-105"
               >
                 <span>Open Module</span>
