@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Papa from 'papaparse';
-import { API, API_BASE } from '../../services/api';
+import { API, API_BASE, fetchWithResilience } from '../../services/api';
 import type { UserSession, Student, TeamHead, Subject } from '../../types';
 import { DashboardLayout, type MenuItem } from '../../components/layout/DashboardLayout';
 import { ConfirmDeleteModal } from '../../components/common/ConfirmDeleteModal';
@@ -583,7 +583,7 @@ export const FacultyDashboard: React.FC = () => {
     setNptelSelectedEmail(primaryEmail);
     setLeetcodeSelectedEmail(primaryEmail);
 
-    fetch(`${API_BASE}/faculty/students/${selectedStudent.id}/nptel-connection`)
+    fetchWithResilience(`${API_BASE}/faculty/students/${selectedStudent.id}/nptel-connection`)
       .then((r) => r.json())
       .then((data) => {
         setNptelConnection(data.connection || null);
@@ -838,7 +838,7 @@ export const FacultyDashboard: React.FC = () => {
 
   const fetchAttendanceHistory = React.useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/faculty/attendance/history`);
+      const res = await fetchWithResilience(`${API_BASE}/faculty/attendance/history`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.history)) {
@@ -935,7 +935,7 @@ export const FacultyDashboard: React.FC = () => {
   // Fetch Daily Attendance whenever attDate changes
   useEffect(() => {
     if (!attDate) return;
-    fetch(`${API_BASE}/faculty/attendance?date=${attDate}`)
+    fetchWithResilience(`${API_BASE}/faculty/attendance?date=${attDate}`)
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data.records)) {
@@ -1158,7 +1158,7 @@ export const FacultyDashboard: React.FC = () => {
   const handleSyncNptelConnection = async () => {
     if (!selectedStudent) return;
     try {
-      const res = await fetch(`${API_BASE}/faculty/students/${selectedStudent.id}/nptel-connection/sync`, { method: 'POST' });
+      const res = await fetchWithResilience(`${API_BASE}/faculty/students/${selectedStudent.id}/nptel-connection/sync`, { method: 'POST' });
       const data = await res.json();
       if (data.connection) setNptelConnection(data.connection);
       alert('NPTEL connection synchronized!');
@@ -1171,7 +1171,7 @@ export const FacultyDashboard: React.FC = () => {
     if (!selectedStudent) return;
     if (!confirm('Are you sure you want to disconnect this Google OAuth connection?')) return;
     try {
-      await fetch(`${API_BASE}/faculty/students/${selectedStudent.id}/nptel-connection`, { method: 'DELETE' });
+      await fetchWithResilience(`${API_BASE}/faculty/students/${selectedStudent.id}/nptel-connection`, { method: 'DELETE' });
       setNptelConnection(null);
       alert('Google OAuth connection disconnected.');
     } catch {
@@ -1354,7 +1354,7 @@ export const FacultyDashboard: React.FC = () => {
       .filter((r) => r.status !== 'UNMARKED');
 
     try {
-      const res = await fetch(`${API_BASE}/faculty/attendance`, {
+      const res = await fetchWithResilience(`${API_BASE}/faculty/attendance`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ date: attDate, records: recordsPayload })

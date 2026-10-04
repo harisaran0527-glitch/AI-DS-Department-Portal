@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { API, API_BASE } from '../../services/api';
+import { API, API_BASE, fetchWithResilience } from '../../services/api';
 import type { Student } from '../../types';
 import {
   Crown,
@@ -197,7 +197,7 @@ export const BestEliteStudentsView: React.FC<BestEliteStudentsViewProps> = ({
           roster.map(async (stu) => {
             try {
               if (userRole === 'HOD' || userRole === 'ADMIN') {
-                const res = await fetch(`${API_BASE}/hod/students/${stu.id}/360`, { credentials: 'include' });
+                const res = await fetchWithResilience(`${API_BASE}/hod/students/${stu.id}/360`, { credentials: 'include' });
                 if (res.ok) {
                   map360[stu.id] = await res.json();
                 }
