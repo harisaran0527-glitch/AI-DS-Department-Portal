@@ -644,23 +644,6 @@ export async function initDatabaseSchema(): Promise<void> {
       VALUES ('default', 25, 15, 10, 10, 10, 10, 5, 10, 5)
     `);
   }
-
-  const hasSubjects = await queryOne('SELECT COUNT(*) as cnt FROM subjects');
-  if (!hasSubjects || Number(hasSubjects.cnt) === 0) {
-    const defaultSubs = [
-      { id: 'sub-seed-1', code: 'AD3401', name: 'Data Structures and Algorithms', dept: 'AI & Data Science', acadYear: '2023-2027', year: '2nd Year', sem: 3, sec: 'ALL', type: 'Theory', credits: 3, handler: 'Assigned Faculty' },
-      { id: 'sub-seed-2', code: 'AD3402', name: 'Artificial Intelligence & Neural Networks', dept: 'AI & Data Science', acadYear: '2023-2027', year: '2nd Year', sem: 4, sec: 'ALL', type: 'Theory', credits: 4, handler: 'Class Coordinator' },
-      { id: 'sub-seed-3', code: 'AD3411', name: 'Machine Learning Laboratory', dept: 'AI & Data Science', acadYear: '2023-2027', year: '2nd Year', sem: 4, sec: 'ALL', type: 'Practical', credits: 2, handler: 'Class Coordinator' },
-      { id: 'sub-seed-4', code: 'AD3501', name: 'Deep Learning & Computer Vision', dept: 'AI & Data Science', acadYear: '2022-2026', year: '3rd Year', sem: 5, sec: 'ALL', type: 'Elective', credits: 3, handler: 'HOD Faculty' }
-    ];
-    const now = new Date().toISOString();
-    for (const s of defaultSubs) {
-      await executeRun(`
-        INSERT INTO subjects (id, subject_code, subject_name, department, academic_year, year, semester, section, subject_type, credits, faculty_handler, created_by_user_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYSTEM', ?)
-      `, [s.id, s.code, s.name, s.dept, s.acadYear, s.year, s.sem, s.sec, s.type, s.credits, s.handler, now]);
-    }
-  }
 }
 
 export interface SubjectRecord {
@@ -976,69 +959,8 @@ export interface ScoringConfig {
 }
 
 export class SQLiteDB {
-  // ONE-TIME SECURE ADMIN BOOTSTRAP FLOW FROM ENVIRONMENT VARIABLES (.env)
   public static async initSystemAccounts(): Promise<void> {
     await initDatabaseSchema();
-    const adminEmail = (process.env.ADMIN_EMAIL || 'departmentai&ds@gmail.com').trim().toLowerCase();
-    const adminInitialPassword = process.env.ADMIN_INITIAL_PASSWORD || 'aids@avs';
-
-    const existingAdmin = await queryOne("SELECT id, email, password_hash FROM users WHERE role = 'ADMIN' OR id = 'admin-sys' OR email = ?", [adminEmail]);
-
-    if (!existingAdmin) {
-      const hash = await bcrypt.hash(adminInitialPassword, 10);
-      await executeRun(`
-        INSERT INTO users (id, email, identifier, name, role, password_hash, is_active, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, 1, ?)
-      `, ['admin-sys', adminEmail, 'admin', 'System Administrator', 'ADMIN', hash, new Date().toISOString()]);
-      console.log(`🔒 Secure Admin Bootstrap: Initial ADMIN account created for ${adminEmail}.`);
-    } else {
-      console.log(`🔒 Admin Account Verified: Existing ADMIN account (${existingAdmin.email}) retained without modification.`);
-    }
-
-    // ALWAYS ENSURE HOD ACCOUNT EXISTS
-    const existingHOD = await queryOne("SELECT id FROM users WHERE role = 'HOD' OR id = 'hod-sys' OR identifier = 'hod' OR email = 'hod.aids@avsenggcollege.ac.in'");
-    if (!existingHOD) {
-      const hodHash = await bcrypt.hash('hod@123', 10);
-      await executeRun(`
-        INSERT INTO users (id, email, identifier, name, role, password_hash, is_active, created_at)
-        VALUES (?, ?, ?, ?, 'HOD', ?, 1, ?)
-      `, ['hod-sys', 'hod.aids@avsenggcollege.ac.in', 'hod', 'Head of Department', hodHash, new Date().toISOString()]);
-      console.log('🔒 Default HOD account initialized (hod.aids@avsenggcollege.ac.in / hod).');
-    }
-
-    // BOOTSTRAP DEMO ACCOUNTS ONLY IF EXPLICITLY ENABLED
-    if (process.env.INITIALIZE_DEMO_ACCOUNTS === 'true') {
-
-      // BOOTSTRAP DEFAULT FACULTY ACCOUNT IF ABSENT
-      const existingFaculty = await queryOne("SELECT id, password_hash FROM users WHERE id = 'fac-sys' OR email = 'faculty.aids@avsenggcollege.ac.in' OR identifier = 'faculty'");
-      if (!existingFaculty) {
-        const facHash = await bcrypt.hash('faculty@123', 10);
-        await executeRun(`
-          INSERT INTO users (id, email, identifier, name, role, password_hash, year, section, faculty_role, is_active, created_at)
-          VALUES (?, ?, ?, ?, 'FACULTY', ?, '2nd Year', 'A', 'Class Coordinator', 1, ?)
-        `, ['fac-sys', 'faculty.aids@avsenggcollege.ac.in', 'faculty', 'Assigned Faculty Member', facHash, new Date().toISOString()]);
-        console.log('🔒 Default FACULTY account initialized (faculty.aids@avsenggcollege.ac.in / faculty).');
-      }
-
-      // BOOTSTRAP DEFAULT STUDENT ACCOUNT IF ABSENT
-      const existingStudent = await queryOne("SELECT id, password_hash FROM users WHERE id = 'stu-sys' OR email = 'student.aids@avsenggcollege.ac.in' OR identifier = 'student'");
-      if (!existingStudent) {
-        const stuHash = await bcrypt.hash('student@123', 10);
-        await executeRun(`
-          INSERT INTO users (id, email, identifier, name, role, password_hash, year, section, is_active, created_at)
-          VALUES (?, ?, ?, ?, 'STUDENT', ?, '2nd Year', 'A', 1, ?)
-        `, ['stu-sys', 'student.aids@avsenggcollege.ac.in', 'student', 'Sample AI & DS Student', stuHash, new Date().toISOString()]);
-
-        const stuProfile = await queryOne("SELECT id FROM students WHERE register_no = '730123243001' OR email = 'student.aids@avsenggcollege.ac.in'");
-        if (!stuProfile) {
-          await executeRun(`
-            INSERT INTO students (id, register_no, name, email, department, year, section, batch, class_coordinator_name, cgpa, overall_score, current_rank, is_representative, is_elite_student)
-            VALUES (?, '730123243001', 'Sample AI & DS Student', 'student.aids@avsenggcollege.ac.in', 'AI & DS', '2nd Year', 'A', '2023-2027', 'Assigned Faculty Member', 8.5, 85.0, 1, 0, 1)
-          `, ['stu-sys']);
-        }
-        console.log('🔒 Default STUDENT account initialized (student.aids@avsenggcollege.ac.in / student / 730123243001).');
-      }
-    }
   }
 
   // USER CRUD
@@ -1050,28 +972,7 @@ export class SQLiteDB {
       sql += ' AND UPPER(role) = ?';
       params.push(role.trim().toUpperCase());
     }
-    let user = (await queryOne<UserRecord>(sql, params)) || undefined;
-
-    if (!user && role?.toUpperCase() === 'HOD' && (lowerId === 'hod' || lowerId === 'hod.aids@avsenggcollege.ac.in')) {
-      user = (await queryOne<UserRecord>("SELECT * FROM users WHERE (LOWER(email) = 'hod.aids@avsenggcollege.ac.in' OR LOWER(identifier) = 'hod') AND UPPER(role) = 'HOD'")) || undefined;
-    }
-
-    if (!user && role?.toUpperCase() === 'ADMIN' && (lowerId === 'admin' || lowerId === 'departmentai&ds@gmail.com')) {
-      user = (await queryOne<UserRecord>("SELECT * FROM users WHERE (LOWER(email) = 'departmentai&ds@gmail.com' OR LOWER(identifier) = 'admin') AND UPPER(role) = 'ADMIN'")) || undefined;
-    }
-
-    if (!user && (role?.toUpperCase() === 'STUDENT' || !role)) {
-      const student = await queryOne<{ email: string }>('SELECT email FROM students WHERE LOWER(register_no) = ? OR LOWER(email) = ?', [lowerId, lowerId]);
-      if (student && student.email) {
-        user = (await queryOne<UserRecord>("SELECT * FROM users WHERE (LOWER(email) = ? OR LOWER(identifier) = ?) AND UPPER(role) = 'STUDENT'", [student.email.toLowerCase(), student.email.toLowerCase()])) || undefined;
-      }
-    }
-
-    if (!user && (role?.toUpperCase() === 'FACULTY' || !role)) {
-      user = (await queryOne<UserRecord>("SELECT * FROM users WHERE (LOWER(email) = ? OR LOWER(identifier) = ?) AND UPPER(role) = 'FACULTY'", [lowerId, lowerId])) || undefined;
-    }
-
-    return user;
+    return (await queryOne<UserRecord>(sql, params)) || undefined;
   }
 
   public async getUserById(id: string): Promise<UserRecord | undefined> {

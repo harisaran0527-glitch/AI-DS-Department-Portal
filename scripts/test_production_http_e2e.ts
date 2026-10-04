@@ -235,7 +235,7 @@ async function verifyLiveProductionHttpE2E() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         identifier: 'hod.aids@avsenggcollege.ac.in',
-        password: 'hod@aids',
+        password: 'hod@123',
         role: 'HOD'
       })
     });
