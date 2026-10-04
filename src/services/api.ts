@@ -28,7 +28,7 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const controller = new AbortController();
-    const timeoutMs = 25000;
+    const timeoutMs = 60000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -112,7 +112,7 @@ export async function fetchWithResilience(url: string, options: RequestInit = {}
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
 
     try {
       const config: RequestInit = {
