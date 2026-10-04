@@ -38,6 +38,9 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   }
   const url = cleanEndpoint;
 
+  const savedToken = typeof localStorage !== 'undefined' ? (localStorage.getItem('aids_session_token') || localStorage.getItem('aids_token')) : null;
+  const authHeader: Record<string, string> = savedToken ? { Authorization: `Bearer ${savedToken}` } : {};
+
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const controller = new AbortController();
     const timeoutMs = 60000;
@@ -49,6 +52,7 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
         signal: options.signal || controller.signal,
         headers: {
           ...defaultHeaders,
+          ...authHeader,
           ...(options.headers as Record<string, string> || {})
         },
         credentials: options.credentials || 'include'
@@ -129,6 +133,8 @@ export async function fetchWithResilience(url: string, options: RequestInit = {}
     cleanEndpoint = `${base}${path}`;
   }
   const targetUrl = cleanEndpoint;
+  const savedToken = typeof localStorage !== 'undefined' ? (localStorage.getItem('aids_session_token') || localStorage.getItem('aids_token')) : null;
+  const authHeader: Record<string, string> = savedToken ? { Authorization: `Bearer ${savedToken}` } : {};
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const controller = new AbortController();
@@ -138,6 +144,10 @@ export async function fetchWithResilience(url: string, options: RequestInit = {}
       const config: RequestInit = {
         ...options,
         signal: options.signal || controller.signal,
+        headers: {
+          ...authHeader,
+          ...(options.headers as Record<string, string> || {})
+        },
         credentials: options.credentials || 'include'
       };
 
@@ -181,16 +191,28 @@ export async function fetchWithResilience(url: string, options: RequestInit = {}
 export const API = {
   // Auth
   login: async (identifier: string, password: string, role: string) => {
-    return request<{ message: string; user: UserSession }>('/auth/login', {
+    const res = await request<{ message: string; user: UserSession; token?: string }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ identifier, password, role })
     });
+    if (res && res.token && typeof localStorage !== 'undefined') {
+      localStorage.setItem('aids_session_token', res.token);
+      localStorage.setItem('aids_token', res.token);
+    }
+    return res;
   },
 
   logout: async () => {
-    return request<{ message: string }>('/auth/logout', {
-      method: 'POST'
-    });
+    try {
+      return await request<{ message: string }>('/auth/logout', {
+        method: 'POST'
+      });
+    } finally {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('aids_session_token');
+        localStorage.removeItem('aids_token');
+      }
+    }
   },
 
   getMe: async () => {

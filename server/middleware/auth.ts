@@ -21,7 +21,12 @@ export interface AuthRequest extends Request {
 }
 
 export function authenticateToken(req: AuthRequest, res: Response, next: NextFunction) {
-  const token = req.cookies?.aids_session_token || req.headers.authorization?.split(' ')[1];
+  let authHeader = req.headers.authorization;
+  if (!authHeader && req.headers.Authorization && typeof req.headers.Authorization === 'string') {
+    authHeader = req.headers.Authorization;
+  }
+  const tokenFromHeader = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : undefined;
+  const token = tokenFromHeader || req.cookies?.aids_session_token;
 
   if (!token) {
     return res.status(401).json({ error: 'Unauthorized: Missing authentication session token.' });
@@ -42,7 +47,10 @@ export function requireRole(...roles: string[]) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    if (!roles.includes(req.user.role)) {
+    const userRole = (req.user.role || '').toString().trim().toUpperCase();
+    const allowedRoles = roles.map((r) => r.trim().toUpperCase());
+
+    if (!allowedRoles.includes(userRole)) {
       return res.status(403).json({ error: `Forbidden: Requires ${roles.join(' or ')} permissions.` });
     }
 
