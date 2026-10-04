@@ -1,9 +1,12 @@
 import type { Student, UserSession, TeamHead, Subject } from '../types';
 
 export function getApiBaseUrl(): string {
-  const envBase = import.meta.env.VITE_API_BASE_URL;
+  const envBase = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL;
   if (envBase && typeof envBase === 'string' && envBase.trim() !== '') {
-    const trimmed = envBase.trim().replace(/\/$/, '');
+    let trimmed = envBase.trim().replace(/\/$/, '');
+    if (trimmed.includes('aids-department-backend.onrender.com')) {
+      trimmed = 'https://ai-ds-department-portal.onrender.com';
+    }
     return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
   }
   return '/api';
@@ -22,9 +25,18 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   const maxAttempts = 3;
   let lastError: any = null;
 
-  const url = endpoint.startsWith('http://') || endpoint.startsWith('https://') 
-    ? endpoint 
-    : (endpoint.startsWith('/api') ? endpoint : `${API_BASE}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`);
+  let cleanEndpoint = endpoint;
+  if (!cleanEndpoint.startsWith('http://') && !cleanEndpoint.startsWith('https://')) {
+    if (cleanEndpoint.startsWith('/api/')) {
+      cleanEndpoint = cleanEndpoint.substring(4);
+    } else if (cleanEndpoint === '/api') {
+      cleanEndpoint = '/';
+    }
+    const base = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
+    const path = cleanEndpoint.startsWith('/') ? cleanEndpoint : `/${cleanEndpoint}`;
+    cleanEndpoint = `${base}${path}`;
+  }
+  const url = cleanEndpoint;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const controller = new AbortController();
@@ -55,10 +67,10 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
 
       // Do NOT retry 4xx validation/auth errors
       if (response.status < 500 && response.status !== 408) {
-        throw new Error(errorMessage || `Client Error ${response.status}`);
+        throw new Error(errorMessage || `Authentication/Client Error (${response.status})`);
       }
 
-      // 5xx Transient Gateway Errors (500, 502, 503, 504) - retry safe/idempotent or cold start proxy responses
+      // 5xx Transient Gateway Errors (502, 503, 504) - retry safe/idempotent or cold start proxy responses
       const isGatewayTransient = response.status === 502 || response.status === 503 || response.status === 504;
       if (attempt < maxAttempts && (isGetOrIdempotent || isGatewayTransient)) {
         console.warn(`⚠️ [API Resilience] Transient HTTP ${response.status} on ${method} ${url}. Retrying attempt ${attempt}/${maxAttempts}...`);
@@ -70,9 +82,9 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
     } catch (err: any) {
       clearTimeout(timeoutId);
 
-      // Immediately rethrow normal 4xx application errors
-      const isNetworkOrTimeout = err.name === 'AbortError' || 
-        (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('HTTP Error 5') || err.message.includes('Load failed')));
+      const isAbort = err.name === 'AbortError';
+      const isBrowserFetchDrop = err instanceof TypeError && (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError') || err.message?.includes('Load failed'));
+      const isNetworkOrTimeout = isAbort || isBrowserFetchDrop;
 
       if (!isNetworkOrTimeout) {
         throw err;
@@ -80,15 +92,14 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
 
       lastError = err;
 
-      if (attempt < maxAttempts && (isGetOrIdempotent || !err.message?.includes('HTTP Error'))) {
-        const isTimeout = err.name === 'AbortError';
-        const logMsg = isTimeout ? 'Request timed out waiting for backend response' : (err.message || 'Network failure');
+      if (attempt < maxAttempts) {
+        const logMsg = isAbort ? 'Request timed out waiting for backend response' : (err.message || 'Network failure');
         console.warn(`⚠️ [API Resilience] ${logMsg} on ${method} ${url}. Retrying attempt ${attempt}/${maxAttempts}...`);
         await delay(Math.pow(2, attempt - 1) * 800);
         continue;
       }
 
-      if (err.name === 'AbortError') {
+      if (isAbort) {
         throw new Error('Request timed out. Please try again.');
       }
 
@@ -106,9 +117,18 @@ export async function fetchWithResilience(url: string, options: RequestInit = {}
   const maxAttempts = 3;
   let lastError: any = null;
 
-  const targetUrl = url.startsWith('http://') || url.startsWith('https://')
-    ? url
-    : (url.startsWith('/api') ? url : `${API_BASE}${url.startsWith('/') ? url : `/${url}`}`);
+  let cleanEndpoint = url;
+  if (!cleanEndpoint.startsWith('http://') && !cleanEndpoint.startsWith('https://')) {
+    if (cleanEndpoint.startsWith('/api/')) {
+      cleanEndpoint = cleanEndpoint.substring(4);
+    } else if (cleanEndpoint === '/api') {
+      cleanEndpoint = '/';
+    }
+    const base = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
+    const path = cleanEndpoint.startsWith('/') ? cleanEndpoint : `/${cleanEndpoint}`;
+    cleanEndpoint = `${base}${path}`;
+  }
+  const targetUrl = cleanEndpoint;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const controller = new AbortController();
@@ -135,8 +155,9 @@ export async function fetchWithResilience(url: string, options: RequestInit = {}
     } catch (err: any) {
       clearTimeout(timeoutId);
 
-      const isNetworkOrTimeout = err.name === 'AbortError' ||
-        (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('Load failed')));
+      const isAbort = err.name === 'AbortError';
+      const isBrowserFetchDrop = err instanceof TypeError && (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError') || err.message?.includes('Load failed'));
+      const isNetworkOrTimeout = isAbort || isBrowserFetchDrop;
 
       if (!isNetworkOrTimeout) {
         throw err;
@@ -144,7 +165,7 @@ export async function fetchWithResilience(url: string, options: RequestInit = {}
 
       lastError = err;
 
-      if (attempt < maxAttempts && (isGetOrIdempotent || !err.message?.includes('HTTP Error'))) {
+      if (attempt < maxAttempts) {
         console.warn(`⚠️ [API Resilience] Fetch drop/timeout on ${method} ${targetUrl}. Retrying attempt ${attempt}/${maxAttempts}...`);
         await delay(Math.pow(2, attempt - 1) * 800);
         continue;
