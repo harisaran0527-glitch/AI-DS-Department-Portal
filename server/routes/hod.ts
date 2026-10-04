@@ -338,6 +338,16 @@ router.post('/awards/finalize', async (req: AuthRequest, res: Response) => {
       aiExplanation
     };
 
+    await db.finalizeAward(awardObj);
+    return res.json({
+      message: 'Award finalized successfully.',
+      award: awardObj
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to finalize award.' });
+  }
+});
+
 // GET Gemini AI Award Candidates for HOD Command Center
 router.get('/award-candidates-v2', async (req: AuthRequest, res: Response) => {
   try {
@@ -442,36 +452,6 @@ router.post('/students/:studentId/records/:recordType', async (req: AuthRequest,
   return res.status(403).json({ error: 'Forbidden: HOD student profile view is strictly READ-ONLY. Student records must be modified by assigned Class Coordinator or Admin.' });
 });
 
-// GET all faculty list for HOD Panel (single source of truth synchronized with Admin creates)
-router.get('/faculty', async (req: AuthRequest, res: Response) => {
-  const facultyUsers = await db.getUsers('FACULTY');
-  const enriched = await Promise.all(
-    facultyUsers.map(async (f) => {
-      const assignment = await db.getFacultyAssignment(f.id);
-      const assignedYear = assignment ? assignment.year : f.year || '2nd Year';
-      const assignedSection = assignment ? assignment.section : f.section || 'A';
-      const assignedRoster = await db.getStudentsForFaculty(f.id, assignedYear, assignedSection);
-
-      return {
-        id: f.id,
-        email: f.email,
-        identifier: f.identifier,
-        name: f.name,
-        role: f.role,
-        year: assignedYear,
-        section: assignedSection,
-        facultyRole: assignment ? assignment.role : f.faculty_role || 'Class Coordinator',
-        department: assignment ? assignment.department : 'AI & DS',
-        isActive: Boolean(f.is_active),
-        createdAt: f.created_at,
-        assignedStudentsCount: assignedRoster.length
-      };
-    })
-  );
-
-  return res.json({ count: enriched.length, faculty: enriched });
-});
-
 // GET dedicated individual faculty workspace details for HOD inspection
 router.get('/faculty/:facultyId', async (req: AuthRequest, res: Response) => {
   const { facultyId } = req.params;
@@ -486,6 +466,7 @@ router.get('/faculty/:facultyId', async (req: AuthRequest, res: Response) => {
   const assignedSection = assignment ? assignment.section : facultyUser.section || 'A';
 
   const assignedRoster = await db.getStudentsForFaculty(facultyId, assignedYear, assignedSection);
+  const totalStudents = assignedRoster.length;
   const student360List = await Promise.all(assignedRoster.map((s) => db.getStudent360(s.id)));
 
   // Compute workspace summary metrics
