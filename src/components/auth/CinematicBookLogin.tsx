@@ -93,7 +93,9 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
       }
     } catch (err: any) {
       setAuthStatus('error');
-      setErrorMessage(err.message || 'Invalid credentials. Please verify your identifier and password.');
+      const msg = err.message || '';
+      const isNetErr = msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Load failed') || msg.includes('timed out') || msg.includes('HTTP Error 5');
+      setErrorMessage(isNetErr ? 'Unable to sign in. Please try again.' : (msg || 'Invalid credentials. Please verify your identifier and password.'));
     }
   };
 

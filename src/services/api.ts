@@ -13,71 +13,6 @@ export const API_BASE = getApiBaseUrl();
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-let wakeupToastElement: HTMLElement | null = null;
-let activeWakeupRequests = 0;
-
-function showWakeupNotice() {
-  if (typeof document === 'undefined') return;
-  activeWakeupRequests++;
-  if (!wakeupToastElement && document.body) {
-    wakeupToastElement = document.createElement('div');
-    wakeupToastElement.id = 'server-wakeup-banner';
-    wakeupToastElement.setAttribute('role', 'status');
-    wakeupToastElement.style.cssText = `
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      z-index: 999999;
-      background: rgba(15, 23, 42, 0.94);
-      color: #38bdf8;
-      border: 1px solid rgba(56, 189, 248, 0.4);
-      padding: 12px 20px;
-      border-radius: 10px;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 14px;
-      font-weight: 500;
-      box-shadow: 0 12px 30px -5px rgba(0, 0, 0, 0.5), 0 0 20px rgba(56, 189, 248, 0.2);
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      backdrop-filter: blur(10px);
-      transition: opacity 0.3s ease, transform 0.3s ease;
-      opacity: 0;
-      transform: translateY(10px);
-    `;
-    wakeupToastElement.innerHTML = `
-      <svg style="width: 18px; height: 18px; animation: spin 1s linear infinite; flex-shrink: 0;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-        <circle style="opacity: 0.25;" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-        <path style="opacity: 0.85;" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-      </svg>
-      <span>Server is waking up, please wait...</span>
-    `;
-    document.body.appendChild(wakeupToastElement);
-    requestAnimationFrame(() => {
-      if (wakeupToastElement) {
-        wakeupToastElement.style.opacity = '1';
-        wakeupToastElement.style.transform = 'translateY(0)';
-      }
-    });
-  }
-}
-
-function hideWakeupNotice() {
-  if (typeof document === 'undefined') return;
-  activeWakeupRequests = Math.max(0, activeWakeupRequests - 1);
-  if (activeWakeupRequests === 0 && wakeupToastElement) {
-    const el = wakeupToastElement;
-    wakeupToastElement = null;
-    el.style.opacity = '0';
-    el.style.transform = 'translateY(10px)';
-    setTimeout(() => {
-      if (el.parentNode) {
-        el.parentNode.removeChild(el);
-      }
-    }, 300);
-  }
-}
-
 export async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const defaultHeaders: Record<string, string> = isFormData ? {} : { 'Content-Type': 'application/json' };
@@ -86,7 +21,6 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
 
   const maxAttempts = 3;
   let lastError: any = null;
-  let wakeupNoticeShown = false;
 
   const url = endpoint.startsWith('http://') || endpoint.startsWith('https://') 
     ? endpoint 
@@ -111,11 +45,6 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
       const response = await fetch(url, config);
       clearTimeout(timeoutId);
 
-      if (wakeupNoticeShown) {
-        hideWakeupNotice();
-        wakeupNoticeShown = false;
-      }
-
       if (response.ok) {
         const data = await response.json().catch(() => ({}));
         return data as T;
@@ -132,10 +61,6 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
       // 5xx Transient Gateway Errors (500, 502, 503, 504) - retry safe/idempotent or cold start proxy responses
       const isGatewayTransient = response.status === 502 || response.status === 503 || response.status === 504;
       if (attempt < maxAttempts && (isGetOrIdempotent || isGatewayTransient)) {
-        if (!wakeupNoticeShown) {
-          showWakeupNotice();
-          wakeupNoticeShown = true;
-        }
         console.warn(`⚠️ [API Resilience] Transient HTTP ${response.status} on ${method} ${url}. Retrying attempt ${attempt}/${maxAttempts}...`);
         await delay(Math.pow(2, attempt - 1) * 800);
         continue;
@@ -150,43 +75,27 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
         (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('HTTP Error 5') || err.message.includes('Load failed')));
 
       if (!isNetworkOrTimeout) {
-        if (wakeupNoticeShown) {
-          hideWakeupNotice();
-          wakeupNoticeShown = false;
-        }
         throw err;
       }
 
       lastError = err;
 
       if (attempt < maxAttempts && (isGetOrIdempotent || !err.message?.includes('HTTP Error'))) {
-        if (!wakeupNoticeShown) {
-          showWakeupNotice();
-          wakeupNoticeShown = true;
-        }
         const isTimeout = err.name === 'AbortError';
-        const logMsg = isTimeout ? 'Request timed out waiting for backend wake-up' : (err.message || 'Network failure');
+        const logMsg = isTimeout ? 'Request timed out waiting for backend response' : (err.message || 'Network failure');
         console.warn(`⚠️ [API Resilience] ${logMsg} on ${method} ${url}. Retrying attempt ${attempt}/${maxAttempts}...`);
         await delay(Math.pow(2, attempt - 1) * 800);
         continue;
       }
 
-      if (wakeupNoticeShown) {
-        hideWakeupNotice();
-        wakeupNoticeShown = false;
-      }
-
       if (err.name === 'AbortError') {
-        throw new Error('Server wake-up response timed out. Please try again.');
+        throw new Error('Request timed out. Please try again.');
       }
 
       throw err;
     }
   }
 
-  if (wakeupNoticeShown) {
-    hideWakeupNotice();
-  }
   throw lastError || new Error('Request failed after retries');
 }
 
@@ -196,7 +105,6 @@ export async function fetchWithResilience(url: string, options: RequestInit = {}
 
   const maxAttempts = 3;
   let lastError: any = null;
-  let wakeupNoticeShown = false;
 
   const targetUrl = url.startsWith('http://') || url.startsWith('https://')
     ? url
@@ -216,17 +124,8 @@ export async function fetchWithResilience(url: string, options: RequestInit = {}
       const response = await fetch(targetUrl, config);
       clearTimeout(timeoutId);
 
-      if (wakeupNoticeShown) {
-        hideWakeupNotice();
-        wakeupNoticeShown = false;
-      }
-
       const isGatewayTransient = response.status === 502 || response.status === 503 || response.status === 504;
       if (!response.ok && response.status >= 500 && attempt < maxAttempts && (isGetOrIdempotent || isGatewayTransient)) {
-        if (!wakeupNoticeShown) {
-          showWakeupNotice();
-          wakeupNoticeShown = true;
-        }
         console.warn(`⚠️ [API Resilience] Transient HTTP ${response.status} on fetch ${method} ${targetUrl}. Retrying attempt ${attempt}/${maxAttempts}...`);
         await delay(Math.pow(2, attempt - 1) * 800);
         continue;
@@ -240,37 +139,21 @@ export async function fetchWithResilience(url: string, options: RequestInit = {}
         (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.message.includes('Load failed')));
 
       if (!isNetworkOrTimeout) {
-        if (wakeupNoticeShown) {
-          hideWakeupNotice();
-          wakeupNoticeShown = false;
-        }
         throw err;
       }
 
       lastError = err;
 
       if (attempt < maxAttempts && (isGetOrIdempotent || !err.message?.includes('HTTP Error'))) {
-        if (!wakeupNoticeShown) {
-          showWakeupNotice();
-          wakeupNoticeShown = true;
-        }
         console.warn(`⚠️ [API Resilience] Fetch drop/timeout on ${method} ${targetUrl}. Retrying attempt ${attempt}/${maxAttempts}...`);
         await delay(Math.pow(2, attempt - 1) * 800);
         continue;
-      }
-
-      if (wakeupNoticeShown) {
-        hideWakeupNotice();
-        wakeupNoticeShown = false;
       }
 
       throw err;
     }
   }
 
-  if (wakeupNoticeShown) {
-    hideWakeupNotice();
-  }
   throw lastError || new Error('Fetch failed after retries');
 }
 

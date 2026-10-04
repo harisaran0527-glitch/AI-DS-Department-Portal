@@ -110,7 +110,9 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
       }
     } catch (err: any) {
       setAuthStatus('error');
-      setErrorMessage(err.message || `Invalid ${roleSubtitle} credentials. Verify your login details.`);
+      const msg = err.message || '';
+      const isNetErr = msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Load failed') || msg.includes('timed out') || msg.includes('HTTP Error 5');
+      setErrorMessage(isNetErr ? 'Unable to sign in. Please try again.' : (msg || `Invalid ${roleSubtitle} credentials. Verify your login details.`));
     }
   };
 
