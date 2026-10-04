@@ -1221,13 +1221,6 @@ export const AdminDashboard: React.FC = () => {
               {/* ACTION BUTTONS */}
               <div className="flex flex-wrap items-center gap-2">
                 <button
-                  onClick={() => setActiveTab('csv-import')}
-                  className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 shadow-lg shadow-cyan-500/20"
-                >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  <span>Import Students</span>
-                </button>
-                <button
                   onClick={() => exportStudentsCsv(filteredStudents, `students_filtered_${Date.now()}.csv`)}
                   disabled={filteredStudents.length === 0}
                   className="bg-slate-800 hover:bg-slate-700 text-cyan-300 disabled:opacity-40 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 border border-slate-700"

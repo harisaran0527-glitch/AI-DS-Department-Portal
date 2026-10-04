@@ -423,101 +423,14 @@ async function requireClassCoordinator(req: AuthRequest, res: Response, next: an
   next();
 }
 
-// POST Add Single Student by Faculty (ONLY Class Coordinator)
+// POST Add Single Student by Faculty (Disabled - HOD ONLY)
 router.post('/students', requireClassCoordinator, async (req: AuthRequest, res: Response) => {
-  const { registerNo, regNo, name, email, collegeEmail, personalEmail, personal_email, batch, password, portalPassword, collegePortalPassword, year, section, cgpa, entryType } = req.body;
-
-  const targetRegNo = registerNo || regNo;
-  const targetEmail = email || collegeEmail;
-  const targetPassword = password || portalPassword || collegePortalPassword;
-
-  if (!targetRegNo || !name || !targetEmail || !targetPassword) {
-    return res.status(400).json({ error: 'Register number, name, college email ID, and portal password are required.' });
-  }
-
-  try {
-    const newStudent = await db.createStudentForFaculty(req.user!.id, {
-      registerNo: targetRegNo,
-      name,
-      email: targetEmail,
-      collegeEmail: targetEmail,
-      personalEmail: personalEmail || personal_email,
-      batch: batch || '2023-2027',
-      password: targetPassword,
-      portalPassword: targetPassword,
-      year,
-      section,
-      entryType,
-      cgpa: (cgpa !== undefined && cgpa !== null && cgpa !== '' && String(cgpa).toUpperCase() !== 'N/A' && String(cgpa).toUpperCase() !== 'NULL' && !isNaN(parseFloat(cgpa))) ? parseFloat(cgpa) : null
-    });
-
-    return res.status(201).json({
-      message: 'Student account created and assigned to your section successfully.',
-      student: newStudent
-    });
-  } catch (err: any) {
-    if (err.message && err.message.toLowerCase().includes('already exists')) {
-      return res.status(409).json({ error: err.message });
-    }
-    return res.status(400).json({ error: err.message || 'Failed to create student account.' });
-  }
+  return res.status(403).json({ error: 'Forbidden: Student master record creation is restricted strictly to authorized HOD portal bulk import workflow.' });
 });
 
-// POST Bulk Import Students by Faculty (ONLY Class Coordinator)
+// POST Bulk Import Students by Faculty (Disabled - HOD ONLY)
 router.post('/students/import', requireClassCoordinator, async (req: AuthRequest, res: Response) => {
-  const { students, defaultPassword } = req.body;
-
-  if (!Array.isArray(students) || students.length === 0) {
-    return res.status(400).json({ error: 'No student records provided for import.' });
-  }
-
-  const createdList: any[] = [];
-  const errorsList: string[] = [];
-  const generatedCredentials: any[] = [];
-
-  for (const s of students) {
-    try {
-      const reg = s.registerNo || s.regNo || s['Register Number'] || s['Register No'];
-      const mail = s.email || s.collegeEmail || s['College Email ID'] || s['College Mail ID'] || `${String(reg).toLowerCase()}@aids.edu`;
-      let isTemp = false;
-      let pass = s.password || s.portalPassword || s.collegePortalPassword || s['College Portal Password'] || s['Portal Password'];
-      if (!pass || typeof pass !== 'string' || pass.trim().length < 6) {
-        if (defaultPassword && typeof defaultPassword === 'string' && defaultPassword.trim().length >= 6) {
-          pass = defaultPassword.trim();
-        } else {
-          pass = generateSecureRandomPassword(12);
-          isTemp = true;
-        }
-      }
-
-      const created = await db.createStudentForFaculty(req.user!.id, {
-        registerNo: reg,
-        name: s.name || s['Student Name'] || s['Name'],
-        email: mail,
-        collegeEmail: mail,
-        personalEmail: s.personalEmail || s.personal_email,
-        batch: s.batch || '2023-2027',
-        password: pass,
-        portalPassword: pass,
-        year: s.year || s['Year'],
-        section: s.section || s['Section'],
-        cgpa: (s.cgpa !== undefined && s.cgpa !== null && s.cgpa !== '' && String(s.cgpa).toUpperCase() !== 'N/A' && String(s.cgpa).toUpperCase() !== 'NULL' && !isNaN(parseFloat(s.cgpa))) ? parseFloat(s.cgpa) : null
-      });
-      createdList.push(created);
-      if (isTemp) {
-        generatedCredentials.push({ registerNo: reg, name: s.name || '', tempPassword: pass });
-      }
-    } catch (err: any) {
-      errorsList.push(`Skipped ${s.registerNo || s.name || 'row'}: ${err.message}`);
-    }
-  }
-
-  return res.status(200).json({
-    message: `Successfully imported ${createdList.length} students to your section.`,
-    count: createdList.length,
-    generatedCredentials: generatedCredentials.length > 0 ? generatedCredentials : undefined,
-    errors: errorsList
-  });
+  return res.status(403).json({ error: 'Forbidden: Student master record creation is restricted strictly to authorized HOD portal bulk import workflow.' });
 });
 
 // POST Reset Student Password by Class Coordinator

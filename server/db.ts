@@ -1086,18 +1086,16 @@ export class SQLiteDB {
     const params: any[] = [];
 
     if (facultyId) {
-      if (cleanYear && cleanYear !== 'ALL' && cleanSec && cleanSec !== 'ALL') {
-        sql += ' AND (created_by_faculty_id = ? OR faculty_workspace_id = ? OR (LOWER(TRIM(year)) = LOWER(TRIM(?)) AND UPPER(TRIM(section)) = UPPER(TRIM(?))))';
-        params.push(facultyId, facultyId, cleanYear, cleanSec);
-      } else if (cleanYear && cleanYear !== 'ALL') {
-        sql += ' AND (created_by_faculty_id = ? OR faculty_workspace_id = ? OR LOWER(TRIM(year)) = LOWER(TRIM(?)))';
-        params.push(facultyId, facultyId, cleanYear);
-      } else if (cleanSec && cleanSec !== 'ALL') {
-        sql += ' AND (created_by_faculty_id = ? OR faculty_workspace_id = ? OR UPPER(TRIM(section)) = UPPER(TRIM(?)))';
-        params.push(facultyId, facultyId, cleanSec);
-      } else {
-        sql += ' AND (created_by_faculty_id = ? OR faculty_workspace_id = ?)';
-        params.push(facultyId, facultyId);
+      sql += ' AND (created_by_faculty_id = ? OR faculty_workspace_id = ?)';
+      params.push(facultyId, facultyId);
+
+      if (cleanYear && cleanYear !== 'ALL') {
+        sql += ' AND LOWER(TRIM(year)) = LOWER(TRIM(?))';
+        params.push(cleanYear);
+      }
+      if (cleanSec && cleanSec !== 'ALL') {
+        sql += ' AND UPPER(TRIM(section)) = UPPER(TRIM(?))';
+        params.push(cleanSec);
       }
     } else {
       if (cleanYear && cleanYear !== 'ALL') {

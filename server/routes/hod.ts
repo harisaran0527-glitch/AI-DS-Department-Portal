@@ -103,6 +103,221 @@ router.get('/students', async (req: AuthRequest, res: Response) => {
   return res.json({ count: students.length, students });
 });
 
+// POST HOD Student Excel Import Preview (Validation & Conflict Detection)
+router.post('/students/import-preview', async (req: AuthRequest, res: Response) => {
+  try {
+    const { facultyId, year, section, rows } = req.body || {};
+
+    if (!facultyId || !year || !section) {
+      return res.status(400).json({ error: 'Assigned Faculty, Year, and Section selection are required.' });
+    }
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: 'No student rows provided in Excel file.' });
+    }
+
+    // Verify assigned Faculty exists in DB with role 'FACULTY'
+    const targetFaculty = await db.getUserById(facultyId);
+    if (!targetFaculty || targetFaculty.role !== 'FACULTY') {
+      return res.status(400).json({ error: `Selected Faculty account does not exist in system.` });
+    }
+
+    const allDbStudents = await db.getStudents('ALL', 'ALL');
+    const existingRegNos = new Set(allDbStudents.map((s) => s.register_no.trim().toLowerCase()));
+    const dbEmailToRegNo = new Map<string, string>();
+    allDbStudents.forEach((s) => dbEmailToRegNo.set(s.email.trim().toLowerCase(), s.register_no.trim().toLowerCase()));
+
+    const regNoInFileCount = new Map<string, number>();
+    const emailInFileCount = new Map<string, number>();
+
+    // First pass to detect file-level duplicates
+    rows.forEach((r) => {
+      const reg = String(r['Register Number'] || r['Register No'] || r.registerNo || r.register_no || r.regNo || '').trim().toLowerCase();
+      const email = String(r['College Mail ID'] || r['College Email ID'] || r['College Mail'] || r.collegeEmail || r.email || '').trim().toLowerCase();
+      if (reg) regNoInFileCount.set(reg, (regNoInFileCount.get(reg) || 0) + 1);
+      if (email) emailInFileCount.set(email, (emailInFileCount.get(email) || 0) + 1);
+    });
+
+    let validCount = 0;
+    let updateCount = 0;
+    let errorCount = 0;
+
+    const preview = rows.map((r, index) => {
+      const rowNumber = index + 1;
+      const errors: string[] = [];
+
+      const name = String(r['Name'] || r['Student Name'] || r.name || '').trim();
+      const registerNo = String(r['Register Number'] || r['Register No'] || r.registerNo || r.register_no || r.regNo || '').trim();
+      const mobileNumber = String(r['Mobile Number'] || r['Mobile No'] || r.mobileNumber || r.mobile_number || r.phone || r['Contact Number'] || '').trim();
+      const collegeEmail = String(r['College Mail ID'] || r['College Email ID'] || r['College Mail'] || r.collegeEmail || r.email || '').trim().toLowerCase();
+      const personalEmail = String(r['Personal Mail ID'] || r['Personal Email ID'] || r['Personal Email'] || r.personalEmail || r.personal_email || '').trim().toLowerCase();
+      const address = String(r['Address'] || r.address || '').trim();
+      
+      const rawCgpa = r['CGPA'] !== undefined ? r['CGPA'] : (r.cgpa !== undefined ? r.cgpa : undefined);
+      let cgpa: number | null = null;
+
+      if (!name) errors.push('Missing required student Name.');
+      if (!registerNo) errors.push('Missing required Register Number.');
+      if (!collegeEmail) errors.push('Missing required College Mail ID.');
+
+      if (collegeEmail && !collegeEmail.includes('@')) {
+        errors.push('Invalid College Mail ID format (missing @).');
+      }
+
+      if (personalEmail && !personalEmail.includes('@')) {
+        errors.push('Invalid Personal Mail ID format (missing @).');
+      }
+
+      if (rawCgpa !== undefined && rawCgpa !== null) {
+        const str = String(rawCgpa).trim();
+        if (str !== '' && str.toUpperCase() !== 'N/A' && str.toUpperCase() !== 'NULL' && str.toUpperCase() !== 'NOT AVAILABLE') {
+          const parsedCgpa = parseFloat(str);
+          if (isNaN(parsedCgpa) || parsedCgpa < 0 || parsedCgpa > 10) {
+            errors.push('CGPA must be a valid number between 0.00 and 10.00 or left blank.');
+          } else {
+            cgpa = parsedCgpa;
+          }
+        }
+      }
+
+      const lowerReg = registerNo.toLowerCase();
+      const lowerEmail = collegeEmail.toLowerCase();
+
+      if (lowerReg && (regNoInFileCount.get(lowerReg) || 0) > 1) {
+        errors.push(`Duplicate Register Number "${registerNo}" found in Excel file.`);
+      }
+
+      if (lowerEmail && (emailInFileCount.get(lowerEmail) || 0) > 1) {
+        errors.push(`Duplicate College Mail ID "${collegeEmail}" found in Excel file.`);
+      }
+
+      if (lowerEmail && dbEmailToRegNo.has(lowerEmail)) {
+        const ownerReg = dbEmailToRegNo.get(lowerEmail);
+        if (ownerReg && ownerReg !== lowerReg) {
+          errors.push(`College Mail ID "${collegeEmail}" is already assigned to student ${ownerReg.toUpperCase()} in system.`);
+        }
+      }
+
+      const isUpdate = existingRegNos.has(lowerReg);
+      let status: 'VALID_NEW' | 'UPDATE_EXISTING' | 'ERROR' = 'VALID_NEW';
+
+      if (errors.length > 0) {
+        status = 'ERROR';
+        errorCount++;
+      } else if (isUpdate) {
+        status = 'UPDATE_EXISTING';
+        updateCount++;
+        validCount++;
+      } else {
+        validCount++;
+      }
+
+      return {
+        rowNumber,
+        status,
+        errors,
+        parsedData: {
+          name,
+          registerNo,
+          mobileNumber: mobileNumber || null,
+          collegeEmail,
+          personalEmail: personalEmail || null,
+          address: address || null,
+          cgpa
+        }
+      };
+    });
+
+    return res.json({
+      faculty: { id: targetFaculty.id, name: targetFaculty.name, email: targetFaculty.email },
+      year,
+      section,
+      totalRows: rows.length,
+      validRowsCount: validCount,
+      updateRowsCount: updateCount,
+      errorRowsCount: errorCount,
+      canImport: errorCount === 0 && validCount > 0,
+      preview
+    });
+  } catch (err: any) {
+    console.error('❌ HOD Excel Preview Error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to parse and validate Excel file.' });
+  }
+});
+
+// POST HOD Student Excel Import Confirm (Execute Bulk Upsert & Student Login Creation)
+router.post('/students/import-confirm', async (req: AuthRequest, res: Response) => {
+  try {
+    const { facultyId, year, section, batch, students } = req.body || {};
+
+    if (!facultyId || !year || !section) {
+      return res.status(400).json({ error: 'Assigned Faculty, Year, and Section selection are required.' });
+    }
+
+    if (!Array.isArray(students) || students.length === 0) {
+      return res.status(400).json({ error: 'No student records provided for import.' });
+    }
+
+    // Verify assigned Faculty exists in DB with role 'FACULTY'
+    const targetFaculty = await db.getUserById(facultyId);
+    if (!targetFaculty || targetFaculty.role !== 'FACULTY') {
+      return res.status(400).json({ error: `Selected Faculty account does not exist in system.` });
+    }
+
+    const importedList: any[] = [];
+    const yearToUse = String(year).trim();
+    const sectionToUse = String(section).trim();
+    const batchToUse = batch || '2023-2027';
+
+    for (const s of students) {
+      const reg = String(s.registerNo || s.register_no || s['Register Number'] || s['Register No'] || '').trim();
+      const mail = String(s.collegeEmail || s.email || s['College Mail ID'] || s['College Email ID'] || '').trim();
+      const name = String(s.name || s['Name'] || s['Student Name'] || '').trim();
+
+      if (!reg || !mail || !name) continue;
+
+      const rawCgpa = s.cgpa !== undefined ? s.cgpa : (s['CGPA'] !== undefined ? s['CGPA'] : undefined);
+      let cgpaVal: number | null = null;
+      if (rawCgpa !== undefined && rawCgpa !== null) {
+        const str = String(rawCgpa).trim();
+        if (str !== '' && str.toUpperCase() !== 'N/A' && str.toUpperCase() !== 'NULL' && str.toUpperCase() !== 'NOT AVAILABLE') {
+          const parsed = parseFloat(str);
+          if (!isNaN(parsed)) cgpaVal = parsed;
+        }
+      }
+
+      const updatedStudent = await db.upsertStudentWithUserLogin({
+        registerNo: reg,
+        name,
+        email: mail,
+        mobileNumber: s.mobileNumber || s.mobile_number || s['Mobile Number'] || s['Mobile No'],
+        personalEmail: s.personalEmail || s.personal_email || s['Personal Mail ID'] || s['Personal Email ID'],
+        address: s.address || s['Address'],
+        cgpa: cgpaVal,
+        year: yearToUse,
+        section: sectionToUse,
+        batch: s.batch || batchToUse,
+        createdByFacultyId: facultyId
+      });
+
+      importedList.push(updatedStudent);
+    }
+
+    if (req.user) {
+      await db.logAudit(req.user.id, req.user.email, req.user.role, 'HOD_BULK_IMPORT_STUDENTS', `Imported ${importedList.length} student records assigned to Faculty ${targetFaculty.name} (${yearToUse} Sec ${sectionToUse}).`);
+    }
+
+    return res.status(201).json({
+      message: `Successfully imported/updated ${importedList.length} individual student accounts mapped to Faculty ${targetFaculty.name} (${yearToUse} Section ${sectionToUse}). Student logins synchronized with initial password = Register Number.`,
+      importedCount: importedList.length,
+      students: importedList
+    });
+  } catch (err: any) {
+    console.error('❌ HOD Excel Import Confirm Error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to execute bulk student import.' });
+  }
+});
+
 // GET department Elite Students
 router.get('/elite-students', async (req: AuthRequest, res: Response) => {
   const { year, section } = req.query;

@@ -275,8 +275,11 @@ export const API = {
     });
   },
 
-  previewStudentExcelImport: async (rows: any[]) => {
+  previewHodStudentExcelImport: async (facultyId: string, year: string, section: string, rows: any[]) => {
     return request<{
+      faculty: { id: string; name: string; email: string };
+      year: string;
+      section: string;
       totalRows: number;
       validRowsCount: number;
       updateRowsCount: number;
@@ -296,16 +299,16 @@ export const API = {
           cgpa: number | null;
         };
       }>;
-    }>('/admin/students/import-preview', {
+    }>('/hod/students/import-preview', {
       method: 'POST',
-      body: JSON.stringify({ rows })
+      body: JSON.stringify({ facultyId, year, section, rows })
     });
   },
 
-  confirmStudentExcelImport: async (students: any[], defaultYear?: string, defaultSection?: string, defaultBatch?: string) => {
-    return request<{ message: string; importedCount: number; students: any[] }>('/admin/students/import-confirm', {
+  confirmHodStudentExcelImport: async (facultyId: string, year: string, section: string, students: any[], batch?: string) => {
+    return request<{ message: string; importedCount: number; students: any[] }>('/hod/students/import-confirm', {
       method: 'POST',
-      body: JSON.stringify({ students, defaultYear, defaultSection, defaultBatch })
+      body: JSON.stringify({ facultyId, year, section, batch, students })
     });
   },
 

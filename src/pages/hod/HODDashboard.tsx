@@ -23,12 +23,14 @@ import {
   User,
   FileCheck,
   FileText,
-  ShieldAlert
+  ShieldAlert,
+  FileSpreadsheet
 } from 'lucide-react';
 
 import { ForgotPasswordModal } from '../../components/common/ForgotPasswordModal';
 import { SubjectManagement } from '../../components/academic/SubjectManagement';
 import { HodFacultyWorkspaceView } from '../../components/hod/HodFacultyWorkspaceView';
+import { HodStudentBulkUploadView } from '../../components/hod/HodStudentBulkUploadView';
 import { BestEliteStudentsView } from '../../components/elite/BestEliteStudentsView';
 import { GeminiTopRecognitionView } from '../../components/ranking/GeminiTopRecognitionView';
 import { GeminiCategoryBestPerformerCard } from '../../components/ranking/GeminiCategoryBestPerformerCard';
@@ -160,6 +162,7 @@ export const HODDashboard: React.FC = () => {
   const hodMenuItems: MenuItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'students', label: 'Students', icon: Users, badge: String(students.length) },
+    { id: 'student-bulk-upload', label: 'Student Bulk Upload', icon: FileSpreadsheet },
     { id: 'subjects', label: 'Department Subjects', icon: BookOpen },
     { id: 'faculty', label: 'Faculty Roster', icon: Users2 },
     { id: 'years-sections', label: 'Years & Sections', icon: Calendar },
@@ -255,6 +258,15 @@ export const HODDashboard: React.FC = () => {
           </div>
         </div>
 
+        {/* STUDENT BULK UPLOAD TAB */}
+        {activeTab === 'student-bulk-upload' && (
+          <HodStudentBulkUploadView
+            onImportCompleted={() => {
+              fetchDepartmentData();
+            }}
+          />
+        )}
+
         {/* DEPARTMENT FACULTY ROSTER & INDIVIDUAL WORKSPACES */}
         {activeTab === 'faculty' && (
           <HodFacultyWorkspaceView
@@ -340,15 +352,25 @@ export const HODDashboard: React.FC = () => {
         {/* 2. STUDENTS ROSTER & PROOF MANAGEMENT */}
         {activeTab === 'students' && (
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
               <h2 className="text-lg font-bold text-white">Department Student Roster</h2>
-              <input
-                type="text"
-                placeholder="Search student..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white"
-              />
+
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={() => setActiveTab('student-bulk-upload')}
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 shadow-lg shadow-amber-500/20"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>+ Bulk Upload Students (Excel)</span>
+                </button>
+                <input
+                  type="text"
+                  placeholder="Search student..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white"
+                />
+              </div>
             </div>
 
             <div className="overflow-x-auto">
