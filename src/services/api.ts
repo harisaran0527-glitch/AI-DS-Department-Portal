@@ -51,11 +51,11 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
       }
 
       const data = await response.json().catch(() => ({}));
-      const errorMessage = data.error || `HTTP Error ${response.status}`;
+      const errorMessage = data.error || data.message;
 
       // Do NOT retry 4xx validation/auth errors
       if (response.status < 500 && response.status !== 408) {
-        throw new Error(errorMessage);
+        throw new Error(errorMessage || `Client Error ${response.status}`);
       }
 
       // 5xx Transient Gateway Errors (500, 502, 503, 504) - retry safe/idempotent or cold start proxy responses
@@ -66,7 +66,7 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
         continue;
       }
 
-      throw new Error(errorMessage);
+      throw new Error(errorMessage || `Server Error (${response.status}). Please try again.`);
     } catch (err: any) {
       clearTimeout(timeoutId);
 

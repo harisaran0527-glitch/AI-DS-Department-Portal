@@ -52,9 +52,12 @@ export const SimpleAdminLogin: React.FC = () => {
       }
     } catch (err: any) {
       setAuthStatus('error');
-      const raw = err.message || '';
-      const isRawNetwork = raw === 'Failed to fetch' || raw === 'NetworkError' || raw === 'Load failed';
-      setErrorMessage(isRawNetwork ? 'Unable to sign in. Please check your network connection and try again.' : (raw || 'Invalid admin credentials. Please verify your email/ID and password.'));
+      const msg = err.message || '';
+      if (msg === 'Failed to fetch' || msg.includes('NetworkError') || msg.includes('Load failed')) {
+        setErrorMessage('Network connection error. Please check your internet connection and try again.');
+      } else {
+        setErrorMessage(msg || 'Invalid admin credentials. Please verify your email/ID and password.');
+      }
     }
   };
 
