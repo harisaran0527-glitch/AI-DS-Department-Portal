@@ -33,6 +33,7 @@ import { BestEliteStudentsView } from '../../components/elite/BestEliteStudentsV
 import { GeminiTopRecognitionView } from '../../components/ranking/GeminiTopRecognitionView';
 import { GeminiCategoryBestPerformerCard } from '../../components/ranking/GeminiCategoryBestPerformerCard';
 import { GeminiFullLeetCodeDashboard } from '../../components/ranking/GeminiFullLeetCodeDashboard';
+import { StudentAiRewardCard } from '../../components/ranking/StudentAiRewardCard';
 import { getNptelUrlForStudent, normalizeAcademicYear } from '../../services/nptelUrlHelper';
 
 export const StudentDashboard: React.FC = () => {
@@ -214,6 +215,10 @@ export const StudentDashboard: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {(activeTab === 'dashboard' || activeTab === 'awards') && (
+          <StudentAiRewardCard studentId={student.id} />
+        )}
 
         {activeTab === 'ranking' && (
           <GeminiTopRecognitionView

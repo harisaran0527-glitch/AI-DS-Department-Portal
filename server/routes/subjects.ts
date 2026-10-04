@@ -160,4 +160,152 @@ router.delete('/:id', requireRole('FACULTY', 'HOD', 'ADMIN'), async (req: AuthRe
   }
 });
 
+// POST /api/subjects/import-preview - Preview and validate bulk Subject Master Excel upload
+router.post('/import-preview', requireRole('FACULTY', 'HOD', 'ADMIN'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { rows } = req.body;
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or empty rows provided for Subject Master import.' });
+    }
+
+    const validRows: any[] = [];
+    const invalidRows: any[] = [];
+    const seenCodes = new Set<string>();
+
+    const existingSubjects = await db.getSubjects({});
+    const existingCodeSet = new Set(existingSubjects.map((s) => s.subjectCode.trim().toUpperCase()));
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rawCode = row.subjectCode || row['Subject Code'] || row['subject_code'] || row.code || '';
+      const rawTitle = row.subjectTitle || row['Subject Title'] || row['subject_name'] || row.title || '';
+      const year = (row.year || '2nd Year').toString().trim();
+      const semester = Number(row.semester) || 3;
+      const section = (row.section || 'ALL').toString().trim();
+      const subjectType = (row.subjectType || row.type || 'Theory').toString().trim();
+      const credits = Number(row.credits) || 3;
+
+      const cleanCode = String(rawCode).trim().toUpperCase();
+      const cleanTitle = String(rawTitle).trim();
+
+      if (!cleanCode) {
+        invalidRows.push({ rowNumber: i + 1, rawData: row, reason: 'Subject Code is required.' });
+        continue;
+      }
+
+      if (!cleanTitle) {
+        invalidRows.push({ rowNumber: i + 1, rawData: row, reason: 'Subject Title is required.' });
+        continue;
+      }
+
+      if (seenCodes.has(cleanCode)) {
+        invalidRows.push({ rowNumber: i + 1, rawData: row, reason: `Duplicate Subject Code "${cleanCode}" found in uploaded file.` });
+        continue;
+      }
+
+      seenCodes.add(cleanCode);
+
+      const isExistingInDb = existingCodeSet.has(cleanCode);
+
+      validRows.push({
+        rowNumber: i + 1,
+        subjectCode: cleanCode,
+        subjectTitle: cleanTitle,
+        year,
+        semester,
+        section,
+        subjectType,
+        credits,
+        isExistingInDb,
+        status: isExistingInDb ? 'UPDATE_EXISTING' : 'NEW_SUBJECT'
+      });
+    }
+
+    return res.json({
+      summary: {
+        totalRowsProcessed: rows.length,
+        validCount: validRows.length,
+        invalidCount: invalidRows.length
+      },
+      validRows,
+      invalidRows
+    });
+  } catch (error: any) {
+    console.error('Error in subject import preview:', error);
+    return res.status(500).json({ error: error.message || 'Failed to preview Subject Master import.' });
+  }
+});
+
+// POST /api/subjects/import-confirm - Confirm bulk Subject Master import
+router.post('/import-confirm', requireRole('FACULTY', 'HOD', 'ADMIN'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { subjects } = req.body;
+    if (!Array.isArray(subjects) || subjects.length === 0) {
+      return res.status(400).json({ error: 'No valid subjects provided for confirmation.' });
+    }
+
+    const importedSubjects: any[] = [];
+    const userId = req.user?.id || 'SYSTEM';
+
+    for (const s of subjects) {
+      const code = String(s.subjectCode || s.code).trim().toUpperCase();
+      const title = String(s.subjectTitle || s.title).trim();
+      const year = (s.year || '2nd Year').toString().trim();
+      const semester = Number(s.semester) || 3;
+      const section = (s.section || 'ALL').toString().trim();
+      const subjectType = (s.subjectType || 'Theory').toString().trim();
+      const credits = Number(s.credits) || 3;
+
+      const existing = await db.findSubjectByCode(code);
+      if (existing) {
+        const updated = await db.updateSubject(existing.id, {
+          subject_name: title,
+          year,
+          semester,
+          section,
+          subject_type: subjectType as any,
+          credits
+        });
+        importedSubjects.push(updated);
+      } else {
+        const added = await db.addSubject({
+          subject_code: code,
+          subject_name: title,
+          department: 'AI & Data Science',
+          academic_year: '2025-2026',
+          year,
+          semester,
+          section,
+          subject_type: subjectType as any,
+          credits,
+          faculty_handler: req.user?.name || 'Class Coordinator',
+          created_by_user_id: userId
+        });
+        importedSubjects.push(added);
+      }
+    }
+
+    await db.createBulkImportAudit(
+      userId,
+      req.user?.role || 'FACULTY',
+      'SUBJECT_MASTER_IMPORT',
+      'bulk_subject_master_import.xlsx',
+      importedSubjects.length,
+      0,
+      { importedCount: importedSubjects.length }
+    );
+
+    await db.logAudit(userId, req.user?.email || '', req.user?.role || '', 'SUBJECT_MASTER_IMPORT', `SUBJECTS_COUNT:${importedSubjects.length}`);
+
+    return res.json({
+      message: 'Subject Master bulk import confirmed and saved successfully.',
+      importedCount: importedSubjects.length,
+      subjects: importedSubjects
+    });
+  } catch (error: any) {
+    console.error('Error in subject import confirm:', error);
+    return res.status(500).json({ error: error.message || 'Failed to confirm Subject Master import.' });
+  }
+});
+
 export default router;

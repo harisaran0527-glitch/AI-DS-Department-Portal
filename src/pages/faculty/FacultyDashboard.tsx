@@ -7,6 +7,7 @@ import { DashboardLayout, type MenuItem } from '../../components/layout/Dashboar
 import { ConfirmDeleteModal } from '../../components/common/ConfirmDeleteModal';
 import { ForgotPasswordModal } from '../../components/common/ForgotPasswordModal';
 import { SubjectManagement } from '../../components/academic/SubjectManagement';
+import { AcademicsModule } from '../../components/academic/AcademicsModule';
 import { BestEliteStudentsView } from '../../components/elite/BestEliteStudentsView';
 import { GeminiTopRecognitionView } from '../../components/ranking/GeminiTopRecognitionView';
 import { GeminiCategoryBestPerformerCard } from '../../components/ranking/GeminiCategoryBestPerformerCard';
@@ -2255,12 +2256,11 @@ export const FacultyDashboard: React.FC = () => {
               assignedYear={assignedYear}
               assignedSection={assignedSection}
             />
-            {/* SUBJECT MANAGEMENT & ADD SUBJECT FEATURE */}
-            <SubjectManagement
-              userRole="FACULTY"
+
+            {/* ACADEMICS MODULE WITH SUBJECT MASTER + BULK MARKS UPLOAD */}
+            <AcademicsModule
               assignedYear={assignedYear}
               assignedSection={assignedSection}
-              onSubjectsChange={(subs) => setRegisteredSubjects(subs)}
             />
 
             <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-6 space-y-6 shadow-xl">

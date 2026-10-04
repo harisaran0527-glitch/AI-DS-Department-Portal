@@ -3,6 +3,7 @@ import fs from 'fs';
 import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
 import { isPostgresActive, queryOne, queryAll, executeRun, executeTransaction, sqliteDb } from './postgresAdapter.js';
+import { calculateCategoryScores, computeOverallScore } from './scoringEngine.js';
 
 dotenv.config();
 
@@ -459,6 +460,33 @@ export async function initDatabaseSchema(): Promise<void> {
       FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS student_ai_rewards (
+      student_id TEXT PRIMARY KEY,
+      total_reward_score REAL NOT NULL DEFAULT 0,
+      performance_level TEXT NOT NULL DEFAULT 'Developing',
+      category_points_json TEXT NOT NULL DEFAULT '{}',
+      activities_considered_json TEXT NOT NULL DEFAULT '[]',
+      evidence_sources_json TEXT NOT NULL DEFAULT '{}',
+      award_eligibility_json TEXT NOT NULL DEFAULT '[]',
+      recommended_award TEXT NOT NULL DEFAULT 'None',
+      ai_reasoning TEXT NOT NULL DEFAULT '',
+      confidence_score REAL NOT NULL DEFAULT 0.95,
+      calculated_at TEXT NOT NULL,
+      FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS bulk_import_audits (
+      id TEXT PRIMARY KEY,
+      uploader_user_id TEXT NOT NULL,
+      uploader_role TEXT NOT NULL,
+      import_type TEXT NOT NULL,
+      file_name TEXT,
+      accepted_count INTEGER NOT NULL DEFAULT 0,
+      rejected_count INTEGER NOT NULL DEFAULT 0,
+      details_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL
+    );
+
     -- INDEXES FOR FAST QUERY EXECUTION
     CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
     CREATE INDEX IF NOT EXISTS idx_users_identifier ON users(identifier);
@@ -483,6 +511,7 @@ export async function initDatabaseSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_leetcode_proofs_stu ON leetcode_proofs(student_id);
     CREATE INDEX IF NOT EXISTS idx_subjects_code_ctx ON subjects(subject_code, year, semester, section);
     CREATE INDEX IF NOT EXISTS idx_subjects_year_sem ON subjects(year, semester, section);
+    CREATE INDEX IF NOT EXISTS idx_student_ai_rewards_score ON student_ai_rewards(total_reward_score DESC);
   `;
 
   if (isPostgresActive()) {
@@ -3819,6 +3848,197 @@ export class SQLiteDB {
   public async deleteSubject(id: string): Promise<boolean> {
     const res = await executeRun('DELETE FROM subjects WHERE id = ?', [id]);
     return res.changes > 0;
+  }
+
+  // STUDENT AI REWARDS
+  public async saveStudentAiReward(reward: any): Promise<void> {
+    const now = new Date().toISOString();
+    await executeRun(`
+      INSERT INTO student_ai_rewards (
+        student_id, total_reward_score, performance_level, category_points_json,
+        activities_considered_json, evidence_sources_json, award_eligibility_json,
+        recommended_award, ai_reasoning, confidence_score, calculated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(student_id) DO UPDATE SET
+        total_reward_score = EXCLUDED.total_reward_score,
+        performance_level = EXCLUDED.performance_level,
+        category_points_json = EXCLUDED.category_points_json,
+        activities_considered_json = EXCLUDED.activities_considered_json,
+        evidence_sources_json = EXCLUDED.evidence_sources_json,
+        award_eligibility_json = EXCLUDED.award_eligibility_json,
+        recommended_award = EXCLUDED.recommended_award,
+        ai_reasoning = EXCLUDED.ai_reasoning,
+        confidence_score = EXCLUDED.confidence_score,
+        calculated_at = EXCLUDED.calculated_at
+    `, [
+      reward.studentId,
+      reward.totalRewardScore || 0,
+      reward.performanceLevel || 'Developing',
+      JSON.stringify(reward.categoryPoints || {}),
+      JSON.stringify(reward.activitiesConsidered || []),
+      JSON.stringify(reward.evidenceSources || {}),
+      JSON.stringify(reward.awardEligibility || []),
+      reward.recommendedAward || 'Academic Excellence Recognisee',
+      reward.aiReasoning || '',
+      reward.confidenceScore || 0.95,
+      now
+    ]);
+  }
+
+  public async getStudentAiReward(studentId: string): Promise<any | null> {
+    const row = await queryOne<any>('SELECT * FROM student_ai_rewards WHERE student_id = ?', [studentId]);
+    if (!row) return null;
+    return {
+      studentId: row.student_id,
+      totalRewardScore: row.total_reward_score,
+      performanceLevel: row.performance_level,
+      categoryPoints: safeParseJson(row.category_points_json, {}),
+      activitiesConsidered: safeParseJson(row.activities_considered_json, []),
+      evidenceSources: safeParseJson(row.evidence_sources_json, {}),
+      awardEligibility: safeParseJson(row.award_eligibility_json, []),
+      recommendedAward: row.recommended_award,
+      aiReasoning: row.ai_reasoning,
+      confidenceScore: row.confidence_score,
+      calculatedAt: row.calculated_at
+    };
+  }
+
+  public async getAllStudentAiRewards(): Promise<any[]> {
+    const rows = await queryAll<any>('SELECT * FROM student_ai_rewards ORDER BY total_reward_score DESC');
+    return rows.map((row) => ({
+      studentId: row.student_id,
+      totalRewardScore: row.total_reward_score,
+      performanceLevel: row.performance_level,
+      categoryPoints: safeParseJson(row.category_points_json, {}),
+      activitiesConsidered: safeParseJson(row.activities_considered_json, []),
+      evidenceSources: safeParseJson(row.evidence_sources_json, {}),
+      awardEligibility: safeParseJson(row.award_eligibility_json, []),
+      recommendedAward: row.recommended_award,
+      aiReasoning: row.ai_reasoning,
+      confidenceScore: row.confidence_score,
+      calculatedAt: row.calculated_at
+    }));
+  }
+
+  // ACADEMICS & MARKS UPSERT
+  public async findSubjectByCode(code: string): Promise<SubjectRecord | null> {
+    const cleanCode = String(code).trim().toUpperCase();
+    const row = await queryOne<any>('SELECT * FROM subjects WHERE UPPER(subject_code) = ?', [cleanCode]);
+    if (!row) return null;
+    return {
+      id: row.id,
+      subject_code: row.subject_code || row.subjectCode,
+      subject_name: row.subject_name || row.subjectName || row.name,
+      department: row.department,
+      year: row.year,
+      semester: row.semester,
+      section: row.section,
+      subject_type: row.subject_type || row.subjectType,
+      credits: row.credits,
+      faculty_handler: row.faculty_handler || row.facultyHandler,
+      created_by_user_id: row.created_by_user_id || row.createdByUserId,
+      created_at: row.created_at || row.createdAt
+    };
+  }
+
+  public async upsertStudentSubjectMark(
+    studentId: string,
+    subjectCode: string,
+    subjectTitle: string,
+    marks: number,
+    semesterNo: number = 3
+  ): Promise<void> {
+    const cleanCode = String(subjectCode).trim().toUpperCase();
+    const cleanTitle = String(subjectTitle).trim();
+
+    const existing = await queryAll<any>('SELECT * FROM academic_records WHERE student_id = ?', [studentId]);
+    let semRecord = existing.find((r) => Number(r.semester_no) === Number(semesterNo)) || existing[0];
+
+    let subjectsList: Array<{ subjectCode: string; subjectTitle: string; marks: number; grade?: string; credits?: number }> = [];
+    if (semRecord && semRecord.subjects_json) {
+      subjectsList = safeParseJson(semRecord.subjects_json, []);
+    }
+
+    const idx = subjectsList.findIndex((s) => String(s.subjectCode).trim().toUpperCase() === cleanCode);
+    const markEntry = {
+      subjectCode: cleanCode,
+      subjectTitle: cleanTitle,
+      marks: Number(marks),
+      grade: marks >= 90 ? 'O' : (marks >= 80 ? 'A+' : (marks >= 70 ? 'A' : (marks >= 60 ? 'B+' : (marks >= 50 ? 'B' : 'U')))),
+      credits: 3
+    };
+
+    if (idx >= 0) {
+      subjectsList[idx] = markEntry;
+    } else {
+      subjectsList.push(markEntry);
+    }
+
+    const totalMarksSum = subjectsList.reduce((acc, s) => acc + (Number(s.marks) || 0), 0);
+    const avgScore = subjectsList.length > 0 ? totalMarksSum / subjectsList.length : 0;
+    const computedSgpa = Math.min(10.0, Math.round((avgScore / 10) * 100) / 100);
+
+    const now = new Date().toISOString();
+
+    if (semRecord) {
+      await executeRun(`
+        UPDATE academic_records
+        SET subjects_json = ?, sgpa = ?, cgpa = ?
+        WHERE id = ?
+      `, [JSON.stringify(subjectsList), computedSgpa, computedSgpa, semRecord.id]);
+    } else {
+      const recId = `acad-${studentId}-sem${semesterNo}-${Date.now()}`;
+      await executeRun(`
+        INSERT INTO academic_records (id, student_id, semester_no, sgpa, cgpa, total_credits, subjects_json, exam_type, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'Semester', ?)
+      `, [recId, studentId, semesterNo, computedSgpa, computedSgpa, subjectsList.length * 3, JSON.stringify(subjectsList), now]);
+    }
+
+    await executeRun(`
+      UPDATE students
+      SET cgpa = ?
+      WHERE id = ?
+    `, [computedSgpa, studentId]);
+
+    const updatedStudent = await this.getStudentById(studentId);
+    if (updatedStudent) {
+      const full360 = await this.getStudent360(studentId);
+      if (full360) {
+        const catScores = calculateCategoryScores(
+          full360.student as any,
+          full360.academics,
+          full360.arrears,
+          full360.skillEdge,
+          full360.nptel,
+          full360.attendance,
+          full360.discipline,
+          full360.leetcode,
+          full360.projects,
+          full360.certificates,
+          full360.participation
+        );
+        const scoringConfig = await this.getScoringConfig();
+        const overallScore = computeOverallScore(catScores, scoringConfig);
+        await executeRun('UPDATE students SET overall_score = ? WHERE id = ?', [overallScore, studentId]);
+      }
+    }
+  }
+
+  public async createBulkImportAudit(
+    uploaderUserId: string,
+    uploaderRole: string,
+    importType: string,
+    fileName: string,
+    acceptedCount: number,
+    rejectedCount: number,
+    details: any
+  ): Promise<void> {
+    const id = `imp-audit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const now = new Date().toISOString();
+    await executeRun(`
+      INSERT INTO bulk_import_audits (id, uploader_user_id, uploader_role, import_type, file_name, accepted_count, rejected_count, details_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [id, uploaderUserId, uploaderRole, importType, fileName, acceptedCount, rejectedCount, JSON.stringify(details || {}), now]);
   }
 
   // AUDIT LOGS

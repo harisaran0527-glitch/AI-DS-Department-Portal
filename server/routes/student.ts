@@ -184,6 +184,26 @@ router.post('/sync-nptel', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// GET /api/student/ai-reward - Get student's own Gemini AI Reward Score & Breakdown
+router.get('/ai-reward', async (req: AuthRequest, res: Response) => {
+  try {
+    let studentId = req.user!.studentId || req.user!.id;
+    const studentObj = (await db.getStudentByRegisterNo(req.user!.registerNo || '')) || (await db.getStudentById(studentId));
+    if (studentObj) studentId = studentObj.id;
+
+    const { evaluateStudentRewardPoints } = await import('../services/studentRewardEngine.js');
+    let reward = await db.getStudentAiReward(studentId);
+    if (!reward) {
+      reward = await evaluateStudentRewardPoints(studentId);
+    }
+
+    return res.json({ reward });
+  } catch (err: any) {
+    console.error('Error fetching student AI reward points:', err);
+    return res.status(500).json({ error: err.message || 'Failed to fetch AI reward breakdown.' });
+  }
+});
+
 // Reject ANY modification attempt on other endpoints from Student role
 router.use((req: AuthRequest, res: Response, next) => {
   if (req.method !== 'GET') {

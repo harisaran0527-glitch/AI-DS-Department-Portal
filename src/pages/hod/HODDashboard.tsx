@@ -33,6 +33,7 @@ import { BestEliteStudentsView } from '../../components/elite/BestEliteStudentsV
 import { GeminiTopRecognitionView } from '../../components/ranking/GeminiTopRecognitionView';
 import { GeminiCategoryBestPerformerCard } from '../../components/ranking/GeminiCategoryBestPerformerCard';
 import { GeminiFullLeetCodeDashboard } from '../../components/ranking/GeminiFullLeetCodeDashboard';
+import { HodAwardCandidatesView } from '../../components/ranking/HodAwardCandidatesView';
 
 export const HODDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -309,23 +310,30 @@ export const HODDashboard: React.FC = () => {
           />
         )}
 
-        {/* 1. DASHBOARD */}
-        {activeTab === 'dashboard' && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-            <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex items-center justify-between">
-              <div>
-                <div className="text-slate-400 font-mono uppercase">Department Students</div>
-                <div className="text-2xl font-bold text-white mt-1">{students.length} Students</div>
+        {/* 1. DASHBOARD & AWARD CANDIDATES */}
+        {(activeTab === 'dashboard' || activeTab === 'award-candidates' || activeTab === 'best-student' || activeTab === 'best-rep') && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex items-center justify-between">
+                <div>
+                  <div className="text-slate-400 font-mono uppercase">Department Students</div>
+                  <div className="text-2xl font-bold text-white mt-1">{students.length} Students</div>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-amber-950 border border-amber-800 flex items-center justify-center text-amber-400"><Users className="w-6 h-6" /></div>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-amber-950 border border-amber-800 flex items-center justify-center text-amber-400"><Users className="w-6 h-6" /></div>
-            </div>
-            <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex items-center justify-between">
-              <div>
-                <div className="text-slate-400 font-mono uppercase">Top Candidate</div>
-                <div className="text-base font-bold text-white mt-1">{awardCandidates?.bestStudent?.student?.name || 'N/A'}</div>
+              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex items-center justify-between">
+                <div>
+                  <div className="text-slate-400 font-mono uppercase">Top Candidate</div>
+                  <div className="text-base font-bold text-white mt-1">{awardCandidates?.bestStudent?.student?.name || 'N/A'}</div>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-indigo-950 border border-indigo-800 flex items-center justify-center text-indigo-400"><Crown className="w-6 h-6" /></div>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-indigo-950 border border-indigo-800 flex items-center justify-center text-indigo-400"><Crown className="w-6 h-6" /></div>
             </div>
+
+            <HodAwardCandidatesView
+              assignedYear={selectedYear === 'ALL' ? undefined : selectedYear}
+              assignedSection={selectedSection === 'ALL' ? undefined : selectedSection}
+            />
           </div>
         )}
 

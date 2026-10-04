@@ -1681,4 +1681,185 @@ router.delete('/team-heads/:id/members/:studentId', async (req: AuthRequest, res
   return res.json({ teamHead: updatedHead, message: 'Member removed from team successfully.' });
 });
 
+// POST /api/faculty/academics/import-preview - Preview and validate bulk mark Excel upload
+router.post('/academics/import-preview', requireRole('FACULTY', 'HOD', 'ADMIN'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { rows } = req.body;
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or empty rows provided for Bulk Marks Upload.' });
+    }
+
+    const assignment = await db.getFacultyAssignment(req.user!.id);
+    const facultyAssignedYear = assignment ? assignment.year : req.user!.assignedYear;
+    const facultyAssignedSection = assignment ? assignment.section : req.user!.assignedSection;
+    const isSpecialRole = req.user!.role === 'ADMIN' || req.user!.role === 'HOD';
+
+    const validRows: any[] = [];
+    const invalidRows: any[] = [];
+    const seenMap = new Set<string>();
+
+    const allStudents = await db.getAllStudents();
+    const studentRegMap = new Map(allStudents.map((s) => [(s.register_no || s.registerNo || '').trim().toUpperCase(), s]));
+
+    const allSubjects = await db.getSubjects({});
+    const subjectCodeMap = new Map(allSubjects.map((s) => [s.subjectCode.trim().toUpperCase(), s]));
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rawRegNo = row.registerNo || row['Register Number'] || row['register_no'] || row['Reg No'] || '';
+      const rawSubjectCode = row.subjectCode || row['Subject Code'] || row['subject_code'] || '';
+      const rawSubjectTitle = row.subjectTitle || row['Subject Title'] || row['subject_name'] || '';
+      const rawMarks = row.marks !== undefined ? row.marks : row['Marks'];
+
+      const cleanRegNo = String(rawRegNo).trim().toUpperCase();
+      const cleanCode = String(rawSubjectCode).trim().toUpperCase();
+      const cleanTitle = String(rawSubjectTitle).trim();
+      const numMarks = Number(rawMarks);
+
+      // 1. Basic empty check
+      if (!cleanRegNo) {
+        invalidRows.push({ rowNumber: i + 1, rawData: row, reason: 'Register Number is required.' });
+        continue;
+      }
+      if (!cleanCode) {
+        invalidRows.push({ rowNumber: i + 1, rawData: row, reason: 'Subject Code is required.' });
+        continue;
+      }
+      if (isNaN(numMarks) || numMarks < 0 || numMarks > 100) {
+        invalidRows.push({ rowNumber: i + 1, rawData: row, reason: `Invalid marks value "${rawMarks}". Marks must be a number between 0 and 100.` });
+        continue;
+      }
+
+      // 2. Authoritative Register Number student lookup
+      const student = studentRegMap.get(cleanRegNo);
+      if (!student) {
+        invalidRows.push({ rowNumber: i + 1, rawData: row, reason: `Student with Register Number "${cleanRegNo}" not found in database.` });
+        continue;
+      }
+
+      // 3. Section Isolation check for Faculty
+      if (!isSpecialRole && facultyAssignedYear && facultyAssignedSection) {
+        const studentYearNorm = student.year.trim().toLowerCase();
+        const studentSecNorm = student.section.trim().toLowerCase();
+        const facYearNorm = facultyAssignedYear.trim().toLowerCase();
+        const facSecNorm = facultyAssignedSection.trim().toLowerCase();
+
+        if (studentYearNorm !== facYearNorm || studentSecNorm !== facSecNorm) {
+          invalidRows.push({
+            rowNumber: i + 1,
+            rawData: row,
+            reason: `Access Denied: Student ${student.name} (${cleanRegNo}) belongs to [${student.year}, ${student.section}], which is outside your assigned class assignment [${facultyAssignedYear}, ${facultyAssignedSection}].`
+          });
+          continue;
+        }
+      }
+
+      // 4. Subject Master lookup
+      const masterSubject = subjectCodeMap.get(cleanCode);
+      if (!masterSubject) {
+        invalidRows.push({
+          rowNumber: i + 1,
+          rawData: row,
+          reason: `Subject Code "${cleanCode}" does not exist in Subject Master. Please add subject to Subject Master first.`
+        });
+        continue;
+      }
+
+      // 5. Subject Title verification against Subject Master
+      if (cleanTitle && cleanTitle.toLowerCase() !== masterSubject.subjectName.trim().toLowerCase()) {
+        invalidRows.push({
+          rowNumber: i + 1,
+          rawData: row,
+          reason: `Subject Title mismatch for ${cleanCode}: Uploaded "${cleanTitle}", expected "${masterSubject.subjectName}" from Subject Master.`
+        });
+        continue;
+      }
+
+      // Duplicate check in same batch
+      const dedupeKey = `${student.id}_${cleanCode}`;
+      if (seenMap.has(dedupeKey)) {
+        invalidRows.push({ rowNumber: i + 1, rawData: row, reason: `Duplicate entry for Student ${cleanRegNo} and Subject Code ${cleanCode} in uploaded file.` });
+        continue;
+      }
+      seenMap.add(dedupeKey);
+
+      validRows.push({
+        rowNumber: i + 1,
+        studentId: student.id,
+        studentName: student.name,
+        registerNo: student.register_no || student.registerNo,
+        year: student.year,
+        section: student.section,
+        subjectCode: masterSubject.subjectCode,
+        subjectTitle: masterSubject.subjectName,
+        semester: masterSubject.semester,
+        marks: numMarks
+      });
+    }
+
+    return res.json({
+      summary: {
+        totalRowsProcessed: rows.length,
+        validCount: validRows.length,
+        invalidCount: invalidRows.length
+      },
+      validRows,
+      invalidRows
+    });
+  } catch (error: any) {
+    console.error('Error in academic marks import preview:', error);
+    return res.status(500).json({ error: error.message || 'Failed to preview academic marks import.' });
+  }
+});
+
+// POST /api/faculty/academics/import-confirm - Confirm bulk mark upload
+router.post('/academics/import-confirm', requireRole('FACULTY', 'HOD', 'ADMIN'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { marks } = req.body;
+    if (!Array.isArray(marks) || marks.length === 0) {
+      return res.status(400).json({ error: 'No valid marks provided for confirmation.' });
+    }
+
+    const { evaluateStudentRewardPoints } = await import('../services/studentRewardEngine.js');
+
+    const affectedStudentIds = new Set<string>();
+    let savedCount = 0;
+
+    for (const item of marks) {
+      const { studentId, subjectCode, subjectTitle, marks: scoreVal, semester } = item;
+      await db.upsertStudentSubjectMark(studentId, subjectCode, subjectTitle, Number(scoreVal), Number(semester) || 3);
+      affectedStudentIds.add(studentId);
+      savedCount++;
+    }
+
+    // Trigger Gemini Reward Engine recalculation for affected students
+    for (const sId of affectedStudentIds) {
+      try {
+        await evaluateStudentRewardPoints(sId);
+      } catch (_e) {}
+    }
+
+    await db.createBulkImportAudit(
+      req.user!.id,
+      req.user!.role,
+      'BULK_MARKS_IMPORT',
+      'bulk_academic_marks.xlsx',
+      savedCount,
+      0,
+      { affectedStudentsCount: affectedStudentIds.size, totalMarksSaved: savedCount }
+    );
+
+    await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'BULK_MARKS_IMPORT', `STUDENTS:${affectedStudentIds.size}, MARKS:${savedCount}`);
+
+    return res.json({
+      message: 'Academic marks imported and saved successfully.',
+      importedCount: savedCount,
+      updatedStudentsCount: affectedStudentIds.size
+    });
+  } catch (error: any) {
+    console.error('Error in academic marks import confirm:', error);
+    return res.status(500).json({ error: error.message || 'Failed to confirm academic marks import.' });
+  }
+});
+
 export default router;

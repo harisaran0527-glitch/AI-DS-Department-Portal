@@ -684,6 +684,59 @@ export const API = {
     });
   },
 
+  previewSubjectImport: async (rows: any[]) => {
+    return request<{
+      summary: { totalRowsProcessed: number; validCount: number; invalidCount: number };
+      validRows: any[];
+      invalidRows: any[];
+    }>('/subjects/import-preview', {
+      method: 'POST',
+      body: JSON.stringify({ rows })
+    });
+  },
+
+  confirmSubjectImport: async (subjects: any[]) => {
+    return request<{ message: string; importedCount: number; subjects: any[] }>('/subjects/import-confirm', {
+      method: 'POST',
+      body: JSON.stringify({ subjects })
+    });
+  },
+
+  // Bulk Academic Marks Upload & Validation
+  previewAcademicMarksImport: async (rows: any[]) => {
+    return request<{
+      summary: { totalRowsProcessed: number; validCount: number; invalidCount: number };
+      validRows: Array<{ rowNumber: number; studentId: string; studentName: string; registerNo: string; year: string; section: string; subjectCode: string; subjectTitle: string; semester: number; marks: number }>;
+      invalidRows: Array<{ rowNumber: number; rawData: any; reason: string }>;
+    }>('/faculty/academics/import-preview', {
+      method: 'POST',
+      body: JSON.stringify({ rows })
+    });
+  },
+
+  confirmAcademicMarksImport: async (marks: any[]) => {
+    return request<{ message: string; importedCount: number; updatedStudentsCount: number }>('/faculty/academics/import-confirm', {
+      method: 'POST',
+      body: JSON.stringify({ marks })
+    });
+  },
+
+  // Gemini Central Student Recognition & Reward Engine API
+  getStudentAiReward: async () => {
+    return request<{ reward: any }>('/student/ai-reward');
+  },
+
+  getHodAwardCandidatesV2: async () => {
+    return request<{ count: number; candidates: any[] }>('/hod/award-candidates-v2');
+  },
+
+  postHodAwardAction: async (studentId: string, action: 'APPROVE' | 'REJECT', awardTitle?: string, reason?: string) => {
+    return request<{ message: string; award: any }>(`/hod/awards/${studentId}/action`, {
+      method: 'POST',
+      body: JSON.stringify({ action, awardTitle, reason })
+    });
+  },
+
   // Elite Students Designation & Dedicated Profile Edits
   setStudentEliteStatus: async (studentId: string, isElite: boolean, role: 'HOD' | 'FACULTY' = 'HOD') => {
     const base = role === 'HOD' ? '/hod' : '/faculty';

@@ -338,12 +338,94 @@ router.post('/awards/finalize', async (req: AuthRequest, res: Response) => {
       aiExplanation
     };
 
-    await db.finalizeAward(awardObj);
-    await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'FINALIZE_AWARD', `AWARD:${awardKey}:${winner.register_no}`);
+// GET Gemini AI Award Candidates for HOD Command Center
+router.get('/award-candidates-v2', async (req: AuthRequest, res: Response) => {
+  try {
+    const { evaluateAllStudentsRewardPoints } = await import('../services/studentRewardEngine.js');
+    const evaluations = await evaluateAllStudentsRewardPoints();
 
-    return res.status(201).json({ message: 'Award finalized successfully.', award: awardObj });
+    const finalizedAwards = await db.getFinalizedAwards();
+    const approvedSet = new Map(finalizedAwards.map((a: any) => [a.winner_student_id || a.winnerStudentId, a]));
+
+    const candidates = evaluations.map((ev, index) => {
+      const existingAward = approvedSet.get(ev.studentId);
+      return {
+        id: existingAward?.id || `cand-${ev.studentId}`,
+        rank: index + 1,
+        studentId: ev.studentId,
+        studentName: ev.studentName,
+        registerNo: ev.registerNo,
+        year: ev.year,
+        section: ev.section,
+        totalRewardScore: ev.totalRewardScore,
+        performanceLevel: ev.performanceLevel,
+        awardCategory: ev.recommendedAward,
+        recommendedAward: ev.recommendedAward,
+        aiReasoning: ev.aiReasoning,
+        activitiesConsidered: ev.activitiesConsidered,
+        evidenceSources: ev.evidenceSources,
+        categoryPoints: ev.categoryPoints,
+        status: existingAward ? (existingAward.status || 'APPROVED') : 'PENDING_REVIEW',
+        rejectionReason: existingAward?.rejection_reason || null
+      };
+    });
+
+    return res.json({ count: candidates.length, candidates });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Failed to finalize award.' });
+    console.error('Error fetching award candidates:', err);
+    return res.status(500).json({ error: err.message || 'Failed to fetch award candidates.' });
+  }
+});
+
+// POST HOD Action on Award Candidate (APPROVE / REJECT)
+router.post('/awards/:studentId/action', async (req: AuthRequest, res: Response) => {
+  try {
+    const { studentId } = req.params;
+    const { action, awardTitle, reason } = req.body;
+
+    if (!action || !['APPROVE', 'REJECT'].includes(action.toUpperCase())) {
+      return res.status(400).json({ error: 'Action must be either "APPROVE" or "REJECT".' });
+    }
+
+    const student = await db.getStudentById(studentId);
+    if (!student) {
+      return res.status(404).json({ error: 'Student record not found.' });
+    }
+
+    const cleanAction = action.toUpperCase() as 'APPROVE' | 'REJECT';
+    const now = new Date().toISOString();
+
+    const awardObj = {
+      id: `awd-${studentId}-${Date.now()}`,
+      awardKey: cleanAction === 'APPROVE' ? 'APPROVED_AWARD' : 'REJECTED_AWARD',
+      awardTitle: awardTitle || 'Department Recognition Award',
+      winnerStudentId: student.id,
+      winnerStudentName: student.name,
+      registerNo: student.register_no || student.registerNo,
+      year: student.year,
+      section: student.section,
+      overallScore: student.overall_score || 0,
+      finalizedAt: now,
+      finalizedByHODName: req.user?.name || 'Head of Department',
+      aiExplanation: cleanAction === 'APPROVE'
+        ? `Approved by HOD: ${student.name} confirmed for ${awardTitle || 'Department Award'}.`
+        : `Rejected by HOD: ${reason || 'Decision reviewed by HOD.'}`,
+      status: cleanAction === 'APPROVE' ? 'APPROVED' : 'REJECTED',
+      rejectionReason: cleanAction === 'REJECT' ? (reason || 'Decision reviewed by HOD.') : undefined
+    };
+
+    await db.finalizeAward(awardObj);
+    await db.logAudit(req.user!.id, req.user!.email, req.user!.role, `HOD_${cleanAction}_AWARD`, `STUDENT:${student.register_no || student.registerNo}`);
+
+    return res.json({
+      message: cleanAction === 'APPROVE'
+        ? `Successfully approved award recommendation for ${student.name}.`
+        : `Award recommendation for ${student.name} has been rejected.`,
+      award: awardObj
+    });
+  } catch (err: any) {
+    console.error('Error processing award action:', err);
+    return res.status(500).json({ error: err.message || 'Failed to process award action.' });
   }
 });
 
