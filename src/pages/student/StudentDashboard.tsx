@@ -134,7 +134,6 @@ export const StudentDashboard: React.FC = () => {
   const studentMenuItems: MenuItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'profile', label: 'My Profile', icon: GraduationCap },
-    { id: 'discipline', label: 'Discipline Records', icon: AlertTriangle },
     { id: 'connected-accounts', label: 'Connected Accounts', icon: LinkIcon },
     { id: 'academics', label: 'Academics', icon: BookOpen },
     { id: 'skilledge', label: 'SkillEdge', icon: Code },
@@ -1200,91 +1199,6 @@ export const StudentDashboard: React.FC = () => {
               )}
 
               <ProofAttachmentControl studentId={student.id} recordType="academics" recordId="cgpa-record" userRole="STUDENT" />
-            </div>
-          </div>
-        )}
-
-        {/* DISCIPLINE TAB (STRICTLY 100% READ-ONLY FOR STUDENT) */}
-        {activeTab === 'discipline' && (
-          <div className="space-y-6 font-mono text-xs">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-4">
-                <div>
-                  <h3 className="text-lg font-bold text-white flex items-center space-x-2 font-sans">
-                    <AlertTriangle className="w-5 h-5 text-rose-400" />
-                    <span>My Disciplinary Records & Violation History</span>
-                  </h3>
-                  <p className="text-slate-400 text-[11px] font-mono mt-0.5">
-                    Official record of logged campus discipline issues, rule violations, staff actions, and fine details for student <strong className="text-white">{student.registerNo}</strong>.
-                  </p>
-                </div>
-                <span className="bg-rose-950 border border-rose-800 text-rose-300 text-[11px] px-3 py-1 rounded-full font-bold flex items-center space-x-1 shrink-0">
-                  <ShieldCheck className="w-3.5 h-3.5 text-rose-400" />
-                  <span>STRICTLY READ-ONLY</span>
-                </span>
-              </div>
-
-              {/* DISCIPLINE RECORDS LIST / TABLE */}
-              {Array.isArray(_discipline) && _discipline.length > 0 ? (
-                <div className="space-y-4 font-sans">
-                  <div className="grid grid-cols-1 gap-4">
-                    {_discipline.map((d: any, idx: number) => (
-                      <div key={d.id || idx} className="bg-slate-950 border border-rose-900/40 p-4 rounded-xl space-y-3 shadow-md">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-800/80 pb-2">
-                          <div className="flex items-center space-x-2 font-mono">
-                            <span className="bg-rose-950 text-rose-300 font-bold text-[10px] px-2.5 py-0.5 rounded border border-rose-800 uppercase">
-                              {d.category || d.issue || 'Discipline Issue'}
-                            </span>
-                            <span className="text-slate-400 text-[11px]">Date: <strong className="text-white">{d.date}</strong></span>
-                            {d.time && <span className="text-slate-400 text-[11px]">Time: <strong className="text-slate-300">{d.time}</strong></span>}
-                          </div>
-                          {(Number(d.fineAmount || d.fine_amount) > 0) && (
-                            <span className="bg-amber-950 text-amber-300 font-bold text-[11px] px-3 py-0.5 rounded border border-amber-800 font-mono">
-                              Fine Amount: ₹{d.fineAmount || d.fine_amount}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                          <div>
-                            <span className="text-slate-500 font-mono text-[11px] block">Rule Violated:</span>
-                            <span className="text-white font-semibold">{d.ruleViolated || d.rule_violated || 'Campus Rule Violation'}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-500 font-mono text-[11px] block">Staff Action Taken:</span>
-                            <span className="text-amber-300 font-semibold">{d.actionTaken || d.action_taken || d.warningAction || 'Logged in Student Profile'}</span>
-                          </div>
-                        </div>
-
-                        {(d.fineDetails || d.fine_details) && (
-                          <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
-                            <span className="text-slate-400 font-mono text-[10px] block font-bold">Fine Details / Payment Record:</span>
-                            <span className="text-slate-200">{d.fineDetails || d.fine_details}</span>
-                          </div>
-                        )}
-
-                        {(d.remark || d.remarks) && (
-                          <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
-                            <span className="text-slate-400 font-mono text-[10px] block font-bold">Additional Remarks:</span>
-                            <span className="text-slate-300 italic">{d.remark || d.remarks}</span>
-                          </div>
-                        )}
-
-                        <div className="text-[10px] text-slate-500 font-mono flex justify-between items-center pt-1 border-t border-slate-900">
-                          <span>Recorded By: <strong className="text-slate-400">{d.recordedBy || d.recorded_by || 'Department Faculty'}</strong></span>
-                          <span className="text-rose-400/80 font-bold">RECORD PERMANENTLY LINKED TO STUDENT ID</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-slate-950 p-8 rounded-xl border border-slate-800 text-center text-emerald-400 font-mono space-y-2">
-                  <CheckCircle className="w-8 h-8 text-emerald-400 mx-auto" />
-                  <div className="font-bold text-sm">No Disciplinary Issues Recorded</div>
-                  <p className="text-xs text-slate-400">You have no campus discipline violations or active warnings on record.</p>
-                </div>
-              )}
             </div>
           </div>
         )}
