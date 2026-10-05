@@ -20,9 +20,11 @@ import {
   CheckCircle2,
   XCircle,
   Layers,
-  BarChart2
+  BarChart2,
+  FileSpreadsheet
 } from 'lucide-react';
 import { ProofAttachmentControl } from '../common/ProofAttachmentControl';
+import { HodStudentBulkUploadView } from './HodStudentBulkUploadView';
 
 interface HodFacultyWorkspaceViewProps {
   selectedYearFilter?: string;
@@ -47,6 +49,9 @@ export const HodFacultyWorkspaceView: React.FC<HodFacultyWorkspaceViewProps> = (
   // Workspace Student Filtering
   const [studentSearchQuery, setStudentSearchQuery] = useState<string>('');
   const [performanceCategory, setPerformanceCategory] = useState<string>('ALL');
+
+  // Upload Modal State inside Staff Workspace
+  const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
 
   // Modal Inspector State for assigned student
   const [inspectStudent, setInspectStudent] = useState<any | null>(null);
@@ -286,8 +291,16 @@ export const HodFacultyWorkspaceView: React.FC<HodFacultyWorkspaceViewProps> = (
                   </p>
                 </div>
 
-                {/* Student Search & Category Filters */}
+                {/* Student Search & Upload Controls */}
                 <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                  <button
+                    onClick={() => setShowUploadModal(true)}
+                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 shadow-lg shadow-amber-500/20 font-sans cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" />
+                    <span>+ Upload Student Excel</span>
+                  </button>
+
                   <div className="relative flex-1 md:w-56">
                     <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
                     <input
@@ -414,6 +427,42 @@ export const HodFacultyWorkspaceView: React.FC<HodFacultyWorkspaceViewProps> = (
                 </div>
               )}
             </div>
+
+            {/* STAFF-SPECIFIC STUDENT UPLOAD EXCEL MODAL */}
+            {showUploadModal && f && (
+              <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+                <div className="bg-slate-900 border border-slate-800 w-full max-w-4xl rounded-2xl p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
+                  <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                    <div>
+                      <h3 className="text-base font-bold text-white font-sans flex items-center space-x-2">
+                        <FileSpreadsheet className="w-5 h-5 text-amber-400" />
+                        <span>Upload Student Excel for <strong className="text-amber-400">{f.name}</strong></span>
+                      </h3>
+                      <p className="text-xs text-slate-400 font-mono mt-0.5">
+                        Assigned Year: <strong className="text-white">{f.year}</strong> | Assigned Section: <strong className="text-white">Section {f.section}</strong>
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setShowUploadModal(false)}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1 rounded-xl text-xs font-mono font-bold"
+                    >
+                      ✕ Close
+                    </button>
+                  </div>
+
+                  <HodStudentBulkUploadView
+                    initialFacultyId={f.id}
+                    initialYear={f.year}
+                    initialSection={f.section}
+                    onImportCompleted={() => {
+                      setShowUploadModal(false);
+                      loadFacultyWorkspace(f.id);
+                    }}
+                    onClose={() => setShowUploadModal(false)}
+                  />
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -764,8 +813,8 @@ export const HodFacultyWorkspaceView: React.FC<HodFacultyWorkspaceViewProps> = (
               ))}
             </div>
           )}
-        </>
-      )}
-    </div>
-  );
+      </>
+    )}
+  </div>
+);
 };

@@ -100,7 +100,32 @@ router.put('/faculty/:id', async (req: AuthRequest, res: Response) => {
 router.get('/students', async (req: AuthRequest, res: Response) => {
   const { year, section } = req.query;
   const students = await db.getStudents(year as string, section as string);
-  return res.json({ count: students.length, students });
+  const facultyUsers = await db.getUsers('FACULTY');
+  const facMap = new Map(facultyUsers.map((f) => [f.id, f.name]));
+  const assignmentsMap = await db.getAllFacultyAssignments();
+  const yearSecToFac = new Map<string, string>();
+  for (const fId of Object.keys(assignmentsMap)) {
+    const a = assignmentsMap[fId];
+    if (a && a.year && a.section) {
+      const fName = facMap.get(fId);
+      if (fName) {
+        yearSecToFac.set(`${a.year}_${a.section}`.toLowerCase(), fName);
+      }
+    }
+  }
+
+  const enriched = students.map((s: any) => {
+    let facultyName = s.created_by_faculty_id ? facMap.get(s.created_by_faculty_id) : undefined;
+    if (!facultyName && s.year && s.section) {
+      facultyName = yearSecToFac.get(`${s.year}_${s.section}`.toLowerCase());
+    }
+    return {
+      ...s,
+      facultyName: facultyName || s.classCoordinatorName || 'Not Assigned',
+      faculty_name: facultyName || s.classCoordinatorName || 'Not Assigned'
+    };
+  });
+  return res.json({ count: enriched.length, students: enriched });
 });
 
 // POST HOD Student Excel Import Preview (Validation & Conflict Detection)
@@ -606,9 +631,17 @@ router.get('/award-candidates-v2', async (req: AuthRequest, res: Response) => {
 router.post('/awards/:studentId/action', async (req: AuthRequest, res: Response) => {
   try {
     const { studentId } = req.params;
-    const { action, awardTitle, reason } = req.body;
+    let { action, awardTitle, reason, remarks } = req.body || {};
 
-    if (!action || !['APPROVE', 'REJECT'].includes(action.toUpperCase())) {
+    if (typeof action === 'object' && action !== null) {
+      remarks = action.remarks || action.reason;
+      awardTitle = action.awardTitle;
+      action = action.action;
+    }
+
+    const finalReason = reason || remarks || '';
+
+    if (!action || !['APPROVE', 'REJECT'].includes(String(action).toUpperCase())) {
       return res.status(400).json({ error: 'Action must be either "APPROVE" or "REJECT".' });
     }
 
@@ -617,7 +650,7 @@ router.post('/awards/:studentId/action', async (req: AuthRequest, res: Response)
       return res.status(404).json({ error: 'Student record not found.' });
     }
 
-    const cleanAction = action.toUpperCase() as 'APPROVE' | 'REJECT';
+    const cleanAction = String(action).toUpperCase() as 'APPROVE' | 'REJECT';
     const now = new Date().toISOString();
 
     const awardObj = {
@@ -634,9 +667,9 @@ router.post('/awards/:studentId/action', async (req: AuthRequest, res: Response)
       finalizedByHODName: req.user?.name || 'Head of Department',
       aiExplanation: cleanAction === 'APPROVE'
         ? `Approved by HOD: ${student.name} confirmed for ${awardTitle || 'Department Award'}.`
-        : `Rejected by HOD: ${reason || 'Decision reviewed by HOD.'}`,
+        : `Rejected by HOD: ${finalReason || 'Decision reviewed by HOD.'}`,
       status: cleanAction === 'APPROVE' ? 'APPROVED' : 'REJECTED',
-      rejectionReason: cleanAction === 'REJECT' ? (reason || 'Decision reviewed by HOD.') : undefined
+      rejectionReason: cleanAction === 'REJECT' ? (finalReason || 'Decision reviewed by HOD.') : undefined
     };
 
     await db.finalizeAward(awardObj);

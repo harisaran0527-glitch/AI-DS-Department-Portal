@@ -7,34 +7,17 @@ import { ConfirmDeleteModal } from '../../components/common/ConfirmDeleteModal';
 import { ProofAttachmentControl } from '../../components/common/ProofAttachmentControl';
 import {
   Crown,
-  Award,
-  Sliders,
   Users,
   CheckCircle,
-  Trophy,
-  Code,
-  Star,
   Users2,
   BarChart3,
-  ShieldCheck,
-  Calendar,
   Key,
-  BookOpen,
-  User,
-  FileCheck,
-  FileText,
-  ShieldAlert,
-  FileSpreadsheet
+  BookOpen
 } from 'lucide-react';
 
 import { ForgotPasswordModal } from '../../components/common/ForgotPasswordModal';
 import { SubjectManagement } from '../../components/academic/SubjectManagement';
 import { HodFacultyWorkspaceView } from '../../components/hod/HodFacultyWorkspaceView';
-import { HodStudentBulkUploadView } from '../../components/hod/HodStudentBulkUploadView';
-import { BestEliteStudentsView } from '../../components/elite/BestEliteStudentsView';
-import { GeminiTopRecognitionView } from '../../components/ranking/GeminiTopRecognitionView';
-import { GeminiCategoryBestPerformerCard } from '../../components/ranking/GeminiCategoryBestPerformerCard';
-import { GeminiFullLeetCodeDashboard } from '../../components/ranking/GeminiFullLeetCodeDashboard';
 import { HodAwardCandidatesView } from '../../components/ranking/HodAwardCandidatesView';
 
 export const HODDashboard: React.FC = () => {
@@ -62,7 +45,6 @@ export const HODDashboard: React.FC = () => {
   });
   const [awardCandidates, setAwardCandidates] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
-  const [isBestEliteExpanded, setIsBestEliteExpanded] = useState<boolean>(false);
 
   const handleLogout = async () => {
     try {
@@ -71,8 +53,7 @@ export const HODDashboard: React.FC = () => {
     navigate('/hod');
   };
 
-  // Config Slider Temp State
-  const [_tempConfig, setTempConfig] = useState<ScoringConfig>(scoringConfig);
+
 
   // Selected student for HOD 360 Inspection
   const [selectedHODStudent, setSelectedHODStudent] = useState<Student | null>(null);
@@ -127,7 +108,6 @@ export const HODDashboard: React.FC = () => {
       setAwardCandidates(candRes.candidates || null);
       if (cfgRes?.config) {
         setScoringConfig(cfgRes.config);
-        setTempConfig(cfgRes.config);
       }
     } catch (err: any) {
       console.error(err);
@@ -161,47 +141,8 @@ export const HODDashboard: React.FC = () => {
 
   const hodMenuItems: MenuItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-    { id: 'students', label: 'Students', icon: Users, badge: String(students.length) },
-    { id: 'student-bulk-upload', label: 'Student Bulk Upload', icon: FileSpreadsheet },
-    { id: 'subjects', label: 'Department Subjects', icon: BookOpen },
     { id: 'faculty', label: 'Faculty Roster', icon: Users2 },
-    { id: 'years-sections', label: 'Years & Sections', icon: Calendar },
-    { id: 'analytics', label: 'Analytics', icon: ShieldCheck },
-    { id: 'rankings', label: 'Rankings', icon: ShieldCheck },
-    {
-      id: 'best-elite-students',
-      label: 'Best Elite Students',
-      icon: Crown,
-      isCollapsible: true,
-      isExpanded: isBestEliteExpanded,
-      onToggleExpand: () => {
-        setIsBestEliteExpanded((prev) => {
-          const nextState = !prev;
-          if (nextState && !activeTab.startsWith('best-elite-')) {
-            setActiveTab('best-elite-skilledge');
-          }
-          return nextState;
-        });
-      },
-      childrenItems: [
-        { id: 'best-elite-skilledge', label: 'SkillEdge Reward Points', icon: Code },
-        { id: 'best-elite-academics', label: 'Academic Performance', icon: BookOpen },
-        { id: 'best-elite-leetcode', label: 'LeetCode', icon: Code },
-        { id: 'best-elite-linkedin', label: 'LinkedIn Profile', icon: User },
-        { id: 'best-elite-github', label: 'GitHub URL', icon: Code },
-        { id: 'best-elite-hackathons', label: 'Hackathon Achievement', icon: Trophy },
-        { id: 'best-elite-projects', label: 'Projects', icon: Star },
-        { id: 'best-elite-nptel', label: 'NPTEL', icon: FileCheck },
-        { id: 'best-elite-certificates', label: 'Certificate Courses', icon: FileText }
-      ]
-    },
-    { id: 'best-student', label: 'Best Student Candidate', icon: Crown },
-    { id: 'best-leetcode', label: 'Best LeetCode Candidate', icon: Code },
-    { id: 'elite-student', label: 'Elite Student Candidate', icon: Trophy },
-    { id: 'best-team-head', label: 'Best Team Head Candidate', icon: Star },
-    { id: 'best-rep', label: 'Best Representative Candidate', icon: Award },
-    { id: 'scoring-config', label: 'Scoring Configuration', icon: Sliders },
-    { id: 'finalized-awards', label: 'Finalized Awards', icon: CheckCircle }
+    { id: 'subjects', label: 'Department Subjects', icon: BookOpen }
   ];
 
   return (
@@ -258,16 +199,7 @@ export const HODDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* STUDENT BULK UPLOAD TAB */}
-        {activeTab === 'student-bulk-upload' && (
-          <HodStudentBulkUploadView
-            onImportCompleted={() => {
-              fetchDepartmentData();
-            }}
-          />
-        )}
-
-        {/* DEPARTMENT FACULTY ROSTER & INDIVIDUAL WORKSPACES */}
+        {/* 1. DEPARTMENT FACULTY ROSTER & INDIVIDUAL WORKSPACES */}
         {activeTab === 'faculty' && (
           <HodFacultyWorkspaceView
             selectedYearFilter={selectedYear}
@@ -275,7 +207,7 @@ export const HODDashboard: React.FC = () => {
           />
         )}
 
-        {/* DEPARTMENT SUBJECTS MANAGEMENT */}
+        {/* 2. DEPARTMENT SUBJECTS MANAGEMENT */}
         {activeTab === 'subjects' && (
           <SubjectManagement
             userRole="HOD"
@@ -284,129 +216,101 @@ export const HODDashboard: React.FC = () => {
           />
         )}
 
-        {activeTab === 'rankings' && (
-          <GeminiTopRecognitionView
-            userRole="HOD"
-            assignedYear={selectedYear === 'ALL' ? undefined : selectedYear}
-            assignedSection={selectedSection === 'ALL' ? undefined : selectedSection}
-          />
-        )}
-
-        {activeTab === 'best-leetcode' && (
-          <GeminiFullLeetCodeDashboard
-            assignedYear={selectedYear === 'ALL' ? undefined : selectedYear}
-            assignedSection={selectedSection === 'ALL' ? undefined : selectedSection}
-          />
-        )}
-
-        {activeTab === 'best-student' && (
+        {/* 3. DASHBOARD: OVERVIEW, AWARD CANDIDATES, & ACTUAL STUDENTS */}
+        {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            <GeminiCategoryBestPerformerCard
-              categoryKey="overall"
-              assignedYear={selectedYear === 'ALL' ? undefined : selectedYear}
-              assignedSection={selectedSection === 'ALL' ? undefined : selectedSection}
-            />
-          </div>
-        )}
-
-        {(activeTab === 'elite-student' || activeTab === 'best-student' || activeTab === 'best-elite-students' || activeTab.startsWith('best-elite-')) && (
-          <BestEliteStudentsView
-            userRole="HOD"
-            assignedYear={selectedYear === 'ALL' ? undefined : selectedYear}
-            assignedSection={selectedSection === 'ALL' ? undefined : selectedSection}
-            selectedCategory={
-              activeTab.startsWith('best-elite-') && activeTab !== 'best-elite-students'
-                ? (activeTab.replace('best-elite-', '') as any)
-                : 'skilledge'
-            }
-          />
-        )}
-
-        {/* 1. DASHBOARD & AWARD CANDIDATES */}
-        {(activeTab === 'dashboard' || activeTab === 'award-candidates' || activeTab === 'best-student' || activeTab === 'best-rep') && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex items-center justify-between">
                 <div>
-                  <div className="text-slate-400 font-mono uppercase">Department Students</div>
-                  <div className="text-2xl font-bold text-white mt-1">{students.length} Students</div>
+                  <div className="text-slate-400 font-mono uppercase font-bold">Department Students</div>
+                  <div className="text-2xl font-extrabold text-white mt-1 font-mono">{students.length} Students</div>
                 </div>
-                <div className="w-12 h-12 rounded-xl bg-amber-950 border border-amber-800 flex items-center justify-center text-amber-400"><Users className="w-6 h-6" /></div>
+                <div className="w-12 h-12 rounded-xl bg-amber-950/80 border border-amber-800 flex items-center justify-center text-amber-400"><Users className="w-6 h-6" /></div>
               </div>
               <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex items-center justify-between">
                 <div>
-                  <div className="text-slate-400 font-mono uppercase">Top Candidate</div>
-                  <div className="text-base font-bold text-white mt-1">{awardCandidates?.bestStudent?.student?.name || 'N/A'}</div>
+                  <div className="text-slate-400 font-mono uppercase font-bold">Award Candidates</div>
+                  <div className="text-2xl font-extrabold text-amber-400 mt-1 font-mono">{students.length > 0 ? '5 Categories (Top 2 Each)' : '0 Candidates'}</div>
                 </div>
-                <div className="w-12 h-12 rounded-xl bg-indigo-950 border border-indigo-800 flex items-center justify-center text-indigo-400"><Crown className="w-6 h-6" /></div>
+                <div className="w-12 h-12 rounded-xl bg-indigo-950/80 border border-indigo-800 flex items-center justify-center text-indigo-400"><Crown className="w-6 h-6" /></div>
               </div>
             </div>
 
+            {/* TOP 2 CANDIDATES PER AWARD CATEGORY */}
             <HodAwardCandidatesView
               assignedYear={selectedYear === 'ALL' ? undefined : selectedYear}
               assignedSection={selectedSection === 'ALL' ? undefined : selectedSection}
+              onSelectStudent360={(stuId) => {
+                const target = students.find((s) => s.id === stuId);
+                if (target) {
+                  handleOpenHOD360(target);
+                } else {
+                  handleOpenHOD360({ id: stuId } as any);
+                }
+              }}
             />
-          </div>
-        )}
 
-        {/* 2. STUDENTS ROSTER & PROOF MANAGEMENT */}
-        {activeTab === 'students' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
-              <h2 className="text-lg font-bold text-white">Department Student Roster</h2>
+            {/* ACTUAL DEPARTMENT STUDENT OVERVIEW */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                <h2 className="text-lg font-bold text-white font-sans">Department Student Overview</h2>
 
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={() => setActiveTab('student-bulk-upload')}
-                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 shadow-lg shadow-amber-500/20"
-                >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  <span>+ Bulk Upload Students (Excel)</span>
-                </button>
-                <input
-                  type="text"
-                  placeholder="Search student..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white"
-                />
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="text"
+                    placeholder="Search student..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono"
+                  />
+                </div>
               </div>
-            </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
-                <thead>
-                  <tr className="text-slate-400 border-b border-slate-800 font-mono uppercase">
-                    <th className="py-3 px-3">Reg No</th>
-                    <th className="py-3 px-3">Student Name</th>
-                    <th className="py-3 px-3">Year / Section</th>
-                    <th className="py-3 px-3 text-center">CGPA</th>
-                    <th className="py-3 px-3 text-center">Overall Score</th>
-                    <th className="py-3 px-3 text-center">Rank</th>
-                    <th className="py-3 px-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800">
-                  {filteredStudents.map((stu) => (
-                    <tr key={stu.id} className="hover:bg-slate-950">
-                      <td className="py-3 px-3 font-mono text-slate-300">{stu.registerNo}</td>
-                      <td className="py-3 px-3 font-bold text-white">{stu.name}</td>
-                      <td className="py-3 px-3 font-mono text-slate-400">{stu.year} - {stu.section}</td>
-                      <td className="py-3 px-3 text-center font-bold text-emerald-400">{(stu.cgpa !== null && stu.cgpa !== undefined && stu.cgpa !== '') ? Number(stu.cgpa).toFixed(2) : 'Not Available'}</td>
-                      <td className="py-3 px-3 text-center font-extrabold text-amber-400">{stu.overallScore ? stu.overallScore.toFixed(1) : '0.0'}</td>
-                      <td className="py-3 px-3 text-center font-bold text-indigo-400">#{stu.currentRank || 1}</td>
-                      <td className="py-3 px-3 text-right">
-                        <button
-                          onClick={() => handleOpenHOD360(stu)}
-                          className="bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/50 text-indigo-300 hover:text-white px-2.5 py-1 rounded-lg text-xs font-semibold"
-                        >
-                          360° Profile (Read-Only)
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {filteredStudents.length === 0 ? (
+                <div className="p-8 text-center text-slate-500 font-mono text-xs">
+                  No uploaded students found in database matching current filters.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead>
+                      <tr className="text-slate-400 border-b border-slate-800 font-mono uppercase">
+                        <th className="py-3 px-3">Year</th>
+                        <th className="py-3 px-3">Reg No</th>
+                        <th className="py-3 px-3">Student Name</th>
+                        <th className="py-3 px-3">Faculty / Staff</th>
+                        <th className="py-3 px-3">Section</th>
+                        <th className="py-3 px-3">College Mail</th>
+                        <th className="py-3 px-3 text-center">CGPA</th>
+                        <th className="py-3 px-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {filteredStudents.map((stu: any) => (
+                        <tr key={stu.id} className="hover:bg-slate-950 font-mono">
+                          <td className="py-3 px-3 text-slate-300">{stu.year}</td>
+                          <td className="py-3 px-3 font-bold text-amber-400">{stu.registerNo}</td>
+                          <td className="py-3 px-3 font-bold text-white font-sans">{stu.name}</td>
+                          <td className="py-3 px-3 text-indigo-300 font-sans font-medium text-[11px]">{stu.facultyName || stu.faculty_name || stu.classCoordinatorName || 'Unassigned'}</td>
+                          <td className="py-3 px-3 text-slate-300">Sec {stu.section}</td>
+                          <td className="py-3 px-3 text-slate-400">{stu.email}</td>
+                          <td className="py-3 px-3 text-center font-bold text-emerald-400">
+                            {(stu.cgpa !== null && stu.cgpa !== undefined && stu.cgpa !== '') ? Number(stu.cgpa).toFixed(2) : 'N/A'}
+                          </td>
+                          <td className="py-3 px-3 text-right font-sans">
+                            <button
+                              onClick={() => handleOpenHOD360(stu)}
+                              className="bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/50 text-indigo-300 hover:text-white px-2.5 py-1 rounded-lg text-xs font-semibold"
+                            >
+                              360° Profile
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -755,10 +755,18 @@ export const API = {
     return request<{ count: number; candidates: any[] }>('/hod/award-candidates-v2');
   },
 
-  postHodAwardAction: async (studentId: string, action: 'APPROVE' | 'REJECT', awardTitle?: string, reason?: string) => {
+  postHodAwardAction: async (
+    studentId: string,
+    actionOrPayload: 'APPROVE' | 'REJECT' | { action: 'APPROVE' | 'REJECT'; remarks?: string; reason?: string; awardTitle?: string },
+    awardTitle?: string,
+    reason?: string
+  ) => {
+    const payload = typeof actionOrPayload === 'object'
+      ? actionOrPayload
+      : { action: actionOrPayload, awardTitle, reason };
     return request<{ message: string; award: any }>(`/hod/awards/${studentId}/action`, {
       method: 'POST',
-      body: JSON.stringify({ action, awardTitle, reason })
+      body: JSON.stringify(payload)
     });
   },
 

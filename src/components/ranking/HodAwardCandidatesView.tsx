@@ -22,7 +22,8 @@ import {
 export const HodAwardCandidatesView: React.FC<{
   assignedYear?: string;
   assignedSection?: string;
-}> = ({ assignedYear, assignedSection }) => {
+  onSelectStudent360?: (studentId: string) => void;
+}> = ({ assignedYear, assignedSection, onSelectStudent360 }) => {
   const [candidates, setCandidates] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -131,135 +132,171 @@ export const HodAwardCandidatesView: React.FC<{
         </div>
       )}
 
-      {/* Main Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-        {isLoading ? (
-          <div className="p-12 text-center space-y-3">
-            <Loader2 className="w-8 h-8 text-amber-400 animate-spin mx-auto" />
-            <p className="text-xs text-slate-400 font-mono">Evaluating student records & ranking award candidates...</p>
-          </div>
-        ) : error ? (
-          <div className="p-12 text-center space-y-3">
-            <AlertCircle className="w-8 h-8 text-red-400 mx-auto" />
-            <p className="text-xs text-red-300 font-mono">{error}</p>
-          </div>
-        ) : filteredCandidates.length === 0 ? (
-          <div className="p-12 text-center text-slate-500 font-mono text-xs">
-            No award candidates generated yet or matching search criteria.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead>
-                <tr className="bg-slate-950 text-slate-400 border-b border-slate-800 font-mono uppercase">
-                  <th className="py-3 px-4">Rank</th>
-                  <th className="py-3 px-4">Student Info</th>
-                  <th className="py-3 px-4">Reward Score</th>
-                  <th className="py-3 px-4">Award Category & Title</th>
-                  <th className="py-3 px-4">AI Reason & Evidence</th>
-                  <th className="py-3 px-4 text-center">Status</th>
-                  <th className="py-3 px-4 text-right">HOD Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800">
-                {filteredCandidates.map((cand) => {
-                  const isApproved = cand.status === 'APPROVED';
-                  const isRejected = cand.status === 'REJECTED';
-                  return (
-                    <tr key={cand.studentId} className="hover:bg-slate-950/60 transition">
-                      <td className="py-3.5 px-4 font-mono font-bold">
-                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs ${cand.rank === 1 ? 'bg-amber-500 text-slate-950 font-extrabold' : cand.rank === 2 ? 'bg-slate-300 text-slate-950 font-extrabold' : cand.rank === 3 ? 'bg-amber-700 text-white font-extrabold' : 'bg-slate-800 text-slate-300'}`}>
-                          #{cand.rank}
-                        </span>
-                      </td>
+      {/* Award Category Cards (Top 2 Candidates per Category) */}
+      {isLoading ? (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center space-y-3 shadow-xl">
+          <Loader2 className="w-8 h-8 text-amber-400 animate-spin mx-auto" />
+          <p className="text-xs text-slate-400 font-mono">Evaluating student records & calculating top 2 award candidates per category...</p>
+        </div>
+      ) : error ? (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center space-y-3 shadow-xl">
+          <AlertCircle className="w-8 h-8 text-red-400 mx-auto" />
+          <p className="text-xs text-red-300 font-mono">{error}</p>
+        </div>
+      ) : candidates.length === 0 ? (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center text-slate-500 font-mono text-xs shadow-xl">
+          No student records found in database to evaluate award candidates.
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {[
+            { id: 'best-student', title: 'BEST STUDENT', icon: Trophy, color: 'text-amber-400', badge: 'bg-amber-950 border-amber-800 text-amber-300' },
+            { id: 'best-team-head', title: 'BEST TEAM HEAD', icon: Star, color: 'text-indigo-400', badge: 'bg-indigo-950 border-indigo-800 text-indigo-300' },
+            { id: 'best-leetcode', title: 'BEST LEETCODE PERFORMER', icon: Code, color: 'text-yellow-400', badge: 'bg-yellow-950 border-yellow-800 text-yellow-300' },
+            { id: 'best-academic', title: 'BEST ACADEMIC PERFORMER', icon: BookOpen, color: 'text-emerald-400', badge: 'bg-emerald-950 border-emerald-800 text-emerald-300' },
+            { id: 'best-project', title: 'BEST PROJECT PERFORMER', icon: ShieldCheck, color: 'text-cyan-400', badge: 'bg-cyan-950 border-cyan-800 text-cyan-300' }
+          ].map((cat) => {
+            let sorted = [...candidates];
+            if (cat.id === 'best-student') {
+              sorted.sort((a, b) => (b.totalRewardScore || b.totalPoints || 0) - (a.totalRewardScore || a.totalPoints || 0));
+            } else if (cat.id === 'best-team-head') {
+              sorted.sort((a, b) => (b.categoryPoints?.projects || 0) - (a.categoryPoints?.projects || 0) || (b.totalRewardScore || b.totalPoints || 0) - (a.totalRewardScore || a.totalPoints || 0));
+            } else if (cat.id === 'best-leetcode') {
+              sorted.sort((a, b) => (b.categoryPoints?.leetCode || 0) - (a.categoryPoints?.leetCode || 0) || (b.totalRewardScore || b.totalPoints || 0) - (a.totalRewardScore || a.totalPoints || 0));
+            } else if (cat.id === 'best-academic') {
+              sorted.sort((a, b) => (b.categoryPoints?.academic || 0) - (a.categoryPoints?.academic || 0) || (b.totalRewardScore || b.totalPoints || 0) - (a.totalRewardScore || a.totalPoints || 0));
+            } else if (cat.id === 'best-project') {
+              sorted.sort((a, b) => (b.categoryPoints?.projects || 0) - (a.categoryPoints?.projects || 0) || (b.totalRewardScore || b.totalPoints || 0) - (a.totalRewardScore || a.totalPoints || 0));
+            }
 
-                      <td className="py-3.5 px-4">
-                        <div className="font-bold text-white text-sm">{cand.studentName}</div>
-                        <div className="text-[11px] text-slate-400 font-mono">
-                          Reg No: <span className="text-amber-400 font-bold">{cand.registerNo}</span> | Year {cand.year} Sec {cand.section}
+            if (searchQuery.trim()) {
+              const q = searchQuery.toLowerCase();
+              sorted = sorted.filter(
+                (c) =>
+                  (c.studentName || '').toLowerCase().includes(q) ||
+                  (c.registerNo || '').toLowerCase().includes(q)
+              );
+            }
+
+            const top2 = sorted.slice(0, 2);
+            if (top2.length === 0) return null;
+
+            const IconComp = cat.icon;
+
+            return (
+              <div key={cat.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center space-x-2.5">
+                    <IconComp className={`w-5 h-5 ${cat.color}`} />
+                    <h3 className="text-sm font-extrabold text-white font-mono tracking-wide uppercase">{cat.title}</h3>
+                  </div>
+                  <span className={`border px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold ${cat.badge}`}>
+                    TOP 2 ELIGIBLE CANDIDATES
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {top2.map((cand, idx) => {
+                    const isApproved = cand.status === 'APPROVED';
+                    const isRejected = cand.status === 'REJECTED';
+                    const score = cand.totalRewardScore || cand.totalPoints || 0;
+
+                    return (
+                      <div
+                        key={cand.studentId || idx}
+                        className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3 hover:border-slate-700 transition-all flex flex-col justify-between"
+                      >
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-start">
+                            <div className="flex items-center space-x-2">
+                              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-mono font-bold ${idx === 0 ? 'bg-amber-500 text-slate-950' : 'bg-slate-700 text-white'}`}>
+                                #{idx + 1}
+                              </span>
+                              <div>
+                                <h4 className="font-bold text-white text-sm leading-tight">{cand.studentName}</h4>
+                                <div className="text-[11px] text-slate-400 font-mono">
+                                  Reg No: <span className="text-amber-400 font-bold">{cand.registerNo}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-base font-extrabold text-amber-400 font-mono">
+                                {score} <span className="text-[10px] text-slate-400 font-normal">pts</span>
+                              </div>
+                              <span className="text-[9px] text-purple-300 font-mono block">{cand.performanceLevel || 'Evaluated'}</span>
+                            </div>
+                          </div>
+
+                          <div className="text-[11px] text-slate-300 font-mono flex flex-wrap gap-2 py-1">
+                            <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-slate-400">
+                              {cand.year} — Section {cand.section}
+                            </span>
+                            <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-indigo-300">
+                              Faculty: {cand.facultyName || cand.classCoordinatorName || 'Assigned Staff'}
+                            </span>
+                          </div>
+
+                          <p className="text-[11px] text-slate-400 leading-relaxed italic bg-slate-900/60 p-2 rounded-lg border border-slate-900 line-clamp-2">
+                            "{cand.aiReasoning || 'Selected based on verifiable academic, coding, and activity performance.'}"
+                          </p>
                         </div>
-                      </td>
 
-                      <td className="py-3.5 px-4">
-                        <div className="text-base font-extrabold text-amber-400 font-mono">
-                          {cand.totalPoints} <span className="text-[10px] text-slate-400 font-normal">pts</span>
+                        <div className="pt-2 border-t border-slate-900 flex items-center justify-between gap-2">
+                          <div>
+                            {isApproved ? (
+                              <span className="bg-emerald-950 border border-emerald-700 text-emerald-300 px-2 py-0.5 rounded text-[10px] font-mono font-bold inline-flex items-center space-x-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                <span>APPROVED</span>
+                              </span>
+                            ) : isRejected ? (
+                              <span className="bg-red-950 border border-red-700 text-red-300 px-2 py-0.5 rounded text-[10px] font-mono font-bold inline-flex items-center space-x-1">
+                                <XCircle className="w-3 h-3 text-red-400" />
+                                <span>REJECTED</span>
+                              </span>
+                            ) : (
+                              <span className="bg-amber-950 border border-amber-700 text-amber-300 px-2 py-0.5 rounded text-[10px] font-mono font-bold inline-flex items-center space-x-1">
+                                <Sparkles className="w-3 h-3 text-amber-400" />
+                                <span>ELIGIBLE</span>
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center space-x-1.5">
+                            {onSelectStudent360 && (
+                              <button
+                                onClick={() => onSelectStudent360(cand.studentId)}
+                                className="bg-indigo-950 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 px-2.5 py-1 rounded text-[10px] font-mono font-semibold"
+                              >
+                                View 360
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => handleAction(cand.studentId, 'APPROVE')}
+                              disabled={isApproved || isSubmittingAction}
+                              className="bg-emerald-600/20 hover:bg-emerald-600 border border-emerald-500/40 text-emerald-300 hover:text-white px-2.5 py-1 rounded text-[10px] font-mono font-bold disabled:opacity-40"
+                            >
+                              Approve
+                            </button>
+
+                            <button
+                              onClick={() => handleAction(cand.studentId, 'REJECT')}
+                              disabled={isRejected || isSubmittingAction}
+                              className="bg-red-600/20 hover:bg-red-600 border border-red-500/40 text-red-300 hover:text-white px-2.5 py-1 rounded text-[10px] font-mono font-bold disabled:opacity-40"
+                            >
+                              Reject
+                            </button>
+                          </div>
                         </div>
-                        <div className="text-[10px] text-purple-300 font-mono">Level: {cand.performanceLevel}</div>
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <span className="inline-block bg-amber-950/60 border border-amber-800/80 text-amber-300 px-2.5 py-0.5 rounded-full font-bold text-[11px]">
-                          {cand.recommendedAward}
-                        </span>
-                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">{cand.awardCategory}</div>
-                      </td>
-
-                      <td className="py-3.5 px-4 max-w-xs">
-                        <p className="text-[11px] text-slate-300 line-clamp-2 leading-relaxed">
-                          {cand.aiReasoning}
-                        </p>
-                        <div className="text-[10px] text-slate-400 font-mono truncate mt-1">
-                          Source: {Array.isArray(cand.evidenceSources) ? cand.evidenceSources.slice(0, 2).join(', ') : 'Portal Database'}
-                        </div>
-                      </td>
-
-                      <td className="py-3.5 px-4 text-center">
-                        {isApproved ? (
-                          <span className="bg-emerald-950 border border-emerald-700 text-emerald-300 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold flex items-center justify-center space-x-1">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                            <span>APPROVED</span>
-                          </span>
-                        ) : isRejected ? (
-                          <span className="bg-red-950 border border-red-700 text-red-300 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold flex items-center justify-center space-x-1">
-                            <XCircle className="w-3 h-3 text-red-400" />
-                            <span>REJECTED</span>
-                          </span>
-                        ) : (
-                          <span className="bg-amber-950 border border-amber-700 text-amber-300 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold flex items-center justify-center space-x-1">
-                            <Sparkles className="w-3 h-3 text-amber-400" />
-                            <span>AI RECOMMENDED</span>
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end space-x-1.5">
-                          <button
-                            onClick={() => setReviewCandidate(cand)}
-                            className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold flex items-center space-x-1 transition"
-                            title="Review full AI breakdown & evidence"
-                          >
-                            <Eye className="w-3.5 h-3.5 text-sky-400" />
-                            <span>Review</span>
-                          </button>
-
-                          <button
-                            onClick={() => handleAction(cand.studentId, 'APPROVE')}
-                            disabled={isApproved || isSubmittingAction}
-                            className="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold flex items-center space-x-1 transition disabled:opacity-40"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                            <span>Approve</span>
-                          </button>
-
-                          <button
-                            onClick={() => handleAction(cand.studentId, 'REJECT')}
-                            disabled={isRejected || isSubmittingAction}
-                            className="bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/40 px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold flex items-center space-x-1 transition disabled:opacity-40"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                            <span>Reject</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Review Modal */}
       {reviewCandidate && (

@@ -25,15 +25,19 @@ interface FacultyOption {
 }
 
 export const HodStudentBulkUploadView: React.FC<{
+  initialFacultyId?: string;
+  initialYear?: string;
+  initialSection?: string;
   onImportCompleted?: () => void;
-}> = ({ onImportCompleted }) => {
+  onClose?: () => void;
+}> = ({ initialFacultyId, initialYear, initialSection, onImportCompleted, onClose }) => {
   const [facultyList, setFacultyList] = useState<FacultyOption[]>([]);
   const [isLoadingFaculty, setIsLoadingFaculty] = useState(true);
 
   // Selections
-  const [selectedFacultyId, setSelectedFacultyId] = useState<string>('');
-  const [selectedYear, setSelectedYear] = useState<string>('2nd Year');
-  const [selectedSection, setSelectedSection] = useState<string>('A');
+  const [selectedFacultyId, setSelectedFacultyId] = useState<string>(initialFacultyId || '');
+  const [selectedYear, setSelectedYear] = useState<string>(initialYear || '2nd Year');
+  const [selectedSection, setSelectedSection] = useState<string>(initialSection || 'A');
 
   // File & Preview State
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -66,7 +70,9 @@ export const HodStudentBulkUploadView: React.FC<{
       const res = await API.getFacultyList();
       const list = res.faculty || [];
       setFacultyList(list);
-      if (list.length > 0) {
+      if (initialFacultyId) {
+        setSelectedFacultyId(initialFacultyId);
+      } else if (list.length > 0) {
         setSelectedFacultyId(list[0].id);
       }
     } catch (err) {
@@ -164,6 +170,20 @@ export const HodStudentBulkUploadView: React.FC<{
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  useEffect(() => {
+    if (initialFacultyId) {
+      setSelectedFacultyId(initialFacultyId);
+    }
+    if (initialYear) {
+      setSelectedYear(initialYear);
+    }
+    if (initialSection) {
+      setSelectedSection(initialSection);
+    }
+  }, [initialFacultyId, initialYear, initialSection]);
+
+  const activeStaff = facultyList.find((f) => f.id === selectedFacultyId);
+
   return (
     <div className="space-y-6">
       {/* HEADER BAR */}
@@ -173,91 +193,130 @@ export const HodStudentBulkUploadView: React.FC<{
             <div className="flex items-center space-x-3">
               <h2 className="text-xl font-bold text-white flex items-center space-x-2">
                 <FileSpreadsheet className="w-6 h-6 text-amber-400" />
-                <span>Student Bulk Upload — HOD Workflow</span>
+                <span>
+                  {initialFacultyId
+                    ? `Student Roster Import — ${activeStaff?.name || 'Staff Assignment'}`
+                    : 'Student Bulk Upload — HOD Workflow'}
+                </span>
               </h2>
               <span className="bg-amber-950 border border-amber-700 text-amber-300 text-xs px-2.5 py-0.5 rounded-full font-mono font-bold">
                 Authoritative Master Import
               </span>
             </div>
             <p className="text-xs text-slate-400 font-mono mt-1">
-              HOD selects Faculty/Staff + Year + Section, validates row-by-row Excel data, and confirms individual student account creation.
+              {initialFacultyId
+                ? 'Upload and validate student roster for this staff member. Year and Section are automatically locked to staff assignment. Register Number is the authoritative student ID.'
+                : 'HOD selects Faculty/Staff + Year + Section, validates row-by-row Excel data, and confirms individual student account creation.'}
             </p>
           </div>
         </div>
 
-        {/* STEP 1: CONFIGURATION SELECTORS */}
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-950/80 border border-slate-800 p-5 rounded-2xl">
-          {/* Faculty Selector */}
-          <div>
-            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono flex items-center space-x-1.5 mb-2">
-              <Users2 className="w-4 h-4 text-amber-400" />
-              <span>1. Assigned Staff / Faculty</span>
-            </label>
-            <select
-              value={selectedFacultyId}
-              onChange={(e) => {
-                setSelectedFacultyId(e.target.value);
-                setPreviewData(null);
-              }}
-              disabled={isLoadingFaculty || isValidating || isImporting}
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 px-3 text-xs text-white font-mono focus:border-amber-500 focus:outline-none"
-            >
-              {facultyList.length === 0 ? (
-                <option value="">No Registered Faculty Accounts Found</option>
-              ) : (
-                facultyList.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name} ({f.identifier} — {f.email})
-                  </option>
-                ))
-              )}
-            </select>
+        {/* STEP 1: CONFIGURATION / LOCKED STAFF CONTEXT */}
+        {initialFacultyId ? (
+          <div className="mt-6 bg-slate-950/80 border border-slate-800 p-5 rounded-2xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center space-x-2">
+                  <Users2 className="w-4 h-4 text-amber-400" />
+                  <span className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono">
+                    Assigned Staff / Faculty:
+                  </span>
+                  <span className="text-sm font-bold text-white font-mono">
+                    {activeStaff?.name || 'Loading...'} {activeStaff?.identifier ? `(${activeStaff.identifier})` : ''}
+                  </span>
+                  {activeStaff?.email && (
+                    <span className="text-xs text-slate-400 font-mono">
+                      • {activeStaff.email}
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-slate-400 font-mono flex items-center space-x-3 pt-1">
+                  <span>
+                    Locked Target:{' '}
+                    <strong className="text-cyan-400 font-bold">{selectedYear}</strong> —{' '}
+                    <strong className="text-emerald-400 font-bold">Section {selectedSection}</strong>
+                  </span>
+                  <span className="text-[10px] text-amber-400/90 font-mono bg-amber-950/50 border border-amber-900/60 px-2 py-0.5 rounded">
+                    ✓ Auto-locked from Faculty Assignment
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
+        ) : (
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-950/80 border border-slate-800 p-5 rounded-2xl">
+            {/* Faculty Selector */}
+            <div>
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono flex items-center space-x-1.5 mb-2">
+                <Users2 className="w-4 h-4 text-amber-400" />
+                <span>1. Assigned Staff / Faculty</span>
+              </label>
+              <select
+                value={selectedFacultyId}
+                onChange={(e) => {
+                  setSelectedFacultyId(e.target.value);
+                  setPreviewData(null);
+                }}
+                disabled={isLoadingFaculty || isValidating || isImporting}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 px-3 text-xs text-white font-mono focus:border-amber-500 focus:outline-none disabled:opacity-80 disabled:cursor-not-allowed"
+              >
+                {facultyList.length === 0 ? (
+                  <option value="">No Registered Faculty Accounts Found</option>
+                ) : (
+                  facultyList.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name} ({f.identifier} — {f.email})
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
 
-          {/* Year Selector */}
-          <div>
-            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono flex items-center space-x-1.5 mb-2">
-              <Calendar className="w-4 h-4 text-cyan-400" />
-              <span>2. Academic Year</span>
-            </label>
-            <select
-              value={selectedYear}
-              onChange={(e) => {
-                setSelectedYear(e.target.value);
-                setPreviewData(null);
-              }}
-              disabled={isValidating || isImporting}
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 px-3 text-xs text-white font-mono focus:border-cyan-500 focus:outline-none"
-            >
-              <option value="1st Year">1st Year</option>
-              <option value="2nd Year">2nd Year</option>
-              <option value="3rd Year">3rd Year</option>
-              <option value="4th Year">4th Year</option>
-            </select>
-          </div>
+            {/* Year Selector */}
+            <div>
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono flex items-center space-x-1.5 mb-2">
+                <Calendar className="w-4 h-4 text-cyan-400" />
+                <span>2. Academic Year</span>
+              </label>
+              <select
+                value={selectedYear}
+                onChange={(e) => {
+                  setSelectedYear(e.target.value);
+                  setPreviewData(null);
+                }}
+                disabled={isValidating || isImporting}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 px-3 text-xs text-white font-mono focus:border-cyan-500 focus:outline-none"
+              >
+                <option value="1st Year">1st Year</option>
+                <option value="2nd Year">2nd Year</option>
+                <option value="3rd Year">3rd Year</option>
+                <option value="4th Year">4th Year</option>
+              </select>
+            </div>
 
-          {/* Section Selector */}
-          <div>
-            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono flex items-center space-x-1.5 mb-2">
-              <Layers className="w-4 h-4 text-emerald-400" />
-              <span>3. Section</span>
-            </label>
-            <select
-              value={selectedSection}
-              onChange={(e) => {
-                setSelectedSection(e.target.value);
-                setPreviewData(null);
-              }}
-              disabled={isValidating || isImporting}
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 px-3 text-xs text-white font-mono focus:border-emerald-500 focus:outline-none"
-            >
-              <option value="A">Section A</option>
-              <option value="B">Section B</option>
-              <option value="C">Section C</option>
-              <option value="D">Section D</option>
-            </select>
+            {/* Section Selector */}
+            <div>
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono flex items-center space-x-1.5 mb-2">
+                <Layers className="w-4 h-4 text-emerald-400" />
+                <span>3. Section</span>
+              </label>
+              <select
+                value={selectedSection}
+                onChange={(e) => {
+                  setSelectedSection(e.target.value);
+                  setPreviewData(null);
+                }}
+                disabled={isValidating || isImporting}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl py-2.5 px-3 text-xs text-white font-mono focus:border-emerald-500 focus:outline-none"
+              >
+                <option value="A">Section A</option>
+                <option value="B">Section B</option>
+                <option value="C">Section C</option>
+                <option value="D">Section D</option>
+              </select>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* STEP 2: FILE UPLOAD DROPZONE */}
         <div className="mt-6">

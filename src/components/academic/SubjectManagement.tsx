@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import Papa from 'papaparse';
 import { API } from '../../services/api';
 import type { Subject } from '../../types';
 import {
@@ -13,7 +14,10 @@ import {
   AlertCircle,
   Loader2,
   Sparkles,
-  GraduationCap
+  GraduationCap,
+  FileSpreadsheet,
+  Upload,
+  CheckCircle2
 } from 'lucide-react';
 
 interface SubjectManagementProps {
@@ -39,6 +43,16 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
   const [yearFilter, setYearFilter] = useState<string>(assignedYear || 'ALL');
   const [semesterFilter, setSemesterFilter] = useState<string>('ALL');
   const [sectionFilter, setSectionFilter] = useState<string>(assignedSection || 'ALL');
+
+  // Excel Bulk Upload Modal State
+  const [showExcelModal, setShowExcelModal] = useState<boolean>(false);
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [isValidatingExcel, setIsValidatingExcel] = useState<boolean>(false);
+  const [isImportingExcel, setIsImportingExcel] = useState<boolean>(false);
+  const [excelPreviewSummary, setExcelPreviewSummary] = useState<any>(null);
+  const [excelValidRows, setExcelValidRows] = useState<any[]>([]);
+  const [excelInvalidRows, setExcelInvalidRows] = useState<any[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Modal State
   const [showModal, setShowModal] = useState<boolean>(false);
@@ -84,6 +98,58 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
   useEffect(() => {
     fetchSubjects();
   }, []);
+
+  const handleExcelFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setExcelFile(file);
+    setExcelPreviewSummary(null);
+    setExcelValidRows([]);
+    setExcelInvalidRows([]);
+    setIsValidatingExcel(true);
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        const rows = results.data as any[];
+        try {
+          const res = await API.previewSubjectImport(rows);
+          setExcelPreviewSummary(res.summary);
+          setExcelValidRows(res.validRows || []);
+          setExcelInvalidRows(res.invalidRows || []);
+        } catch (err: any) {
+          alert(err.message || 'Failed to preview Subject Master Excel upload.');
+        } finally {
+          setIsValidatingExcel(false);
+        }
+      },
+      error: (err) => {
+        alert(`Failed to parse CSV file: ${err.message}`);
+        setIsValidatingExcel(false);
+      }
+    });
+  };
+
+  const handleConfirmSubjectImport = async () => {
+    if (excelValidRows.length === 0) return;
+    setIsImportingExcel(true);
+    try {
+      const res = await API.confirmSubjectImport(excelValidRows);
+      setSuccessMsg(res.message || `Successfully imported ${res.importedCount || excelValidRows.length} Department Subjects.`);
+      setShowExcelModal(false);
+      setExcelFile(null);
+      setExcelPreviewSummary(null);
+      setExcelValidRows([]);
+      setExcelInvalidRows([]);
+      await fetchSubjects();
+    } catch (err: any) {
+      alert(err.message || 'Failed to confirm Subject Master import.');
+    } finally {
+      setIsImportingExcel(false);
+    }
+  };
 
   const isReadOnly = userRole === 'STUDENT';
 
