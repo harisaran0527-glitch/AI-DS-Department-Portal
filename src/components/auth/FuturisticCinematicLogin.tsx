@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API } from '../../services/api';
-import { User, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, ShieldCheck, Sparkles } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, ShieldCheck, Sparkles, ShieldAlert, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ForgotPasswordModal } from '../common/ForgotPasswordModal';
 import { ParticleField } from './ParticleField';
+import { DisciplineIssueModule } from '../discipline/DisciplineIssueModule';
 import type { Role } from '../../types';
 
 interface FuturisticCinematicLoginProps {
@@ -21,6 +22,9 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
   destinationRoute = '/hod/dashboard'
 }) => {
   const navigate = useNavigate();
+
+  // Standalone Discipline Module Modal / Fullscreen view State
+  const [isStandaloneDisciplineOpen, setIsStandaloneDisciplineOpen] = useState(false);
 
   // Parallax mouse position tracking for desktop
   const mousePos = useRef({ x: 0, y: 0 });
@@ -111,6 +115,23 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
       }
     }
   };
+
+  const handleOpenDisciplineModule = () => {
+    setIsStandaloneDisciplineOpen(true);
+  };
+
+  if (isStandaloneDisciplineOpen) {
+    return (
+      <div className="min-h-screen bg-[#061229] p-4 md:p-8 text-white font-sans relative z-20">
+        <div className="max-w-7xl mx-auto">
+          <DisciplineIssueModule
+            userRole="FACULTY"
+            onBack={() => setIsStandaloneDisciplineOpen(false)}
+          />
+        </div>
+      </div>
+    );
+  }
 
   const isHod = portalRole === 'HOD';
   const isStudent = portalRole === 'STUDENT';
@@ -378,6 +399,69 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
             AVS Engineering College • Department of AI & DS
           </div>
         </motion.div>
+
+        {/* FACULTY ONLY: PREMIUM SCROLL-DOWN DISCIPLINE ISSUE ACCESS CARD */}
+        {portalRole === 'FACULTY' && (
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            className="panel relative rounded-2xl p-6 sm:p-7 space-y-4 overflow-hidden border border-amber-500/40 bg-[#0B2347]/90 backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8),0_0_40px_rgba(245,158,11,0.2)]"
+          >
+            {/* Holographic Scanner Beam Bar */}
+            <div className="panel-scan" />
+
+            {/* Corner Tech Brackets */}
+            <div className="corner tl" />
+            <div className="corner tr" />
+            <div className="corner bl" />
+            <div className="corner br" />
+
+            {/* Top Header Status */}
+            <div className="flex items-center justify-between border-b border-amber-500/30 pb-3">
+              <div className="flex items-center space-x-2">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shadow-[0_0_10px_#F59E0B]" />
+                <span className="text-[10px] font-mono font-bold tracking-widest text-amber-400 uppercase">
+                  Authorized Faculty Access
+                </span>
+              </div>
+              <span className="text-[10px] font-mono text-amber-300/90 bg-amber-950/70 px-2.5 py-0.5 rounded border border-amber-500/40 font-semibold tracking-wider">
+                DISCIPLINE PORTAL
+              </span>
+            </div>
+
+            {/* Title & Description */}
+            <div className="flex flex-col items-center text-center space-y-2 pt-1">
+              <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.25)]">
+                <ShieldAlert className="w-6 h-6 animate-pulse" />
+              </div>
+              <h3 className="text-xl font-extrabold text-white tracking-tight uppercase font-sans">
+                Discipline Issue
+              </h3>
+              <p className="text-xs text-slate-300 font-mono leading-relaxed max-w-xs">
+                Dedicated access point for authorized Faculty to log, validate, and manage student disciplinary incidents & rule violations.
+              </p>
+            </div>
+
+            {/* Action Button */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={handleOpenDisciplineModule}
+                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold font-mono text-xs tracking-wider uppercase transition-all duration-200 shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:shadow-[0_0_30px_rgba(245,158,11,0.5)] flex items-center justify-center space-x-2 group cursor-pointer"
+              >
+                <ShieldAlert className="w-4 h-4 text-slate-950 group-hover:scale-110 transition-transform" />
+                <span>Access Discipline Module</span>
+                <ArrowRight className="w-4 h-4 text-slate-950 group-hover:translate-x-1 transition-transform" />
+              </button>
+            </div>
+
+            {/* Small Footer Note */}
+            <div className="text-center text-[10px] font-mono text-slate-400 pt-1 border-t border-amber-500/20">
+              Faculty Authentication & Register No. Validation Required
+            </div>
+          </motion.div>
+        )}
       </div>
 
       {/* FORGOT PASSWORD MODAL */}
