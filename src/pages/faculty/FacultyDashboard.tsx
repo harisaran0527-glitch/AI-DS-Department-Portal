@@ -274,11 +274,6 @@ export const FacultyDashboard: React.FC = () => {
   const [bulkImportError, setBulkImportError] = useState('');
   const [bulkImportSuccess, setBulkImportSuccess] = useState('');
 
-  // --- DISCIPLINE FORM STATE & FINE RULE ENGINE ---
-  const [discCat, setDisciplineCat] = useState<'Late Comer' | 'Grooming' | 'ID Card' | 'Dress Code'>('Late Comer');
-  const [discRemark, setDisciplineRemark] = useState('');
-  const [discActionTaken, setDisciplineActionTaken] = useState('');
-
   // --- CERTIFICATE FORM & UPLOAD MODAL STATE ---
   const [showCertModal, setShowCertModal] = useState(false);
   const [editingCert, setEditingCert] = useState<any | null>(null);
@@ -1463,7 +1458,7 @@ export const FacultyDashboard: React.FC = () => {
     { id: 'skilledge', label: 'SkillEdge', icon: Code },
     { id: 'nptel', label: 'NPTEL', icon: FileCheck },
     { id: 'attendance', label: 'Attendance', icon: Calendar },
-    { id: 'discipline', label: 'Discipline', icon: AlertTriangle },
+    { id: 'discipline-issues', label: 'Discipline', icon: ShieldAlert },
     { id: 'certificate', label: 'Certificate', icon: FileText },
     { id: 'leetcode', label: 'LeetCode', icon: Code },
     { id: 'participation', label: 'Participation', icon: Users },
@@ -1478,7 +1473,7 @@ export const FacultyDashboard: React.FC = () => {
     { id: 'bth-skilledge', label: 'SkillEdge', icon: Code },
     { id: 'bth-nptel', label: 'NPTEL', icon: FileCheck },
     { id: 'bth-attendance', label: 'Attendance', icon: Calendar },
-    { id: 'bth-discipline', label: 'Discipline', icon: AlertTriangle },
+    { id: 'discipline-issues', label: 'Discipline', icon: ShieldAlert },
     { id: 'bth-certificate', label: 'Certificate', icon: FileText },
     { id: 'bth-leetcode', label: 'LeetCode', icon: Code },
     { id: 'bth-participation', label: 'Participation', icon: Users },
@@ -1489,6 +1484,7 @@ export const FacultyDashboard: React.FC = () => {
 
   const facultyMenuItems: MenuItem[] = [
     { id: 'my-students', label: 'My Students', icon: Users, badge: String(students.length) },
+    { id: 'discipline-issues', label: 'Discipline', icon: ShieldAlert },
     {
       id: 'best-student',
       label: 'Best Student',
@@ -1544,11 +1540,6 @@ export const FacultyDashboard: React.FC = () => {
         setIsBestLeetCodePerformerExpanded(!isBestLeetCodePerformerExpanded);
         setActiveTab('best-leetcode-performer');
       }
-    },
-    {
-      id: 'discipline-issues',
-      label: 'Discipline',
-      icon: ShieldAlert
     }
   ];
 
@@ -1784,18 +1775,35 @@ export const FacultyDashboard: React.FC = () => {
       onSelectTab={setActiveTab}
       onLogout={handleLogout}
       headerActions={
-        <button
-          onClick={() => setShowForgotModal(true)}
-          className="text-xs text-sky-300 hover:text-white bg-sky-950/80 border border-sky-700/60 px-3 py-1.5 rounded-xl font-mono flex items-center space-x-1.5 cursor-pointer shadow-sm"
-        >
-          <Lock className="w-3.5 h-3.5 text-sky-400" />
-          <span>Forgot Password?</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setActiveTab('discipline-issues')}
+            className={`touch-target text-xs px-3.5 py-1.5 rounded-xl font-mono flex items-center space-x-1.5 cursor-pointer shadow-sm transition-all min-h-[40px] ${
+              activeTab === 'discipline-issues' || activeTab === 'discipline' || activeTab === 'bth-discipline'
+                ? 'bg-rose-600 text-white font-bold shadow-rose-900/40'
+                : 'text-rose-300 hover:text-white bg-rose-950/80 border border-rose-700/60 hover:bg-rose-900/60'
+            }`}
+            title="Open Campus Discipline Module"
+          >
+            <ShieldAlert className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+            <span>Discipline</span>
+          </button>
+          <button
+            onClick={() => setShowForgotModal(true)}
+            className="text-xs text-sky-300 hover:text-white bg-sky-950/80 border border-sky-700/60 px-3 py-1.5 min-h-[40px] rounded-xl font-mono flex items-center space-x-1.5 cursor-pointer shadow-sm"
+          >
+            <Lock className="w-3.5 h-3.5 text-sky-400" />
+            <span>Forgot Password?</span>
+          </button>
+        </div>
       }
     >
       <div className="space-y-6 max-w-7xl mx-auto">
-        {activeTab === 'discipline-issues' && (
-          <DisciplineIssueModule userRole="FACULTY" />
+        {(activeTab === 'discipline-issues' || activeTab === 'discipline' || activeTab === 'bth-discipline') && (
+          <DisciplineIssueModule
+            userRole="FACULTY"
+            onBack={() => setActiveTab('my-students')}
+          />
         )}
 
         {(activeTab === 'best-elite-student' || activeTab.startsWith('best-elite-')) && (
@@ -1845,6 +1853,34 @@ export const FacultyDashboard: React.FC = () => {
                 </div>
                 <div className="text-[10px] text-slate-400 font-semibold">Enabled Logins</div>
               </div>
+            </div>
+
+            {/* Quick Access: Department Discipline System Card */}
+            <div className="bg-gradient-to-r from-rose-950/40 via-slate-900 to-slate-900 border border-rose-800/50 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 shrink-0">
+                  <ShieldAlert className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center space-x-2">
+                    <span>Department Discipline System</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800/60 font-bold">
+                      All Students
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 font-mono mt-0.5">
+                    Log and track student rule violations, incident history, and staff actions.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('discipline-issues')}
+                className="btn-action min-h-[44px] px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center space-x-2 shadow-md shadow-rose-950/50 transition-all cursor-pointer shrink-0"
+              >
+                <ShieldAlert className="w-4 h-4 shrink-0" />
+                <span>Open Discipline Module →</span>
+              </button>
             </div>
 
             {/* CENTRAL STUDENT ROSTER TABLE CONTAINER */}
@@ -4055,139 +4091,6 @@ export const FacultyDashboard: React.FC = () => {
                     </div>
                   </div>
                 )}
-              </div>
-            )}
-          </div>
-        </div>
-        )}
-
-        {/* SECTION 6: DISCIPLINE FORM & FINE RULE ENGINE MODULE */}
-        {(activeTab === 'discipline' || activeTab === 'bth-discipline') && (
-          <div className="space-y-6">
-            <GeminiCategoryBestPerformerCard
-              categoryKey="discipline"
-              assignedYear={assignedYear}
-              assignedSection={assignedSection}
-            />
-            <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-6 space-y-6 shadow-xl">
-            {activeTab.startsWith('bth-') ? renderBestTeamStudentHeader() : renderSelectedStudentHeader()}
-
-            <div className="border-b border-slate-800/80 pb-3">
-              <h2 className="text-lg font-bold text-white flex items-center space-x-2 font-sans">
-                <AlertTriangle className="w-5 h-5 text-amber-400" />
-                <span>Discipline — Fine Rule Engine & Incident History</span>
-              </h2>
-              <p className="text-xs text-slate-400 font-mono mt-0.5">Log discipline remarks across Late Comer, Grooming, ID Card, and Dress Code.</p>
-            </div>
-
-            {!selectedStudent ? (activeTab.startsWith('bth-') ? renderNoTeamStudentSelectedPrompt() : renderNoStudentSelectedPrompt()) : (
-              <div className="space-y-6 font-mono text-xs">
-                {/* INCIDENTS LOGGED */}
-                {(student360Edit?.discipline || []).length > 0 && (
-                  <div className="space-y-3">
-                    <h4 className="font-bold text-amber-400 uppercase font-sans text-sm">Logged Incidents ({(student360Edit?.discipline || []).length})</h4>
-                    <div className="divide-y divide-slate-800 bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
-                      {(student360Edit?.discipline || []).map((d: any, idx: number) => (
-                        <div key={d.id || idx} className="p-4 flex items-center justify-between">
-                          <div className="space-y-1">
-                            <div className="flex items-center space-x-2">
-                              <span className="bg-amber-950 text-amber-300 font-bold px-2 py-0.5 rounded border border-amber-800">
-                                {d.category || 'Discipline Remark'}
-                              </span>
-                              <span className="text-slate-400 text-[11px]">{formatDate(d.created_at || d.recordedAt)}</span>
-                            </div>
-                            <p className="text-slate-200 font-sans">{d.remark}</p>
-                            {d.recordedBy && <div className="text-slate-500 text-[10px]">Logged by: {d.recordedBy}</div>}
-                          </div>
-
-                          <button
-                            onClick={() => setDeleteTarget({ studentId: selectedStudent.id, recordType: 'discipline', recordId: d.id, recordName: 'Discipline Incident' })}
-                            className="text-red-400 hover:text-red-300 p-1 cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* ADD DISCIPLINE ENTRY FORM */}
-                <form className="bg-slate-950 border border-slate-800 p-5 rounded-xl space-y-4 shadow-inner">
-                  <h4 className="font-bold text-amber-400 uppercase text-sm font-sans">+ Log Discipline Incident</h4>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-slate-300 font-bold block mb-1">Incident Category</label>
-                      <select
-                        value={discCat}
-                        onChange={(e) => setDisciplineCat(e.target.value as any)}
-                        className="w-full bg-slate-900 border border-slate-800 p-2.5 rounded-xl text-white font-bold"
-                      >
-                        <option value="Late Comer">Late Comer</option>
-                        <option value="Grooming">Grooming</option>
-                        <option value="ID Card">ID Card Missing</option>
-                        <option value="Dress Code">Dress Code Violation</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-slate-300 font-bold block mb-1">Action Taken (Optional)</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Warning issued, Fine imposed"
-                        value={discActionTaken}
-                        onChange={(e) => setDisciplineActionTaken(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 p-2.5 rounded-xl text-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-slate-300 font-bold block mb-1">Remark Description</label>
-                    <textarea
-                      rows={3}
-                      required
-                      placeholder="Enter detailed discipline remark..."
-                      value={discRemark}
-                      onChange={(e) => setDisciplineRemark(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-white font-sans text-xs"
-                    />
-                  </div>
-
-                  <div className="flex justify-end pt-2">
-                    <button
-                      type="button"
-                      disabled={!discRemark.trim()}
-                      onClick={async () => {
-                        if (!selectedStudent || !discRemark.trim()) return;
-                        try {
-                          await API.updateStudent360(selectedStudent.id, {
-                            discipline: [
-                              ...(student360Edit?.discipline || []),
-                              {
-                                id: `disc-${Date.now()}`,
-                                category: discCat,
-                                remark: discRemark,
-                                actionTaken: discActionTaken,
-                                recordedBy: session.email
-                              }
-                            ]
-                          });
-                          alert(`Discipline incident logged for ${selectedStudent.name}!`);
-                          setDisciplineRemark('');
-                          setDisciplineActionTaken('');
-                          await reloadStudent360();
-                        } catch (err: any) {
-                          alert(err.message || 'Failed to save discipline incident.');
-                        }
-                      }}
-                      className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-slate-950 font-bold px-6 py-2.5 rounded-xl cursor-pointer shadow-lg transition-all font-sans"
-                    >
-                      Save Discipline Incident
-                    </button>
-                  </div>
-                </form>
               </div>
             )}
           </div>
