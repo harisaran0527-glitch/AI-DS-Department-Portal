@@ -1944,7 +1944,7 @@ export const AdminDashboard: React.FC = () => {
             )}
 
             <form onSubmit={handleSaveHOD} className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-slate-400 font-semibold block mb-1">HOD Name</label>
                   <input
@@ -1971,7 +1971,7 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-slate-400 font-semibold block mb-1">Official Email</label>
                   <input
@@ -2008,7 +2008,7 @@ export const AdminDashboard: React.FC = () => {
               </div>
 
               {!editingHOD && (
-                <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-800">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-800">
                   <div>
                     <label className="text-slate-400 font-semibold block mb-1">Portal Password</label>
                     <div className="relative">
@@ -2172,7 +2172,7 @@ export const AdminDashboard: React.FC = () => {
             )}
 
             <form onSubmit={handleSaveFaculty} className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-slate-400 font-semibold block mb-1">Faculty Name</label>
                   <input
@@ -2213,7 +2213,7 @@ export const AdminDashboard: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="text-slate-400 font-semibold block mb-1">Department</label>
                   <input
@@ -2252,7 +2252,7 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-slate-400 font-semibold block mb-1">Faculty Role</label>
                   <select
@@ -2279,7 +2279,7 @@ export const AdminDashboard: React.FC = () => {
               </div>
 
               {!editingFaculty && (
-                <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-800">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-800">
                   <div>
                     <label className="text-slate-400 font-semibold block mb-1">Portal Password</label>
                     <div className="relative">

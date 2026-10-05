@@ -121,14 +121,14 @@ export const SimpleAdminLogin: React.FC = () => {
                 Email / College Gmail
               </label>
               <div className="relative group">
-                <User className="absolute left-3.5 top-3 w-4 h-4 text-cyan-400 group-focus-within:text-cyan-200 transition-colors" />
+                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-400 group-focus-within:text-cyan-200 transition-colors pointer-events-none" />
                 <input
                   type="text"
                   required
                   placeholder="Enter admin email or ID"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  className="w-full bg-slate-900/90 border border-cyan-500/50 rounded-xl py-2.5 pl-10 pr-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all"
+                  className="w-full bg-slate-900/90 border border-cyan-500/50 rounded-xl py-2.5 pl-10 pr-3 min-h-[44px] text-base sm:text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all"
                 />
               </div>
             </div>
@@ -139,20 +139,20 @@ export const SimpleAdminLogin: React.FC = () => {
                 Portal Password
               </label>
               <div className="relative group">
-                <Lock className="absolute left-3.5 top-3 w-4 h-4 text-cyan-400 group-focus-within:text-cyan-200 transition-colors" />
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-400 group-focus-within:text-cyan-200 transition-colors pointer-events-none" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
                   placeholder="Enter admin password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-900/90 border border-cyan-500/50 rounded-xl py-2.5 pl-10 pr-10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all"
+                  className="w-full bg-slate-900/90 border border-cyan-500/50 rounded-xl py-2.5 pl-10 pr-10 min-h-[44px] text-base sm:text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all"
                 />
                 <button
                   type="button"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-3 text-cyan-400 hover:text-white transition-colors cursor-pointer"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-cyan-400 hover:text-white transition-colors cursor-pointer"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -184,7 +184,7 @@ export const SimpleAdminLogin: React.FC = () => {
             <button
               type="submit"
               disabled={authStatus === 'loading'}
-              className="btn-action w-full mt-2 py-2.5 bg-gradient-to-r from-cyan-500 via-sky-400 to-cyan-500 hover:from-cyan-400 hover:to-sky-300 text-slate-950 font-extrabold rounded-xl text-xs tracking-wider uppercase shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-transform duration-200 transform-gpu hover:scale-[1.03] active:scale-[0.97] disabled:scale-100 disabled:opacity-75 disabled:cursor-not-allowed motion-reduce:transform-none cursor-pointer flex items-center justify-center space-x-2"
+              className="btn-action w-full mt-2 py-2.5 min-h-[44px] bg-gradient-to-r from-cyan-500 via-sky-400 to-cyan-500 hover:from-cyan-400 hover:to-sky-300 text-slate-950 font-extrabold rounded-xl text-xs tracking-wider uppercase shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-transform duration-200 transform-gpu hover:scale-[1.03] active:scale-[0.97] disabled:scale-100 disabled:opacity-75 disabled:cursor-not-allowed motion-reduce:transform-none cursor-pointer flex items-center justify-center space-x-2"
             >
               {authStatus === 'loading' ? (
                 <span className="flex items-center space-x-2">

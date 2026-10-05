@@ -29,7 +29,8 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="text-[#64748B] hover:text-[#F1F5F9] p-1 rounded-lg bg-[#171C26] transition-colors"
+            aria-label="Close modal"
+            className="text-[#64748B] hover:text-[#F1F5F9] p-2 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg bg-[#171C26] transition-colors touch-target"
           >
             <X className="w-4 h-4" />
           </button>
@@ -68,7 +69,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
         <div className="pt-2 flex justify-end">
           <button
             onClick={onClose}
-            className="btn-action bg-[#A78BFA] hover:bg-[#C4B5FD] text-[#080A0F] font-bold px-5 py-2 rounded-xl text-xs flex items-center space-x-1.5 transition-transform duration-200"
+            className="btn-action bg-[#A78BFA] hover:bg-[#C4B5FD] text-[#080A0F] font-bold px-5 py-2.5 min-h-[44px] rounded-xl text-xs flex items-center space-x-1.5 transition-transform duration-200"
           >
             <CheckCircle2 className="w-4 h-4" />
             <span>Understood</span>

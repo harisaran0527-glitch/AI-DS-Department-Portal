@@ -36,7 +36,11 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
             </div>
           </div>
 
-          <button onClick={onCancel} className="text-[#64748B] hover:text-[#F1F5F9] transition-colors">
+          <button
+            onClick={onCancel}
+            aria-label="Close modal"
+            className="text-[#64748B] hover:text-[#F1F5F9] p-2 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg bg-[#171C26] transition-colors touch-target"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -60,7 +64,7 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
             type="button"
             onClick={onCancel}
             disabled={isDeleting}
-            className="btn-action px-4 py-2 bg-[#171C26] hover:bg-[#202633] border border-[#252B36] text-[#F1F5F9] text-xs font-semibold rounded-xl transition-transform duration-200"
+            className="btn-action px-4 py-2 min-h-[44px] bg-[#171C26] hover:bg-[#202633] border border-[#252B36] text-[#F1F5F9] text-xs font-semibold rounded-xl transition-transform duration-200"
           >
             Cancel
           </button>
@@ -68,7 +72,7 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
             type="button"
             onClick={onConfirm}
             disabled={isDeleting}
-            className="btn-action px-5 py-2 bg-[#FB7185] hover:bg-rose-600 text-[#080A0F] font-extrabold text-xs rounded-xl shadow-md flex items-center space-x-2 transition-transform duration-200"
+            className="btn-action px-5 py-2 min-h-[44px] bg-[#FB7185] hover:bg-rose-600 text-[#080A0F] font-extrabold text-xs rounded-xl shadow-md flex items-center space-x-2 transition-transform duration-200"
           >
             <Trash2 className="w-4 h-4" />
             <span>{isDeleting ? 'Deleting...' : 'Delete Record'}</span>

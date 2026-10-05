@@ -693,7 +693,7 @@ html.light ::-webkit-scrollbar-thumb:hover {
   position: relative;
   padding: 12px 14px 12px 42px;
   display: flex;
-  items-center: center;
+  align-items: center;
 }
 
 .field-icon {
@@ -1061,18 +1061,12 @@ html, body {
     padding: 12px !important;
   }
 
-  /* Prevent buttons and badges from wrapping internal icon and text */
-  button,
-  a,
-  [role="button"],
-  .touch-target {
+  /* Prevent badges, tags, and compact action buttons from wrapping internal icon and text */
+  .badge,
+  .touch-target:not(.multiline),
+  button.btn-action,
+  button.btn {
     white-space: nowrap;
-  }
-
-  button > div,
-  a > div,
-  [role="button"] > div {
-    flex-wrap: nowrap !important;
   }
 
   /* SVG icons should never shrink or misalign */
