@@ -10,9 +10,7 @@ import {
   Users2,
   Calendar,
   Layers,
-  ArrowRight,
-  RefreshCw,
-  Info
+  RefreshCw
 } from 'lucide-react';
 
 interface FacultyOption {
@@ -50,6 +48,9 @@ export const HodStudentBulkUploadView: React.FC<{
     errorRowsCount: number;
     canImport: boolean;
     preview: any[];
+    faculty?: { id: string; name: string; identifier?: string };
+    year?: string;
+    section?: string;
   } | null>(null);
 
   const [importResult, setImportResult] = useState<{
@@ -209,6 +210,14 @@ export const HodStudentBulkUploadView: React.FC<{
                 : 'HOD selects Faculty/Staff + Year + Section, validates row-by-row Excel data, and confirms individual student account creation.'}
             </p>
           </div>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-xl text-xs font-mono font-bold self-start md:self-auto"
+            >
+              ✕ Close
+            </button>
+          )}
         </div>
 
         {/* STEP 1: CONFIGURATION / LOCKED STAFF CONTEXT */}
@@ -415,12 +424,15 @@ export const HodStudentBulkUploadView: React.FC<{
           {/* CONFIRMATION TOOLBAR */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-950 border border-slate-800 p-4 rounded-xl">
             <div className="text-xs font-mono text-slate-300">
-              Target Faculty: <strong className="text-white">{previewData.faculty?.name}</strong> | Target: <strong className="text-cyan-400">{previewData.year} {previewData.section}</strong>
+              Target Faculty: <strong className="text-white">{previewData.faculty?.name || activeStaff?.name || 'Assigned Staff'}</strong> | Target: <strong className="text-cyan-400">{previewData.year || selectedYear} {previewData.section || selectedSection}</strong>
             </div>
 
             <div className="flex items-center space-x-3">
               <button
-                onClick={resetForm}
+                onClick={() => {
+                  resetForm();
+                  if (onClose) onClose();
+                }}
                 className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-3 py-2 rounded-xl text-xs"
               >
                 Cancel

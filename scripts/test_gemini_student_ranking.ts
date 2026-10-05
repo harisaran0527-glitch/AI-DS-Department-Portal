@@ -61,8 +61,8 @@ async function testGeminiStudentRanking() {
   console.log(`   Description: ${bes.description}`);
 
   // Confirm that candidates in Best Elite Student are explicitly marked as Elite
-  const allStudents = db.getStudents();
-  const eliteInDb = allStudents.filter(s => Boolean(s.is_elite_student || s.isEliteStudent));
+  const allStudents = await db.getStudents();
+  const eliteInDb = allStudents.filter((s: any) => Boolean(s.is_elite_student || s.isEliteStudent));
   console.log(`   - Total DB Students Marked as Elite: ${eliteInDb.length}`);
 
   if (bes.firstPlace.isAvailable) {
@@ -70,7 +70,7 @@ async function testGeminiStudentRanking() {
     console.log(`      Rationale: ${bes.firstPlace.aiExplanation}`);
 
     // Verify candidate is indeed an Elite student
-    const isElite1 = eliteInDb.some(s => s.id === bes.firstPlace.studentId);
+    const isElite1 = eliteInDb.some((s: any) => s.id === bes.firstPlace.studentId);
     if (!isElite1) {
       console.error(`❌ FAIL: 1st Place candidate ${bes.firstPlace.studentName} is NOT an Elite Student in database!`);
       process.exit(1);
@@ -83,7 +83,7 @@ async function testGeminiStudentRanking() {
     console.log(`   🥈 2nd Place: ${bes.secondPlace.studentName} (RegNo: ${bes.secondPlace.registerNo}, Score: ${bes.secondPlace.score?.toFixed(1)}/100)`);
     console.log(`      Rationale: ${bes.secondPlace.aiExplanation}`);
 
-    const isElite2 = eliteInDb.some(s => s.id === bes.secondPlace.studentId);
+    const isElite2 = eliteInDb.some((s: any) => s.id === bes.secondPlace.studentId);
     if (!isElite2) {
       console.error(`❌ FAIL: 2nd Place candidate ${bes.secondPlace.studentName} is NOT an Elite Student in database!`);
       process.exit(1);

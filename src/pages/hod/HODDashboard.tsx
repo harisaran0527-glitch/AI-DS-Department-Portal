@@ -1,15 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { API, API_BASE, fetchWithResilience } from '../../services/api';
-import type { UserSession, Student, ScoringConfig, AcademicYear, Section } from '../../types';
+import { API } from '../../services/api';
+import type { UserSession, Student, AcademicYear, Section } from '../../types';
 import { DashboardLayout, type MenuItem } from '../../components/layout/DashboardLayout';
-import { ConfirmDeleteModal } from '../../components/common/ConfirmDeleteModal';
-import { ProofAttachmentControl } from '../../components/common/ProofAttachmentControl';
 import {
   Crown,
   Users,
-  CheckCircle,
-  Users2,
   BarChart3,
   Key,
   BookOpen
@@ -32,18 +28,6 @@ export const HODDashboard: React.FC = () => {
 
   // Data
   const [students, setStudents] = useState<Student[]>([]);
-  const [scoringConfig, setScoringConfig] = useState<ScoringConfig>({
-    academicWeight: 25,
-    skillEdgeWeight: 15,
-    nptelWeight: 10,
-    participationWeight: 10,
-    certificatesWeight: 10,
-    attendanceWeight: 10,
-    disciplineWeight: 5,
-    leetcodeWeight: 10,
-    projectsWeight: 5
-  });
-  const [awardCandidates, setAwardCandidates] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
 
   const handleLogout = async () => {
