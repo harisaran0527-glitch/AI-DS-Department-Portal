@@ -94,7 +94,7 @@ export const SimpleAdminLogin: React.FC = () => {
               <img 
                 src="/images/avsec-salem-logo.png" 
                 alt="AVSEC Salem Official Logo" 
-                className="h-12 w-auto object-contain drop-shadow-[0_0_15px_rgba(6,182,212,0.5)] mb-1" 
+                className="h-9 w-auto object-contain drop-shadow-[0_0_15px_rgba(6,182,212,0.5)] mb-1" 
               />
               <span className="text-xs font-mono font-extrabold text-slate-300 tracking-wider">
                 AI & DATA SCIENCE
