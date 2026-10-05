@@ -1061,11 +1061,27 @@ html, body {
     padding: 12px !important;
   }
 
-  /* Ensure all action button rows wrap properly */
-  [class*="space-x-2"],
-  [class*="space-x-3"] {
-    flex-wrap: wrap;
-    gap: 6px;
+  /* Prevent buttons and badges from wrapping internal icon and text */
+  button,
+  a,
+  [role="button"],
+  .touch-target {
+    white-space: nowrap;
+  }
+
+  button > div,
+  a > div,
+  [role="button"] > div {
+    flex-wrap: nowrap !important;
+  }
+
+  /* SVG icons should never shrink or misalign */
+  button svg,
+  a svg,
+  [role="button"] svg {
+    flex-shrink: 0 !important;
+    display: inline-block;
+    vertical-align: middle;
   }
 }
 
@@ -1130,15 +1146,25 @@ html, body {
   }
 }
 
-/* --- Mobile-safe word breaking --- */
+/* --- Mobile Natural Word Wrapping (No unexpected mid-word breaks) --- */
 @media (max-width: 640px) {
-  td, th, span, p, div, label {
-    word-break: break-word;
+  p, div, label, span {
     overflow-wrap: break-word;
+    word-break: normal;
+  }
+
+  /* Break long technical strings safely (emails, hashes, register numbers) */
+  .font-mono, [class*="font-mono"], code, pre, td {
+    overflow-wrap: anywhere;
   }
 }
 
 /* --- Prevent any element from causing horizontal overflow --- */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 img, video, iframe, embed, object, svg {
   max-width: 100%;
   height: auto;

@@ -252,7 +252,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                 {errorMessage && (
                   <div className="bg-rose-950/80 border border-rose-500/80 text-rose-200 p-3 rounded-xl text-xs font-mono flex items-center space-x-2 animate-shake">
                     <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-                    <span className="truncate">{errorMessage}</span>
+                    <span className="break-words leading-tight">{errorMessage}</span>
                   </div>
                 )}
 

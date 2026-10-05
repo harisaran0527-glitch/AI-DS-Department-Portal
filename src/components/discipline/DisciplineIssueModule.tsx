@@ -484,13 +484,13 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
                 <ShieldAlert className="w-7 h-7 animate-pulse" />
               </div>
               <div>
-                <div className="flex items-center space-x-2">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-[10px] font-mono font-bold tracking-wider px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800/60 uppercase">
                     ALL-STUDENT ACCESSIBLE MODULE
                   </span>
                   <span className="text-[10px] font-mono text-slate-400">| Department of AI & DS</span>
                 </div>
-                <h1 className="text-xl font-bold text-white tracking-tight mt-0.5">
+                <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight mt-0.5">
                   Campus Discipline Issue Module
                 </h1>
               </div>
@@ -505,29 +505,29 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
             <button
               type="button"
               onClick={handleOpenForm}
-              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-semibold text-xs flex items-center space-x-2 shadow-lg shadow-rose-900/30 hover:scale-105 transition-all cursor-pointer"
+              className="min-h-[44px] px-4 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-semibold text-xs flex items-center space-x-2 shadow-lg shadow-rose-900/30 hover:scale-105 transition-all cursor-pointer"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4 shrink-0" />
               <span>Report Discipline Issue</span>
             </button>
 
             <button
               type="button"
               onClick={handleExportExcel}
-              className="px-3.5 py-2.5 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/60 font-semibold text-xs flex items-center space-x-1.5 transition-all cursor-pointer"
+              className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/60 font-semibold text-xs flex items-center space-x-1.5 transition-all cursor-pointer"
               title="Download Excel (.csv)"
             >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+              <FileSpreadsheet className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>Excel Export</span>
             </button>
 
             <button
               type="button"
               onClick={handleExportPDF}
-              className="px-3.5 py-2.5 rounded-xl bg-sky-950/80 hover:bg-sky-900 text-sky-300 border border-sky-700/60 font-semibold text-xs flex items-center space-x-1.5 transition-all cursor-pointer"
+              className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-sky-950/80 hover:bg-sky-900 text-sky-300 border border-sky-700/60 font-semibold text-xs flex items-center space-x-1.5 transition-all cursor-pointer"
               title="Download PDF Printable Document"
             >
-              <FileText className="w-4 h-4 text-sky-400" />
+              <FileText className="w-4 h-4 text-sky-400 shrink-0" />
               <span>PDF Export</span>
             </button>
           </div>
@@ -616,13 +616,13 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
 
           {/* Filter Controls */}
           <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-            <div className="flex items-center space-x-1.5 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300">
-              <Filter className="w-3.5 h-3.5 text-slate-400" />
+            <div className="flex items-center space-x-1.5 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 min-h-[42px] text-xs text-slate-300">
+              <Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <span className="text-[11px] font-mono text-slate-400">Year:</span>
               <select
                 value={yearFilter}
                 onChange={(e) => setYearFilter(e.target.value)}
-                className="bg-transparent text-white font-medium focus:outline-none cursor-pointer"
+                className="bg-transparent text-white font-medium focus:outline-none cursor-pointer text-base sm:text-xs"
               >
                 <option value="ALL">All Years</option>
                 <option value="1st Year">1st Year</option>
@@ -632,12 +632,12 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
               </select>
             </div>
 
-            <div className="flex items-center space-x-1.5 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300">
+            <div className="flex items-center space-x-1.5 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 min-h-[42px] text-xs text-slate-300">
               <span className="text-[11px] font-mono text-slate-400">Sec:</span>
               <select
                 value={sectionFilter}
                 onChange={(e) => setSectionFilter(e.target.value)}
-                className="bg-transparent text-white font-medium focus:outline-none cursor-pointer"
+                className="bg-transparent text-white font-medium focus:outline-none cursor-pointer text-base sm:text-xs"
               >
                 <option value="ALL">All Sec</option>
                 <option value="A">Sec A</option>
@@ -647,12 +647,12 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
               </select>
             </div>
 
-            <div className="flex items-center space-x-1.5 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300">
+            <div className="flex items-center space-x-1.5 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 min-h-[42px] text-xs text-slate-300">
               <span className="text-[11px] font-mono text-slate-400">Issue:</span>
               <select
                 value={issueFilter}
                 onChange={(e) => setIssueFilter(e.target.value)}
-                className="bg-transparent text-white font-medium focus:outline-none cursor-pointer max-w-[150px] truncate"
+                className="bg-transparent text-white font-medium focus:outline-none cursor-pointer max-w-full sm:max-w-[150px] truncate text-base sm:text-xs"
               >
                 <option value="ALL">All Issues</option>
                 {ISSUE_OPTIONS.map((opt) => (
@@ -666,10 +666,10 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
             <button
               type="button"
               onClick={fetchRecords}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer"
+              className="min-h-[42px] min-w-[42px] flex items-center justify-center p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer"
               title="Refresh List"
             >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 shrink-0 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
@@ -918,7 +918,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
                         : studentMatch
                         ? 'border-emerald-500'
                         : 'border-slate-700'
-                    } text-white px-3.5 py-2.5 rounded-xl text-xs font-mono focus:outline-none transition-all`}
+                    } text-white px-3.5 py-2.5 rounded-xl text-base sm:text-xs font-mono min-h-[44px] focus:outline-none transition-all`}
                   />
                   {studentMatch && (
                     <CheckCircle2 className="w-4 h-4 text-emerald-400 absolute right-3 top-1/2 -translate-y-1/2" />
@@ -1061,7 +1061,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
                   <select
                     value={selectedIssue}
                     onChange={(e) => setSelectedIssue(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 text-white px-3 py-2.5 rounded-xl text-xs focus:border-cyan-500 focus:outline-none cursor-pointer"
+                    className="w-full bg-slate-900 border border-slate-700 text-white px-3 py-2.5 rounded-xl text-base sm:text-xs min-h-[44px] focus:border-cyan-500 focus:outline-none cursor-pointer"
                   >
                     {ISSUE_OPTIONS.map((opt) => (
                       <option key={opt} value={opt}>
@@ -1077,7 +1077,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
                   <select
                     value={selectedRule}
                     onChange={(e) => setSelectedRule(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 text-white px-3 py-2.5 rounded-xl text-xs focus:border-cyan-500 focus:outline-none cursor-pointer"
+                    className="w-full bg-slate-900 border border-slate-700 text-white px-3 py-2.5 rounded-xl text-base sm:text-xs min-h-[44px] focus:border-cyan-500 focus:outline-none cursor-pointer"
                   >
                     {RULE_VIOLATED_OPTIONS.map((opt) => (
                       <option key={opt} value={opt}>
@@ -1096,7 +1096,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
                   value={staffActionTaken}
                   onChange={(e) => setStaffActionTaken(e.target.value)}
                   placeholder="Enter action taken by staff (e.g., Warning issued, sent to HOD cabin, parent called...)"
-                  className="w-full bg-slate-900 border border-slate-700 text-white p-3 rounded-xl text-xs focus:border-cyan-500 focus:outline-none placeholder:text-slate-500"
+                  className="w-full bg-slate-900 border border-slate-700 text-white p-3 rounded-xl text-base sm:text-xs focus:border-cyan-500 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
 
@@ -1111,7 +1111,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
                     value={fineAmountInput}
                     onChange={(e) => setFineAmountInput(e.target.value === '' ? '' : Number(e.target.value))}
                     placeholder="Enter fine amount (0 if none)"
-                    className="w-full bg-slate-900 border border-slate-700 text-white px-3 py-2.5 rounded-xl text-xs font-mono focus:border-cyan-500 focus:outline-none"
+                    className="w-full bg-slate-900 border border-slate-700 text-white px-3 py-2.5 rounded-xl text-base sm:text-xs font-mono min-h-[44px] focus:border-cyan-500 focus:outline-none"
                   />
                 </div>
 
@@ -1122,7 +1122,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
                     value={fineDetailsInput}
                     onChange={(e) => setFineDetailsInput(e.target.value)}
                     placeholder="Receipt No / Fund details"
-                    className="w-full bg-slate-900 border border-slate-700 text-white px-3 py-2.5 rounded-xl text-xs focus:border-cyan-500 focus:outline-none placeholder:text-slate-500"
+                    className="w-full bg-slate-900 border border-slate-700 text-white px-3 py-2.5 rounded-xl text-base sm:text-xs min-h-[44px] focus:border-cyan-500 focus:outline-none placeholder:text-slate-500"
                   />
                 </div>
               </div>
@@ -1135,7 +1135,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
                   value={additionalRemarks}
                   onChange={(e) => setAdditionalRemarks(e.target.value)}
                   placeholder="Enter any additional remarks or observations..."
-                  className="w-full bg-slate-900 border border-slate-700 text-white p-3 rounded-xl text-xs focus:border-cyan-500 focus:outline-none placeholder:text-slate-500"
+                  className="w-full bg-slate-900 border border-slate-700 text-white p-3 rounded-xl text-base sm:text-xs focus:border-cyan-500 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
 
@@ -1144,7 +1144,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
                 <button
                   type="button"
                   onClick={() => setIsFormOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-all cursor-pointer"
+                  className="min-h-[44px] px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -1153,7 +1153,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
                 <button
                   type="submit"
                   disabled={isSubmitting || !studentMatch}
-                  className={`px-5 py-2 rounded-xl font-bold text-xs flex items-center space-x-2 transition-all cursor-pointer ${
+                  className={`min-h-[44px] px-5 py-2 rounded-xl font-bold text-xs flex items-center space-x-2 transition-all cursor-pointer ${
                     !studentMatch
                       ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
                       : 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-900/40'
@@ -1161,12 +1161,12 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
                 >
                   {isSubmitting ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      <Loader2 className="w-4 h-4 animate-spin text-white shrink-0" />
                       <span>Saving Discipline Record...</span>
                     </>
                   ) : (
                     <>
-                      <ShieldAlert className="w-4 h-4" />
+                      <ShieldAlert className="w-4 h-4 shrink-0" />
                       <span>Save Discipline Record</span>
                     </>
                   )}
