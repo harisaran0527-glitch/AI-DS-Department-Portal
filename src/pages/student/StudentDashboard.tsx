@@ -178,40 +178,40 @@ export const StudentDashboard: React.FC = () => {
     >
       <div className="space-y-6">
         {/* Student Top Summary Card */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="flex items-center space-x-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 p-0.5 shadow-xl shrink-0">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 sm:gap-6">
+          <div className="flex items-center space-x-3 sm:space-x-4">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 p-0.5 shadow-xl shrink-0">
               <div className="w-full h-full rounded-xl bg-slate-950 flex items-center justify-center text-indigo-300">
-                <GraduationCap className="w-8 h-8" />
+                <GraduationCap className="w-6 h-6 sm:w-8 sm:h-8" />
               </div>
             </div>
             <div>
-              <div className="flex items-center space-x-3">
-                <h1 className="text-xl font-bold text-white">{student.name}</h1>
-                <span className="bg-indigo-900/60 border border-indigo-700/60 text-indigo-300 text-xs px-3 py-0.5 rounded-full font-semibold font-mono">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-lg sm:text-xl font-bold text-white">{student.name}</h1>
+                <span className="bg-indigo-900/60 border border-indigo-700/60 text-indigo-300 text-[11px] sm:text-xs px-2.5 py-0.5 rounded-full font-semibold font-mono">
                   {student.year} - Section {student.section}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 font-mono mt-0.5">
+              <p className="text-[11px] sm:text-xs text-slate-400 font-mono mt-0.5">
                 Register No: <strong className="text-white">{student.registerNo}</strong> | Batch {student.batch}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-4 w-full md:w-auto">
-            <div className="bg-slate-950 border border-slate-800 px-4 py-2.5 rounded-xl text-center flex-1 md:flex-none">
-              <div className="text-[10px] text-slate-400 uppercase font-mono tracking-wider font-semibold">Cumulative CGPA</div>
-              <div className="text-xl font-extrabold text-emerald-400 font-mono mt-0.5">{(student.cgpa !== null && student.cgpa !== undefined && student.cgpa !== '') ? Number(student.cgpa).toFixed(2) : 'Not Available'}</div>
+          <div className="grid grid-cols-3 gap-2 sm:flex sm:items-center sm:gap-4 w-full md:w-auto">
+            <div className="bg-slate-950 border border-slate-800 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-center flex-1 md:flex-none">
+              <div className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-mono tracking-wider font-semibold">CGPA</div>
+              <div className="text-base sm:text-xl font-extrabold text-emerald-400 font-mono mt-0.5">{(student.cgpa !== null && student.cgpa !== undefined && student.cgpa !== '') ? Number(student.cgpa).toFixed(2) : 'N/A'}</div>
             </div>
 
-            <div className="bg-slate-950 border border-slate-800 px-4 py-2.5 rounded-xl text-center flex-1 md:flex-none">
-              <div className="text-[10px] text-slate-400 uppercase font-mono tracking-wider font-semibold">Composite Score</div>
-              <div className="text-xl font-extrabold text-indigo-400 font-mono mt-0.5">{student.overallScore ? student.overallScore.toFixed(1) : '0.0'}</div>
+            <div className="bg-slate-950 border border-slate-800 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-center flex-1 md:flex-none">
+              <div className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-mono tracking-wider font-semibold">Score</div>
+              <div className="text-base sm:text-xl font-extrabold text-indigo-400 font-mono mt-0.5">{student.overallScore ? student.overallScore.toFixed(1) : '0.0'}</div>
             </div>
 
-            <div className="bg-slate-950 border border-slate-800 px-4 py-2.5 rounded-xl text-center flex-1 md:flex-none">
-              <div className="text-[10px] text-amber-400 uppercase font-mono tracking-wider font-semibold">Section Rank</div>
-              <div className="text-xl font-extrabold text-amber-400 font-mono mt-0.5">#{student.currentRank || 1}</div>
+            <div className="bg-slate-950 border border-slate-800 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-center flex-1 md:flex-none">
+              <div className="text-[9px] sm:text-[10px] text-amber-400 uppercase font-mono tracking-wider font-semibold">Rank</div>
+              <div className="text-base sm:text-xl font-extrabold text-amber-400 font-mono mt-0.5">#{student.currentRank || 1}</div>
             </div>
           </div>
         </div>
@@ -838,37 +838,63 @@ export const StudentDashboard: React.FC = () => {
                 </h4>
 
                 {Array.isArray(_attendance?.historyLogs) && _attendance.historyLogs.length > 0 ? (
-                  <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden max-h-96 overflow-y-auto">
-                    <table className="w-full text-left font-sans text-xs">
-                      <thead className="bg-slate-900 text-slate-400 font-mono text-[10px] uppercase sticky top-0 border-b border-slate-800">
-                        <tr>
-                          <th className="py-3 px-4 font-bold w-12 text-center">#</th>
-                          <th className="py-3 px-4 font-bold">Attendance Date</th>
-                          <th className="py-3 px-4 font-bold text-center">Status</th>
-                          <th className="py-3 px-4 font-bold">Recorded By</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
-                        {_attendance.historyLogs.map((log: any, idx: number) => (
-                          <tr key={idx} className="hover:bg-slate-900/60">
-                            <td className="py-2.5 px-4 text-center text-slate-500">{idx + 1}</td>
-                            <td className="py-2.5 px-4 font-bold text-emerald-400">{log.date}</td>
-                            <td className="py-2.5 px-4 text-center">
-                              <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
-                                log.status === 'PRESENT' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
-                                log.status === 'ABSENT' ? 'bg-red-950 text-red-300 border border-red-800' :
-                                log.status === 'OD' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
-                                'bg-sky-950 text-sky-300 border border-sky-800'
-                              }`}>
-                                {log.status}
-                              </span>
-                            </td>
-                            <td className="py-2.5 px-4 text-slate-400 text-[11px]">{log.recordedBy || 'Faculty'}</td>
+                  <>
+                    {/* Desktop table */}
+                    <div className="hidden sm:block bg-slate-950 border border-slate-800 rounded-xl overflow-hidden max-h-96 overflow-y-auto">
+                      <table className="w-full text-left font-sans text-xs">
+                        <thead className="bg-slate-900 text-slate-400 font-mono text-[10px] uppercase sticky top-0 border-b border-slate-800">
+                          <tr>
+                            <th className="py-3 px-4 font-bold w-12 text-center">#</th>
+                            <th className="py-3 px-4 font-bold">Attendance Date</th>
+                            <th className="py-3 px-4 font-bold text-center">Status</th>
+                            <th className="py-3 px-4 font-bold">Recorded By</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
+                          {_attendance.historyLogs.map((log: any, idx: number) => (
+                            <tr key={idx} className="hover:bg-slate-900/60">
+                              <td className="py-2.5 px-4 text-center text-slate-500">{idx + 1}</td>
+                              <td className="py-2.5 px-4 font-bold text-emerald-400">{log.date}</td>
+                              <td className="py-2.5 px-4 text-center">
+                                <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
+                                  log.status === 'PRESENT' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+                                  log.status === 'ABSENT' ? 'bg-red-950 text-red-300 border border-red-800' :
+                                  log.status === 'OD' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                                  'bg-sky-950 text-sky-300 border border-sky-800'
+                                }`}>
+                                  {log.status}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-4 text-slate-400 text-[11px]">{log.recordedBy || 'Faculty'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Mobile cards */}
+                    <div className="sm:hidden space-y-2 max-h-96 overflow-y-auto pr-1">
+                      {_attendance.historyLogs.map((log: any, idx: number) => (
+                        <div key={idx} className="bg-slate-950 border border-slate-800/80 rounded-xl p-2.5 flex items-center justify-between text-xs">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-[10px] text-slate-500 font-mono w-5">#{idx + 1}</span>
+                            <div>
+                              <div className="font-bold text-emerald-400 font-mono">{log.date}</div>
+                              <div className="text-[10px] text-slate-500">{log.recordedBy || 'Faculty'}</div>
+                            </div>
+                          </div>
+                          <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] font-mono ${
+                            log.status === 'PRESENT' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+                            log.status === 'ABSENT' ? 'bg-red-950 text-red-300 border border-red-800' :
+                            log.status === 'OD' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                            'bg-sky-950 text-sky-300 border border-sky-800'
+                          }`}>
+                            {log.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 ) : (
                   <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 text-center text-slate-500 font-mono">
                     No daily attendance logs recorded yet.

@@ -696,108 +696,175 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-950 text-slate-400 font-mono text-[11px] uppercase tracking-wider border-b border-slate-800">
-                <tr>
-                  <th className="px-4 py-3.5">Incident Date / Time</th>
-                  <th className="px-4 py-3.5">Register No</th>
-                  <th className="px-4 py-3.5">Student Name</th>
-                  <th className="px-4 py-3.5">Year & Sec</th>
-                  <th className="px-4 py-3.5">Issue Category</th>
-                  <th className="px-4 py-3.5">Rule Violated</th>
-                  <th className="px-4 py-3.5">Staff Action Taken</th>
-                  <th className="px-4 py-3.5">Fine (₹)</th>
-                  <th className="px-4 py-3.5">Remarks</th>
-                  <th className="px-4 py-3.5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60 font-sans">
-                {records.map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-800/40 transition-colors">
-                    {/* Date / Time */}
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="font-semibold text-slate-200">{r.date}</div>
-                      <div className="text-[10px] text-slate-400 font-mono">{r.time || 'N/A'}</div>
-                    </td>
-
-                    {/* Register No */}
-                    <td className="px-4 py-3 whitespace-nowrap font-mono font-bold text-cyan-400">
-                      {r.registerNo}
-                    </td>
-
-                    {/* Student Name */}
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="font-bold text-white">{r.studentName}</div>
+          <>
+            {/* MOBILE CARD VIEW (Visible on < md) */}
+            <div className="md:hidden divide-y divide-slate-800/80">
+              {records.map((r) => (
+                <div key={r.id} className="p-4 space-y-2.5 bg-slate-900/40 hover:bg-slate-800/30 transition-all">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-bold text-white">{r.studentName}</div>
+                      <div className="text-xs font-mono font-bold text-cyan-400">{r.registerNo}</div>
                       <div className="text-[10px] text-slate-400 font-mono">{r.collegeEmail}</div>
-                    </td>
+                    </div>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px] shrink-0">
+                      {r.year} • {r.section}
+                    </span>
+                  </div>
 
-                    {/* Year & Sec */}
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px]">
-                        {r.year} • Sec {r.section}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-rose-950/80 text-rose-300 border border-rose-800/60 font-semibold text-[10px]">
+                      {r.issue || r.category}
+                    </span>
+                    {r.fineAmount && r.fineAmount > 0 && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-950/80 text-amber-300 border border-amber-800/60 font-mono font-bold text-[10px]">
+                        Fine: ₹{r.fineAmount}
                       </span>
-                    </td>
+                    )}
+                  </div>
 
-                    {/* Issue Category */}
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-rose-950/80 text-rose-300 border border-rose-800/60 font-semibold text-[11px]">
-                        {r.issue || r.category}
-                      </span>
-                    </td>
+                  {r.ruleViolated && (
+                    <div className="text-[11px] text-slate-300 bg-slate-950/50 p-2 rounded-lg border border-slate-800/60">
+                      <span className="text-[10px] text-slate-500 font-mono block">RULE VIOLATED</span>
+                      <span>{r.ruleViolated}</span>
+                    </div>
+                  )}
 
-                    {/* Rule Violated */}
-                    <td className="px-4 py-3 text-slate-300 max-w-xs text-[11px] leading-relaxed">
-                      {r.ruleViolated || 'N/A'}
-                    </td>
+                  {r.actionTaken && (
+                    <div className="text-[11px] text-slate-300">
+                      <span className="text-[10px] text-slate-500 font-mono">Action: </span>
+                      <span>{r.actionTaken}</span>
+                    </div>
+                  )}
 
-                    {/* Staff Action Taken */}
-                    <td className="px-4 py-3 text-slate-300 max-w-xs text-[11px] leading-relaxed">
-                      {r.actionTaken || '-'}
-                    </td>
+                  {r.remarks && (
+                    <div className="text-[11px] text-slate-400 italic">
+                      <span className="text-[10px] text-slate-500 font-mono not-italic">Remarks: </span>
+                      <span>{r.remarks}</span>
+                    </div>
+                  )}
 
-                    {/* Fine Amount */}
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {r.fineAmount && r.fineAmount > 0 ? (
-                        <div>
-                          <span className="font-bold text-rose-400 font-mono text-sm">₹{r.fineAmount}</span>
-                          {r.fineDetails && (
-                            <div className="text-[10px] text-slate-400 truncate max-w-[120px]">{r.fineDetails}</div>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-slate-500 font-mono">-</span>
-                      )}
-                    </td>
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-800/50 text-[10px] text-slate-400 font-mono">
+                    <div>
+                      {r.date} {r.time ? `• ${r.time}` : ''}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDeletingId(r.id)}
+                      className="touch-target px-2.5 py-1 rounded-lg bg-rose-950/50 hover:bg-rose-900/70 text-rose-400 border border-rose-800/40 flex items-center space-x-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
 
-                    {/* Remarks */}
-                    <td className="px-4 py-3 text-slate-400 max-w-xs text-[11px]">
-                      {r.remarks || '-'}
-                    </td>
-
-                    {/* Actions */}
-                    <td className="px-4 py-3 whitespace-nowrap text-right">
-                      <button
-                        type="button"
-                        onClick={() => setDeletingId(r.id)}
-                        className="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 transition-all"
-                        title="Delete Record"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
+            {/* DESKTOP TABLE VIEW (Visible on md+) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-slate-950 text-slate-400 font-mono text-[11px] uppercase tracking-wider border-b border-slate-800">
+                  <tr>
+                    <th className="px-4 py-3.5">Incident Date / Time</th>
+                    <th className="px-4 py-3.5">Register No</th>
+                    <th className="px-4 py-3.5">Student Name</th>
+                    <th className="px-4 py-3.5">Year & Sec</th>
+                    <th className="px-4 py-3.5">Issue Category</th>
+                    <th className="px-4 py-3.5">Rule Violated</th>
+                    <th className="px-4 py-3.5">Staff Action Taken</th>
+                    <th className="px-4 py-3.5">Fine (₹)</th>
+                    <th className="px-4 py-3.5">Remarks</th>
+                    <th className="px-4 py-3.5 text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 font-sans">
+                  {records.map((r) => (
+                    <tr key={r.id} className="hover:bg-slate-800/40 transition-colors">
+                      {/* Date / Time */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="font-semibold text-slate-200">{r.date}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">{r.time || 'N/A'}</div>
+                      </td>
+
+                      {/* Register No */}
+                      <td className="px-4 py-3 whitespace-nowrap font-mono font-bold text-cyan-400">
+                        {r.registerNo}
+                      </td>
+
+                      {/* Student Name */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="font-bold text-white">{r.studentName}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">{r.collegeEmail}</div>
+                      </td>
+
+                      {/* Year & Sec */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px]">
+                          {r.year} • Sec {r.section}
+                        </span>
+                      </td>
+
+                      {/* Issue Category */}
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-rose-950/80 text-rose-300 border border-rose-800/60 font-semibold text-[11px]">
+                          {r.issue || r.category}
+                        </span>
+                      </td>
+
+                      {/* Rule Violated */}
+                      <td className="px-4 py-3 text-slate-300 max-w-xs text-[11px] leading-relaxed">
+                        {r.ruleViolated || 'N/A'}
+                      </td>
+
+                      {/* Staff Action Taken */}
+                      <td className="px-4 py-3 text-slate-300 max-w-xs text-[11px] leading-relaxed">
+                        {r.actionTaken || '-'}
+                      </td>
+
+                      {/* Fine Amount */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {r.fineAmount && r.fineAmount > 0 ? (
+                          <div>
+                            <span className="font-bold text-rose-400 font-mono text-sm">₹{r.fineAmount}</span>
+                            {r.fineDetails && (
+                              <div className="text-[10px] text-slate-400 truncate max-w-[120px]">{r.fineDetails}</div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-500 font-mono">-</span>
+                        )}
+                      </td>
+
+                      {/* Remarks */}
+                      <td className="px-4 py-3 text-slate-400 max-w-xs text-[11px]">
+                        {r.remarks || '-'}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-4 py-3 whitespace-nowrap text-right">
+                        <button
+                          type="button"
+                          onClick={() => setDeletingId(r.id)}
+                          className="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 transition-all"
+                          title="Delete Record"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
       {/* REPORT DISCIPLINE ISSUE MODAL FORM */}
       {isFormOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto">
-          <div className="relative w-full max-w-2xl bg-[#0B192E] border border-slate-700/80 rounded-2xl p-6 text-white shadow-2xl space-y-5 my-8">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md p-0 sm:p-4 overflow-y-auto">
+          <div className="relative w-full max-w-2xl bg-[#0B192E] border border-slate-700/80 rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 text-white shadow-2xl space-y-4 sm:space-y-5 max-h-[92vh] overflow-y-auto my-0 sm:my-8">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
               <div className="flex items-center space-x-3">

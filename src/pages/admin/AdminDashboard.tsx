@@ -863,90 +863,170 @@ export const AdminDashboard: React.FC = () => {
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs text-left">
-                  <thead>
-                    <tr className="text-slate-400 border-b border-slate-800 font-mono uppercase tracking-wider text-[11px]">
-                      <th className="py-3 px-3">Faculty Name</th>
-                      <th className="py-3 px-3">Faculty ID</th>
-                      <th className="py-3 px-3">Official Email</th>
-                      <th className="py-3 px-3">Year / Section</th>
-                      <th className="py-3 px-3">Role</th>
-                      <th className="py-3 px-3 text-center">Status</th>
-                      <th className="py-3 px-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60">
-                    {filteredFaculty.map((fac) => (
-                      <tr key={fac.id} className="hover:bg-slate-950/60 transition-colors">
-                        <td className="py-3 px-3 font-bold text-white">{fac.name}</td>
-                        <td className="py-3 px-3 font-mono text-cyan-400 font-bold">{fac.identifier}</td>
-                        <td className="py-3 px-3 font-mono text-slate-400">{fac.email}</td>
-                        <td className="py-3 px-3 font-mono">
-                          <span className="bg-slate-950 border border-slate-800 px-2 py-0.5 rounded-md font-bold text-slate-200">
-                            {fac.year || '2nd Year'} - {fac.section || 'A'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 font-semibold text-slate-300">{fac.facultyRole || 'Class Coordinator'}</td>
-                        <td className="py-3 px-3 text-center">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                              fac.isActive
-                                ? 'bg-emerald-950 border border-emerald-700 text-emerald-300'
-                                : 'bg-red-950 border border-red-800 text-red-300'
-                            }`}
-                          >
-                            {fac.isActive ? 'Active' : 'Disabled'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 text-right space-x-2">
-                          <button
-                            onClick={() => openEditFacultyModal(fac)}
-                            className="bg-slate-800 hover:bg-slate-700 text-cyan-400 p-1.5 rounded-lg transition-all"
-                            title="Edit Faculty Assignment"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setResetTargetFaculty(fac);
-                              setNewPasswordInput('');
-                              setShowResetPassword(false);
-                              setResetError('');
-                            }}
-                            className="bg-slate-800 hover:bg-slate-700 text-amber-400 p-1.5 rounded-lg transition-all"
-                            title="Reset Portal Password"
-                          >
-                            <Key className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleToggleStatus(fac)}
-                            className={`p-1.5 rounded-lg transition-all ${
-                              fac.isActive ? 'bg-amber-950/80 text-amber-300 hover:bg-amber-900' : 'bg-emerald-950/80 text-emerald-300 hover:bg-emerald-900'
-                            }`}
-                            title={fac.isActive ? 'Disable Account' : 'Enable Account'}
-                          >
-                            {fac.isActive ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setDeleteTarget({
-                                id: fac.id,
-                                name: `${fac.name} (${fac.email})`,
-                                type: 'Faculty Account'
-                              });
-                            }}
-                            className="bg-red-950/60 hover:bg-red-900 border border-red-800/80 text-red-400 p-1.5 rounded-lg transition-all"
-                            title="Delete Faculty Account"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
+              <>
+                {/* MOBILE FACULTY CARDS (Visible on < md) */}
+                <div className="md:hidden divide-y divide-slate-800/80">
+                  {filteredFaculty.map((fac) => (
+                    <div key={fac.id} className="p-3.5 space-y-2.5 bg-slate-950/40 rounded-xl mb-2 border border-slate-800/60">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="text-sm font-bold text-white">{fac.name}</div>
+                          <div className="text-xs font-mono font-bold text-cyan-400">{fac.identifier}</div>
+                          <div className="text-[10px] text-slate-400 font-mono">{fac.email}</div>
+                        </div>
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                            fac.isActive
+                              ? 'bg-emerald-950 border border-emerald-700 text-emerald-300'
+                              : 'bg-red-950 border border-red-800 text-red-300'
+                          }`}
+                        >
+                          {fac.isActive ? 'Active' : 'Disabled'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs pt-1">
+                        <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-md font-bold text-slate-200 font-mono text-[11px]">
+                          {fac.year || '2nd Year'} - {fac.section || 'A'}
+                        </span>
+                        <span className="text-slate-400 text-[11px] font-semibold">{fac.facultyRole || 'Class Coordinator'}</span>
+                      </div>
+
+                      <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-800/60">
+                        <button
+                          onClick={() => openEditFacultyModal(fac)}
+                          className="touch-target px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 text-xs font-semibold flex items-center space-x-1"
+                          title="Edit Faculty Assignment"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setResetTargetFaculty(fac);
+                            setNewPasswordInput('');
+                            setShowResetPassword(false);
+                            setResetError('');
+                          }}
+                          className="touch-target px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 text-xs font-semibold flex items-center space-x-1"
+                          title="Reset Portal Password"
+                        >
+                          <Key className="w-3.5 h-3.5" />
+                          <span>Reset Pass</span>
+                        </button>
+                        <button
+                          onClick={() => handleToggleStatus(fac)}
+                          className={`touch-target p-2 rounded-lg transition-all ${
+                            fac.isActive ? 'bg-amber-950/80 text-amber-300 hover:bg-amber-900 border border-amber-800/60' : 'bg-emerald-950/80 text-emerald-300 hover:bg-emerald-900 border border-emerald-800/60'
+                          }`}
+                          title={fac.isActive ? 'Disable Account' : 'Enable Account'}
+                        >
+                          {fac.isActive ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setDeleteTarget({
+                              id: fac.id,
+                              name: `${fac.name} (${fac.email})`,
+                              type: 'Faculty Account'
+                            });
+                          }}
+                          className="touch-target p-2 bg-red-950/60 hover:bg-red-900 border border-red-800/80 text-red-400 rounded-lg transition-all"
+                          title="Delete Faculty Account"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* DESKTOP TABLE VIEW (Visible on md+) */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead>
+                      <tr className="text-slate-400 border-b border-slate-800 font-mono uppercase tracking-wider text-[11px]">
+                        <th className="py-3 px-3">Faculty Name</th>
+                        <th className="py-3 px-3">Faculty ID</th>
+                        <th className="py-3 px-3">Official Email</th>
+                        <th className="py-3 px-3">Year / Section</th>
+                        <th className="py-3 px-3">Role</th>
+                        <th className="py-3 px-3 text-center">Status</th>
+                        <th className="py-3 px-3 text-right">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {filteredFaculty.map((fac) => (
+                        <tr key={fac.id} className="hover:bg-slate-950/60 transition-colors">
+                          <td className="py-3 px-3 font-bold text-white">{fac.name}</td>
+                          <td className="py-3 px-3 font-mono text-cyan-400 font-bold">{fac.identifier}</td>
+                          <td className="py-3 px-3 font-mono text-slate-400">{fac.email}</td>
+                          <td className="py-3 px-3 font-mono">
+                            <span className="bg-slate-950 border border-slate-800 px-2 py-0.5 rounded-md font-bold text-slate-200">
+                              {fac.year || '2nd Year'} - {fac.section || 'A'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 font-semibold text-slate-300">{fac.facultyRole || 'Class Coordinator'}</td>
+                          <td className="py-3 px-3 text-center">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                fac.isActive
+                                  ? 'bg-emerald-950 border border-emerald-700 text-emerald-300'
+                                  : 'bg-red-950 border border-red-800 text-red-300'
+                              }`}
+                            >
+                              {fac.isActive ? 'Active' : 'Disabled'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-right space-x-2">
+                            <button
+                              onClick={() => openEditFacultyModal(fac)}
+                              className="bg-slate-800 hover:bg-slate-700 text-cyan-400 p-1.5 rounded-lg transition-all"
+                              title="Edit Faculty Assignment"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setResetTargetFaculty(fac);
+                                setNewPasswordInput('');
+                                setShowResetPassword(false);
+                                setResetError('');
+                              }}
+                              className="bg-slate-800 hover:bg-slate-700 text-amber-400 p-1.5 rounded-lg transition-all"
+                              title="Reset Portal Password"
+                            >
+                              <Key className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleToggleStatus(fac)}
+                              className={`p-1.5 rounded-lg transition-all ${
+                                fac.isActive ? 'bg-amber-950/80 text-amber-300 hover:bg-amber-900' : 'bg-emerald-950/80 text-emerald-300 hover:bg-emerald-900'
+                              }`}
+                              title={fac.isActive ? 'Disable Account' : 'Enable Account'}
+                            >
+                              {fac.isActive ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setDeleteTarget({
+                                  id: fac.id,
+                                  name: `${fac.name} (${fac.email})`,
+                                  type: 'Faculty Account'
+                                });
+                              }}
+                              className="bg-red-950/60 hover:bg-red-900 border border-red-800/80 text-red-400 p-1.5 rounded-lg transition-all"
+                              title="Delete Faculty Account"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -1108,92 +1188,176 @@ export const AdminDashboard: React.FC = () => {
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto space-y-2">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">All Registered HOD Accounts</h3>
-                <table className="w-full text-xs text-left">
-                  <thead>
-                    <tr className="text-slate-400 border-b border-slate-800 font-mono uppercase tracking-wider text-[11px]">
-                      <th className="py-3 px-3">HOD Name</th>
-                      <th className="py-3 px-3">HOD ID</th>
-                      <th className="py-3 px-3">Official Email</th>
-                      <th className="py-3 px-3">Department</th>
-                      <th className="py-3 px-3">Created Date</th>
-                      <th className="py-3 px-3 text-center">Status</th>
-                      <th className="py-3 px-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60">
-                    {hodList.map((hod) => (
-                      <tr key={hod.id} className="hover:bg-slate-950/60 transition-colors">
-                        <td className="py-3 px-3 font-bold text-white">{hod.name}</td>
-                        <td className="py-3 px-3 font-mono text-amber-400 font-bold">{hod.identifier}</td>
-                        <td className="py-3 px-3 font-mono text-slate-400">{hod.email}</td>
-                        <td className="py-3 px-3 font-mono">
-                          <span className="bg-amber-950/60 border border-amber-800/80 px-2.5 py-0.5 rounded-md font-bold text-amber-300">
-                            {hod.department || 'AI & DS'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 font-mono text-slate-400">{hod.createdAt ? new Date(hod.createdAt).toLocaleDateString() : 'N/A'}</td>
-                        <td className="py-3 px-3 text-center">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                              hod.isActive
-                                ? 'bg-emerald-950 border border-emerald-700 text-emerald-300'
-                                : 'bg-red-950 border border-red-800 text-red-300'
-                            }`}
-                          >
-                            {hod.isActive ? 'Active HOD' : 'Disabled'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 text-right space-x-2">
-                          <button
-                            onClick={() => openEditHODModal(hod)}
-                            className="bg-slate-800 hover:bg-slate-700 text-amber-400 p-1.5 rounded-lg transition-all"
-                            title="Edit HOD Details"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setResetTargetHOD(hod);
-                              setNewHODPasswordInput('');
-                              setShowResetHODPassword(false);
-                              setResetHODError('');
-                            }}
-                            className="bg-slate-800 hover:bg-slate-700 text-cyan-400 p-1.5 rounded-lg transition-all"
-                            title="Reset HOD Portal Password"
-                          >
-                            <Key className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleToggleHODStatus(hod)}
-                            className={`p-1.5 rounded-lg transition-all ${
-                              hod.isActive ? 'bg-amber-950/80 text-amber-300 hover:bg-amber-900' : 'bg-emerald-950/80 text-emerald-300 hover:bg-emerald-900'
-                            }`}
-                            title={hod.isActive ? 'Disable HOD Account' : 'Enable HOD Account'}
-                          >
-                            {hod.isActive ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setDeleteTarget({
-                                id: hod.id,
-                                name: `${hod.name} (${hod.email})`,
-                                type: 'HOD Account',
-                                isHOD: true
-                              });
-                            }}
-                            className="bg-red-950/60 hover:bg-red-900 border border-red-800/80 text-red-400 p-1.5 rounded-lg transition-all"
-                            title="Delete HOD Account"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
+              <>
+                {/* MOBILE HOD CARDS (Visible on < md) */}
+                <div className="md:hidden divide-y divide-slate-800/80 space-y-2">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono px-1">Registered HOD Accounts</h3>
+                  {hodList.map((hod) => (
+                    <div key={hod.id} className="p-3.5 space-y-2.5 bg-slate-950/40 rounded-xl mb-2 border border-slate-800/60">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="text-sm font-bold text-white">{hod.name}</div>
+                          <div className="text-xs font-mono font-bold text-amber-400">{hod.identifier}</div>
+                          <div className="text-[10px] text-slate-400 font-mono">{hod.email}</div>
+                        </div>
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                            hod.isActive
+                              ? 'bg-emerald-950 border border-emerald-700 text-emerald-300'
+                              : 'bg-red-950 border border-red-800 text-red-300'
+                          }`}
+                        >
+                          {hod.isActive ? 'Active HOD' : 'Disabled'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs pt-1">
+                        <span className="bg-amber-950/60 border border-amber-800/80 px-2.5 py-0.5 rounded-md font-bold text-amber-300 font-mono text-[11px]">
+                          {hod.department || 'AI & DS'}
+                        </span>
+                        <span className="text-slate-400 text-[10px] font-mono">
+                          {hod.createdAt ? new Date(hod.createdAt).toLocaleDateString() : 'N/A'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-800/60">
+                        <button
+                          onClick={() => openEditHODModal(hod)}
+                          className="touch-target px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 text-xs font-semibold flex items-center space-x-1"
+                          title="Edit HOD Details"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setResetTargetHOD(hod);
+                            setNewHODPasswordInput('');
+                            setShowResetHODPassword(false);
+                            setResetHODError('');
+                          }}
+                          className="touch-target px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 text-xs font-semibold flex items-center space-x-1"
+                          title="Reset HOD Portal Password"
+                        >
+                          <Key className="w-3.5 h-3.5" />
+                          <span>Reset Pass</span>
+                        </button>
+                        <button
+                          onClick={() => handleToggleHODStatus(hod)}
+                          className={`touch-target p-2 rounded-lg transition-all ${
+                            hod.isActive ? 'bg-amber-950/80 text-amber-300 hover:bg-amber-900 border border-amber-800/60' : 'bg-emerald-950/80 text-emerald-300 hover:bg-emerald-900 border border-emerald-800/60'
+                          }`}
+                          title={hod.isActive ? 'Disable HOD Account' : 'Enable HOD Account'}
+                        >
+                          {hod.isActive ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setDeleteTarget({
+                              id: hod.id,
+                              name: `${hod.name} (${hod.email})`,
+                              type: 'HOD Account',
+                              isHOD: true
+                            });
+                          }}
+                          className="touch-target p-2 rounded-lg bg-red-950/60 hover:bg-red-900 border border-red-800/80 text-red-400 transition-all"
+                          title="Delete HOD Account"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* DESKTOP HOD ACCOUNTS TABLE (Visible on >= md) */}
+                <div className="hidden md:block overflow-x-auto space-y-2">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">All Registered HOD Accounts</h3>
+                  <table className="w-full text-xs text-left">
+                    <thead>
+                      <tr className="text-slate-400 border-b border-slate-800 font-mono uppercase tracking-wider text-[11px]">
+                        <th className="py-3 px-3">HOD Name</th>
+                        <th className="py-3 px-3">HOD ID</th>
+                        <th className="py-3 px-3">Official Email</th>
+                        <th className="py-3 px-3">Department</th>
+                        <th className="py-3 px-3">Created Date</th>
+                        <th className="py-3 px-3 text-center">Status</th>
+                        <th className="py-3 px-3 text-right">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {hodList.map((hod) => (
+                        <tr key={hod.id} className="hover:bg-slate-950/60 transition-colors">
+                          <td className="py-3 px-3 font-bold text-white">{hod.name}</td>
+                          <td className="py-3 px-3 font-mono text-amber-400 font-bold">{hod.identifier}</td>
+                          <td className="py-3 px-3 font-mono text-slate-400">{hod.email}</td>
+                          <td className="py-3 px-3 font-mono">
+                            <span className="bg-amber-950/60 border border-amber-800/80 px-2.5 py-0.5 rounded-md font-bold text-amber-300">
+                              {hod.department || 'AI & DS'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 font-mono text-slate-400">{hod.createdAt ? new Date(hod.createdAt).toLocaleDateString() : 'N/A'}</td>
+                          <td className="py-3 px-3 text-center">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                hod.isActive
+                                  ? 'bg-emerald-950 border border-emerald-700 text-emerald-300'
+                                  : 'bg-red-950 border border-red-800 text-red-300'
+                              }`}
+                            >
+                              {hod.isActive ? 'Active HOD' : 'Disabled'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-right space-x-2">
+                            <button
+                              onClick={() => openEditHODModal(hod)}
+                              className="bg-slate-800 hover:bg-slate-700 text-amber-400 p-1.5 rounded-lg transition-all"
+                              title="Edit HOD Details"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setResetTargetHOD(hod);
+                                setNewHODPasswordInput('');
+                                setShowResetHODPassword(false);
+                                setResetHODError('');
+                              }}
+                              className="bg-slate-800 hover:bg-slate-700 text-cyan-400 p-1.5 rounded-lg transition-all"
+                              title="Reset HOD Portal Password"
+                            >
+                              <Key className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleToggleHODStatus(hod)}
+                              className={`p-1.5 rounded-lg transition-all ${
+                                hod.isActive ? 'bg-amber-950/80 text-amber-300 hover:bg-amber-900' : 'bg-emerald-950/80 text-emerald-300 hover:bg-emerald-900'
+                              }`}
+                              title={hod.isActive ? 'Disable HOD Account' : 'Enable HOD Account'}
+                            >
+                              {hod.isActive ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setDeleteTarget({
+                                  id: hod.id,
+                                  name: `${hod.name} (${hod.email})`,
+                                  type: 'HOD Account',
+                                  isHOD: true
+                                });
+                              }}
+                              className="bg-red-950/60 hover:bg-red-900 border border-red-800/80 text-red-400 p-1.5 rounded-lg transition-all"
+                              title="Delete HOD Account"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -1382,79 +1546,142 @@ export const AdminDashboard: React.FC = () => {
                 )}
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs text-left font-mono">
-                  <thead>
-                    <tr className="text-slate-400 border-b border-slate-800 uppercase tracking-wider text-[11px]">
-                      <th className="py-3 px-3">Student Name</th>
-                      <th className="py-3 px-3">Register Number</th>
-                      <th className="py-3 px-3">Email</th>
-                      <th className="py-3 px-3">Year / Sec</th>
-                      <th className="py-3 px-3">Department</th>
-                      <th className="py-3 px-3">Faculty / Coordinator</th>
-                      <th className="py-3 px-3">Created Date</th>
-                      <th className="py-3 px-3 text-center">Status</th>
-                      <th className="py-3 px-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60">
-                    {filteredStudents.map((s: any) => {
-                      const regNo = s.registerNo || s.register_no || s.identifier || 'N/A';
-                      const name = s.name || 'N/A';
-                      const email = s.email || 'N/A';
-                      const year = s.year || '2nd Year';
-                      const section = s.section || 'A';
-                      const dept = s.department || 'AI & DS';
-                      const coord = s.classCoordinatorName || s.class_coordinator_name || s.classCoordinator || 'Assigned Faculty';
-                      const createdDate = s.createdAt || s.created_at ? new Date(s.createdAt || s.created_at).toLocaleDateString() : 'N/A';
-                      const isActive = s.isActive !== false;
+              <>
+                {/* MOBILE STUDENT CARDS (Visible on < md) */}
+                <div className="md:hidden divide-y divide-slate-800/80">
+                  {filteredStudents.map((s: any) => {
+                    const regNo = s.registerNo || s.register_no || s.identifier || 'N/A';
+                    const name = s.name || 'N/A';
+                    const email = s.email || 'N/A';
+                    const year = s.year || '2nd Year';
+                    const section = s.section || 'A';
+                    const dept = s.department || 'AI & DS';
+                    const coord = s.classCoordinatorName || s.class_coordinator_name || s.classCoordinator || 'Assigned Faculty';
+                    const isActive = s.isActive !== false;
 
-                      return (
-                        <tr key={s.id || regNo} className="hover:bg-slate-950/60 transition-colors">
-                          <td className="py-3 px-3 font-bold text-white">{name}</td>
-                          <td className="py-3 px-3 font-mono text-cyan-400 font-bold">{regNo}</td>
-                          <td className="py-3 px-3 font-mono text-slate-400">{email}</td>
-                          <td className="py-3 px-3">
-                            <span className="bg-slate-950 border border-slate-800 px-2 py-0.5 rounded-md font-bold text-slate-200">
-                              {year} - {section}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3 text-slate-300 font-semibold">{dept}</td>
-                          <td className="py-3 px-3 text-amber-300 font-semibold">{coord}</td>
-                          <td className="py-3 px-3 text-slate-400">{createdDate}</td>
-                          <td className="py-3 px-3 text-center">
-                            <span
-                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                isActive
-                                  ? 'bg-emerald-950 border border-emerald-700 text-emerald-300'
-                                  : 'bg-red-950 border border-red-800 text-red-300'
-                              }`}
-                            >
-                              {isActive ? 'Active' : 'Disabled'}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3 text-right">
-                            <button
-                              onClick={() => {
-                                setDeleteTarget({
-                                  id: s.id,
-                                  name: `${name} (${regNo})`,
-                                  type: 'Student Account',
-                                  isStudent: true
-                                });
-                              }}
-                              className="bg-red-950/60 hover:bg-red-900 border border-red-800/80 text-red-400 p-1.5 rounded-lg transition-all"
-                              title="Delete Student Account"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                    return (
+                      <div key={s.id || regNo} className="p-3.5 space-y-2 bg-slate-950/40 rounded-xl mb-2 border border-slate-800/60 font-sans">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="text-sm font-bold text-white">{name}</div>
+                            <div className="text-xs font-mono font-bold text-cyan-400">{regNo}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">{email}</div>
+                          </div>
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                              isActive
+                                ? 'bg-emerald-950 border border-emerald-700 text-emerald-300'
+                                : 'bg-red-950 border border-red-800 text-red-300'
+                            }`}
+                          >
+                            {isActive ? 'Active' : 'Disabled'}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between text-xs pt-1">
+                          <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-md font-bold text-slate-200 font-mono text-[11px]">
+                            {year} - {section} ({dept})
+                          </span>
+                          <span className="text-amber-300 text-[11px] font-semibold">{coord}</span>
+                        </div>
+
+                        <div className="flex items-center justify-end pt-2 border-t border-slate-800/60">
+                          <button
+                            onClick={() => {
+                              setDeleteTarget({
+                                id: s.id,
+                                name: `${name} (${regNo})`,
+                                type: 'Student Account',
+                                isStudent: true
+                              });
+                            }}
+                            className="touch-target px-3 py-1.5 bg-red-950/60 hover:bg-red-900 border border-red-800/80 text-red-400 rounded-lg text-xs font-semibold flex items-center space-x-1"
+                            title="Delete Student Account"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete Student</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* DESKTOP TABLE VIEW (Visible on md+) */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-xs text-left font-mono">
+                    <thead>
+                      <tr className="text-slate-400 border-b border-slate-800 uppercase tracking-wider text-[11px]">
+                        <th className="py-3 px-3">Student Name</th>
+                        <th className="py-3 px-3">Register Number</th>
+                        <th className="py-3 px-3">Email</th>
+                        <th className="py-3 px-3">Year / Sec</th>
+                        <th className="py-3 px-3">Department</th>
+                        <th className="py-3 px-3">Faculty / Coordinator</th>
+                        <th className="py-3 px-3">Created Date</th>
+                        <th className="py-3 px-3 text-center">Status</th>
+                        <th className="py-3 px-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {filteredStudents.map((s: any) => {
+                        const regNo = s.registerNo || s.register_no || s.identifier || 'N/A';
+                        const name = s.name || 'N/A';
+                        const email = s.email || 'N/A';
+                        const year = s.year || '2nd Year';
+                        const section = s.section || 'A';
+                        const dept = s.department || 'AI & DS';
+                        const coord = s.classCoordinatorName || s.class_coordinator_name || s.classCoordinator || 'Assigned Faculty';
+                        const createdDate = s.createdAt || s.created_at ? new Date(s.createdAt || s.created_at).toLocaleDateString() : 'N/A';
+                        const isActive = s.isActive !== false;
+
+                        return (
+                          <tr key={s.id || regNo} className="hover:bg-slate-950/60 transition-colors">
+                            <td className="py-3 px-3 font-bold text-white">{name}</td>
+                            <td className="py-3 px-3 font-mono text-cyan-400 font-bold">{regNo}</td>
+                            <td className="py-3 px-3 font-mono text-slate-400">{email}</td>
+                            <td className="py-3 px-3">
+                              <span className="bg-slate-950 border border-slate-800 px-2 py-0.5 rounded-md font-bold text-slate-200">
+                                {year} - {section}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-slate-300 font-semibold">{dept}</td>
+                            <td className="py-3 px-3 text-amber-300 font-semibold">{coord}</td>
+                            <td className="py-3 px-3 text-slate-400">{createdDate}</td>
+                            <td className="py-3 px-3 text-center">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  isActive
+                                    ? 'bg-emerald-950 border border-emerald-700 text-emerald-300'
+                                    : 'bg-red-950 border border-red-800 text-red-300'
+                                }`}
+                              >
+                                {isActive ? 'Active' : 'Disabled'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <button
+                                onClick={() => {
+                                  setDeleteTarget({
+                                    id: s.id,
+                                    name: `${name} (${regNo})`,
+                                    type: 'Student Account',
+                                    isStudent: true
+                                  });
+                                }}
+                                className="bg-red-950/60 hover:bg-red-900 border border-red-800/80 text-red-400 p-1.5 rounded-lg transition-all"
+                                title="Delete Student Account"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         )}

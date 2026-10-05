@@ -910,3 +910,274 @@ html.light .field input::placeholder {
   text-shadow: 0 0 10px rgba(34, 211, 238, 0.8);
 }
 
+/* ============================================================ */
+/* MOBILE-FIRST PWA & TOUCH-FRIENDLY UTILITIES                  */
+/* ============================================================ */
+
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+
+/* Mobile Safe Areas */
+.pt-safe {
+  padding-top: max(0.75rem, var(--sat));
+}
+.pb-safe {
+  padding-bottom: max(0.75rem, var(--sab));
+}
+.pl-safe {
+  padding-left: max(1rem, var(--sal));
+}
+.pr-safe {
+  padding-right: max(1rem, var(--sar));
+}
+
+/* Touch-optimized interactions */
+@media (pointer: coarse) {
+  button, a, input, select, textarea, [role="button"] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Prevent unwanted horizontal overflow */
+html, body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Mobile Modal Bottom Sheet */
+@media (max-width: 640px) {
+  .mobile-modal-sheet {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 92vh !important;
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    margin: auto 0 0 0 !important;
+  }
+}
+
+/* Responsive Table Scroll Container */
+.table-responsive-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Accessible Minimum Touch Height */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ============================================================ */
+/* COMPREHENSIVE MOBILE-FIRST RESPONSIVE SYSTEM                 */
+/* ============================================================ */
+
+/* --- Mobile Form Optimization --- */
+@media (max-width: 640px) {
+  /* All interactive inputs get comfortable touch sizes */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="search"],
+  input[type="url"],
+  input[type="date"],
+  select,
+  textarea {
+    min-height: 44px;
+    font-size: 16px !important; /* Prevents iOS zoom on focus */
+    padding-left: 12px;
+    padding-right: 12px;
+    border-radius: 12px;
+  }
+
+  /* Buttons get comfortable touch sizes */
+  button:not(.touch-target) {
+    min-height: 40px;
+  }
+
+  /* Full-width form labels */
+  label {
+    font-size: 12px;
+  }
+
+  /* Modals become near-full-screen bottom sheets */
+  .portal-modal,
+  [class*="max-w-2xl"],
+  [class*="max-w-xl"],
+  [class*="max-w-lg"],
+  [class*="max-w-md"],
+  [class*="max-w-4xl"] {
+    max-width: calc(100vw - 16px) !important;
+    max-height: 94vh !important;
+    overflow-y: auto !important;
+    border-radius: 16px !important;
+  }
+
+  /* Prevent grid columns from being too narrow */
+  .grid-cols-5,
+  [class*="grid-cols-5"],
+  [class*="md:grid-cols-5"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+/* --- Mobile Header & Navigation Polish --- */
+@media (max-width: 767px) {
+  /* Compact page content padding */
+  main {
+    padding: 12px !important;
+    padding-bottom: calc(12px + var(--sab, 0px)) !important;
+  }
+
+  /* Prevent oversized headings */
+  h1 {
+    font-size: 1.125rem !important;
+    line-height: 1.4;
+  }
+
+  h2 {
+    font-size: 1rem !important;
+    line-height: 1.4;
+  }
+
+  /* Cards get tighter padding on mobile */
+  [class*="rounded-2xl"][class*="p-6"] {
+    padding: 14px !important;
+  }
+
+  [class*="rounded-2xl"][class*="p-5"] {
+    padding: 12px !important;
+  }
+
+  /* Ensure all action button rows wrap properly */
+  [class*="space-x-2"],
+  [class*="space-x-3"] {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+}
+
+/* --- Mobile Modal Full-Screen Sheet Pattern --- */
+@media (max-width: 640px) {
+  /* Fixed modal overlays should scroll internally */
+  .fixed.inset-0[class*="flex"][class*="items-center"] {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+
+  .fixed.inset-0[class*="flex"][class*="items-center"] > div:not([class*="inset-0"]) {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    border-top-left-radius: 20px !important;
+    border-top-right-radius: 20px !important;
+    max-height: 95vh !important;
+    overflow-y: auto !important;
+  }
+}
+
+/* --- HOD Year/Section Filter Pills (Mobile Scroll) --- */
+@media (max-width: 640px) {
+  [class*="flex-wrap"][class*="items-center"][class*="justify-between"][class*="gap-4"] {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  /* Make year/section filter pills scrollable horizontally */
+  [class*="flex"][class*="items-center"][class*="space-x-2"][class*="text-xs"] {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+    max-width: 100%;
+    padding-bottom: 4px;
+  }
+}
+
+/* --- Performance: Reduce animations on mobile --- */
+@media (max-width: 640px) {
+  .shaft, .fog-a, .fog-b, .fog-c, .grid-floor, .seed, .seed-core, .seed-line,
+  .panel-scan, .panel-energy, .orbit, .ring {
+    animation-duration: 0s !important;
+    animation: none !important;
+  }
+
+  .noise, .vignette, .env {
+    display: none !important;
+  }
+}
+
+/* Respect reduced motion preference globally */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --- Mobile-safe word breaking --- */
+@media (max-width: 640px) {
+  td, th, span, p, div, label {
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+}
+
+/* --- Prevent any element from causing horizontal overflow --- */
+img, video, iframe, embed, object, svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* --- Mobile Keyboard Safety --- */
+@supports (height: 100dvh) {
+  .min-h-screen {
+    min-height: 100dvh;
+  }
+}
+
+/* --- Login Page Mobile Optimization --- */
+@media (max-width: 640px) {
+  /* Reduce login card perspectives/3D on mobile */
+  [class*="perspective"] {
+    perspective: none !important;
+  }
+
+  [class*="rotateX"],
+  [class*="rotateY"] {
+    transform: none !important;
+  }
+
+  /* Login form should be comfortable on mobile */
+  .field input {
+    font-size: 16px !important;
+    min-height: 44px !important;
+    padding: 10px 36px 10px 0 !important;
+  }
+
+  .field-inner {
+    padding: 14px 14px 14px 42px !important;
+  }
+
+  .btn {
+    padding: 16px 0 !important;
+    font-size: 13px !important;
+    min-height: 48px !important;
+  }
+}
+

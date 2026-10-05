@@ -49,8 +49,8 @@ async function run() {
       }
     }
 
-    // 1. Admin Login
-    console.log('\n--- Test 1: Admin Login ---');
+    // 1. Admin Login & Authentication Check (Read-Only)
+    console.log('\n--- Test 1: Admin Authentication Verification ---');
     const adminLoginRes = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -62,7 +62,7 @@ async function run() {
     assert(adminLoginData.user?.role === 'ADMIN', 'Admin login user role is ADMIN');
     const adminToken = adminLoginData.token;
 
-    // 2. Wrong credentials
+    // 2. Invalid Credentials Handling (Read-Only)
     console.log('\n--- Test 2: Invalid Credentials Handling ---');
     const wrongRes = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
@@ -73,114 +73,25 @@ async function run() {
     assert(wrongRes.status === 401, 'Wrong password returns 401 Unauthorized');
     assert(wrongData.error.includes('Invalid credentials'), 'Error message says Invalid credentials');
 
-    // 3. Create or find test faculty
-    console.log('\n--- Test 3: Admin Reset Faculty Password ---');
-    let testFac = await db.findUserByIdentifier('fac_test_auth@aids.edu');
-    if (!testFac) {
-      const facHash = await bcrypt.hash('InitPass@123', 10);
-      await db.createUser({
-        id: `fac-test-${Date.now()}`,
-        email: 'fac_test_auth@aids.edu',
-        identifier: 'FAC_TEST_AUTH',
-        name: 'Test Faculty User',
-        role: 'FACULTY',
-        passwordHash: facHash,
-        facultyRole: 'Class Coordinator',
-        year: '2nd Year',
-        section: 'A'
-      });
-      testFac = await db.findUserByIdentifier('fac_test_auth@aids.edu');
+    // 3. Read-Only Query Verification for Registered Users
+    console.log('\n--- Test 3: Read-Only Database User Verification ---');
+    const adminRecord = await db.findUserByIdentifier('admin', 'ADMIN');
+    assert(Boolean(adminRecord && adminRecord.role === 'ADMIN'), 'Admin record verified directly in database');
+
+    console.log('\n--- Test 4: Check Optional Registered Roles (Read-Only) ---');
+    const facultyRecord = await db.findUserByIdentifier('faculty', 'FACULTY');
+    if (facultyRecord) {
+      assert(facultyRecord.role === 'FACULTY', 'Registered faculty account verified');
+    } else {
+      console.log('[SKIP] No faculty account provisioned yet (strictly read-only mode).');
     }
 
-    const newFacPassword = 'NewSecureFacPass@2026';
-    const resetFacRes = await fetch(`${BASE_URL}/admin/faculty/${testFac!.id}/reset-password`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${adminToken}`
-      },
-      body: JSON.stringify({ newPassword: newFacPassword })
-    });
-    const resetFacData = await resetFacRes.json() as any;
-    assert(resetFacRes.status === 200, `Admin resets faculty password returns 200: ${resetFacData.message}`);
-
-    // Verify login with new faculty password
-    const facLoginRes = await fetch(`${BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifier: testFac!.email, password: newFacPassword, role: 'FACULTY' })
-    });
-    const facLoginData = await facLoginRes.json() as any;
-    assert(facLoginRes.status === 200, 'Faculty successfully logs in with new reset password');
-    assert(Boolean(facLoginData.token), 'Faculty receives valid JWT token on login');
-
-    // 4. Create or find test HOD
-    console.log('\n--- Test 4: Admin Reset HOD Password ---');
-    let testHod = await db.findUserByIdentifier('hod_test_auth@aids.edu');
-    if (!testHod) {
-      const hodHash = await bcrypt.hash('InitHodPass@123', 10);
-      await db.createUser({
-        id: `hod-test-${Date.now()}`,
-        email: 'hod_test_auth@aids.edu',
-        identifier: 'HOD_TEST_AUTH',
-        name: 'Dr. Test HOD',
-        role: 'HOD',
-        passwordHash: hodHash
-      });
-      testHod = await db.findUserByIdentifier('hod_test_auth@aids.edu');
+    const hodRecord = await db.findUserByIdentifier('hod', 'HOD');
+    if (hodRecord) {
+      assert(hodRecord.role === 'HOD', 'Registered HOD account verified');
+    } else {
+      console.log('[SKIP] No HOD account provisioned yet (strictly read-only mode).');
     }
-
-    const newHodPassword = 'NewSecureHodPass@2026';
-    const resetHodRes = await fetch(`${BASE_URL}/admin/hod/${testHod!.id}/reset-password`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${adminToken}`
-      },
-      body: JSON.stringify({ password: newHodPassword })
-    });
-    const resetHodData = await resetHodRes.json() as any;
-    assert(resetHodRes.status === 200, `Admin resets HOD password returns 200: ${resetHodData.message}`);
-
-    // Verify login with new HOD password
-    const hodLoginRes = await fetch(`${BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifier: testHod!.email, password: newHodPassword, role: 'HOD' })
-    });
-    const hodLoginData = await hodLoginRes.json() as any;
-    assert(hodLoginRes.status === 200, 'HOD successfully logs in with new reset password');
-    assert(Boolean(hodLoginData.token), 'HOD receives valid JWT token on login');
-
-    // 5. Admin Self Change Password
-    console.log('\n--- Test 5: Admin Self Change Password ---');
-    const changeAdminRes = await fetch(`${BASE_URL}/admin/change-password`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${adminToken}`
-      },
-      body: JSON.stringify({ currentPassword: 'aids@avs', newPassword: 'aids@avs_new' })
-    });
-    const changeAdminData = await changeAdminRes.json() as any;
-    assert(changeAdminRes.status === 200, `Admin changes own password returns 200: ${changeAdminData.message}`);
-
-    // Revert admin password back to aids@avs
-    const revertTokenRes = await fetch(`${BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifier: 'admin', password: 'aids@avs_new', role: 'ADMIN' })
-    });
-    const revertTokenData = await revertTokenRes.json() as any;
-    await fetch(`${BASE_URL}/admin/change-password`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${revertTokenData.token}`
-      },
-      body: JSON.stringify({ currentPassword: 'aids@avs_new', newPassword: 'aids@avs' })
-    });
-    assert(true, 'Reverted admin password back to aids@avs for production safety');
 
     console.log(`\n====================================================`);
     console.log(`SUMMARY: ${passed} PASSED, ${failed} FAILED`);

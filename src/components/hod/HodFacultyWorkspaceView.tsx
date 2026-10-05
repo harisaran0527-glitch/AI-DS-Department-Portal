@@ -346,85 +346,145 @@ export const HodFacultyWorkspaceView: React.FC<HodFacultyWorkspaceViewProps> = (
                   <p className="text-slate-500 text-[11px]">Try clearing the search query or selecting "All Students".</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left">
-                    <thead>
-                      <tr className="text-slate-400 border-b border-slate-800 font-mono uppercase text-[10px]">
-                        <th className="py-3 px-3">Reg No</th>
-                        <th className="py-3 px-3">Student Name</th>
-                        <th className="py-3 px-3 text-center">Attendance</th>
-                        <th className="py-3 px-3 text-center">CGPA</th>
-                        <th className="py-3 px-3 text-center">Arrears</th>
-                        <th className="py-3 px-3 text-center">SkillEdge</th>
-                        <th className="py-3 px-3 text-center">NPTEL</th>
-                        <th className="py-3 px-3 text-center">Certs / Proofs</th>
-                        <th className="py-3 px-3 text-center">LeetCode</th>
-                        <th className="py-3 px-3 text-center">Elite Status</th>
-                        <th className="py-3 px-3 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800 font-mono">
-                      {filteredStudents.map((stu: any) => (
-                        <tr key={stu.id} className="hover:bg-slate-950/80 transition-colors">
-                          <td className="py-3 px-3 text-slate-300 font-bold">{stu.registerNo || stu.register_no}</td>
-                          <td className="py-3 px-3 font-bold text-white font-sans">{stu.name}</td>
-                          <td className="py-3 px-3 text-center font-bold">
-                            <span className={stu.attendancePct >= 80 ? 'text-emerald-400' : 'text-red-400'}>
-                              {stu.attendancePct}%
+                <>
+                  {/* MOBILE STUDENT CARDS (Visible on < md) */}
+                  <div className="md:hidden divide-y divide-slate-800/80">
+                    {filteredStudents.map((stu: any) => (
+                      <div key={stu.id} className="p-3.5 space-y-2.5 bg-slate-950/40 rounded-xl mb-2 border border-slate-800/60 font-sans">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="text-sm font-bold text-white">{stu.name}</div>
+                            <div className="text-xs font-mono font-bold text-amber-400">{stu.registerNo || stu.register_no}</div>
+                          </div>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${stu.attendancePct >= 80 ? 'bg-emerald-950 border border-emerald-700 text-emerald-300' : 'bg-red-950 border border-red-800 text-red-300'}`}>
+                            Att: {stu.attendancePct}%
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 text-center text-[10px] font-mono bg-slate-900/60 p-2 rounded-lg border border-slate-800/60">
+                          <div>
+                            <span className="text-slate-400 block">CGPA</span>
+                            <span className="font-bold text-emerald-400 text-xs">
+                              {(stu.cgpa !== null && stu.cgpa !== undefined && stu.cgpa !== '') ? Number(stu.cgpa).toFixed(2) : 'N/A'}
                             </span>
-                          </td>
-                          <td className="py-3 px-3 text-center font-bold text-emerald-400">
-                            {(stu.cgpa !== null && stu.cgpa !== undefined && stu.cgpa !== '') ? Number(stu.cgpa).toFixed(2) : 'Not Available'}
-                          </td>
-                          <td className="py-3 px-3 text-center font-bold">
-                            {stu.arrearsCount > 0 ? (
-                              <span className="bg-red-950 border border-red-800 text-red-300 px-2 py-0.5 rounded-md text-[10px]">
-                                {stu.arrearsCount} Arrears
-                              </span>
-                            ) : (
-                              <span className="text-slate-500 text-[10px]">0</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-3 text-center font-bold text-cyan-400">{stu.skilledgePts} pts</td>
-                          <td className="py-3 px-3 text-center font-bold text-amber-400">
-                            {stu.nptelCount > 0 ? `${stu.nptelCount} Enrolled` : '-'}
-                          </td>
-                          <td className="py-3 px-3 text-center">
-                            <div className="flex items-center justify-center space-x-1">
-                              <span className="text-white font-bold">{stu.certsCount}</span>
-                              {stu.pendingCertsCount > 0 && (
-                                <span className="bg-amber-950 border border-amber-800 text-amber-300 text-[9px] px-1.5 py-0.2 rounded font-bold" title="Pending verifications">
-                                  {stu.pendingCertsCount} P
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-3 px-3 text-center font-bold text-yellow-400">
-                            {stu.leetcodeSolved > 0 ? `${stu.leetcodeSolved} Solved` : '-'}
-                          </td>
-                          <td className="py-3 px-3 text-center">
-                            {stu.isEliteStudent ? (
-                              <span className="bg-amber-950 border border-amber-700 text-amber-300 text-[9px] px-2 py-0.5 rounded-full font-bold">
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block">SkillEdge</span>
+                            <span className="font-bold text-cyan-400 text-xs">{stu.skilledgePts || 0} pts</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block">Arrears</span>
+                            <span className={`font-bold text-xs ${stu.arrearsCount > 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+                              {stu.arrearsCount || 0}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1">
+                          <div className="flex items-center space-x-1.5 text-[10px] font-mono text-slate-400">
+                            {stu.isEliteStudent && (
+                              <span className="bg-amber-950 border border-amber-700 text-amber-300 px-2 py-0.5 rounded-full font-bold">
                                 ELITE
                               </span>
-                            ) : (
-                              <span className="text-slate-600 text-[10px]">REGULAR</span>
                             )}
-                          </td>
-                          <td className="py-3 px-3 text-right">
-                            <button
-                              onClick={() => handleOpenStudent360(stu)}
-                              className="bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/50 text-indigo-300 hover:text-white px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all inline-flex items-center space-x-1 font-sans"
-                            >
-                              <span>360° View</span>
-                              <ChevronRight className="w-3 h-3" />
-                            </button>
-                          </td>
+                            {stu.certsCount > 0 && (
+                              <span>📜 {stu.certsCount} certs</span>
+                            )}
+                          </div>
+
+                          <button
+                            onClick={() => handleOpenStudent360(stu)}
+                            className="touch-target px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/50 text-indigo-300 hover:text-white rounded-xl text-xs font-semibold inline-flex items-center space-x-1"
+                          >
+                            <span>360° View</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* DESKTOP TABLE VIEW (Visible on md+) */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-xs text-left">
+                      <thead>
+                        <tr className="text-slate-400 border-b border-slate-800 font-mono uppercase text-[10px]">
+                          <th className="py-3 px-3">Reg No</th>
+                          <th className="py-3 px-3">Student Name</th>
+                          <th className="py-3 px-3 text-center">Attendance</th>
+                          <th className="py-3 px-3 text-center">CGPA</th>
+                          <th className="py-3 px-3 text-center">Arrears</th>
+                          <th className="py-3 px-3 text-center">SkillEdge</th>
+                          <th className="py-3 px-3 text-center">NPTEL</th>
+                          <th className="py-3 px-3 text-center">Certs / Proofs</th>
+                          <th className="py-3 px-3 text-center">LeetCode</th>
+                          <th className="py-3 px-3 text-center">Elite Status</th>
+                          <th className="py-3 px-3 text-right">Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800 font-mono">
+                        {filteredStudents.map((stu: any) => (
+                          <tr key={stu.id} className="hover:bg-slate-950/80 transition-colors">
+                            <td className="py-3 px-3 text-slate-300 font-bold">{stu.registerNo || stu.register_no}</td>
+                            <td className="py-3 px-3 font-bold text-white font-sans">{stu.name}</td>
+                            <td className="py-3 px-3 text-center font-bold">
+                              <span className={stu.attendancePct >= 80 ? 'text-emerald-400' : 'text-red-400'}>
+                                {stu.attendancePct}%
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-center font-bold text-emerald-400">
+                              {(stu.cgpa !== null && stu.cgpa !== undefined && stu.cgpa !== '') ? Number(stu.cgpa).toFixed(2) : 'Not Available'}
+                            </td>
+                            <td className="py-3 px-3 text-center font-bold">
+                              {stu.arrearsCount > 0 ? (
+                                <span className="bg-red-950 border border-red-800 text-red-300 px-2 py-0.5 rounded-md text-[10px]">
+                                  {stu.arrearsCount} Arrears
+                                </span>
+                              ) : (
+                                <span className="text-slate-500 text-[10px]">0</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 text-center font-bold text-cyan-400">{stu.skilledgePts} pts</td>
+                            <td className="py-3 px-3 text-center font-bold text-amber-400">
+                              {stu.nptelCount > 0 ? `${stu.nptelCount} Enrolled` : '-'}
+                            </td>
+                            <td className="py-3 px-3 text-center">
+                              <div className="flex items-center justify-center space-x-1">
+                                <span className="text-white font-bold">{stu.certsCount}</span>
+                                {stu.pendingCertsCount > 0 && (
+                                  <span className="bg-amber-950 border border-amber-800 text-amber-300 text-[9px] px-1.5 py-0.2 rounded font-bold" title="Pending verifications">
+                                    {stu.pendingCertsCount} P
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 text-center font-bold text-yellow-400">
+                              {stu.leetcodeSolved > 0 ? `${stu.leetcodeSolved} Solved` : '-'}
+                            </td>
+                            <td className="py-3 px-3 text-center">
+                              {stu.isEliteStudent ? (
+                                <span className="bg-amber-950 border border-amber-700 text-amber-300 text-[9px] px-2 py-0.5 rounded-full font-bold">
+                                  ELITE
+                                </span>
+                              ) : (
+                                <span className="text-slate-600 text-[10px]">REGULAR</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <button
+                                onClick={() => handleOpenStudent360(stu)}
+                                className="bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/50 text-indigo-300 hover:text-white px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all inline-flex items-center space-x-1 font-sans"
+                              >
+                                <span>360° View</span>
+                                <ChevronRight className="w-3 h-3" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
 

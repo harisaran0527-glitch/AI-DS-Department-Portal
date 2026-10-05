@@ -56,71 +56,93 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#080A0F] text-[#94A3B8] flex flex-col md:flex-row antialiased selection:bg-[#A78BFA] selection:text-[#080A0F]">
+    <div className="min-h-screen bg-[#080A0F] text-[#94A3B8] flex flex-col md:flex-row antialiased selection:bg-[#A78BFA] selection:text-[#080A0F] overflow-x-hidden">
       {/* MOBILE TOP NAVBAR HEADER */}
-      <div className="md:hidden bg-[#0D1017] border-b border-[#252B36] px-4 py-3 flex items-center justify-between z-40 sticky top-0">
-        <div className="flex items-center space-x-3">
-          <img 
-            src="/images/avsec-salem-logo.png" 
-            alt="AVSEC Salem Logo" 
-            className="h-8 w-auto object-contain shrink-0 drop-shadow-[0_0_8px_rgba(167,139,250,0.3)]" 
+      <div className="md:hidden bg-[#0D1017] border-b border-[#252B36] px-3 sm:px-4 py-2.5 pt-safe flex items-center justify-between z-40 sticky top-0 shadow-lg">
+        <div className="flex items-center space-x-2.5 overflow-hidden">
+          <img
+            src="/images/avsec-salem-logo.png"
+            alt="AVSEC Salem Logo"
+            className="h-7 w-auto object-contain shrink-0 drop-shadow-[0_0_8px_rgba(167,139,250,0.3)]"
           />
-          <div>
-            <div className="text-xs font-bold text-[#F1F5F9] tracking-wide">AVSEC - SALEM</div>
-            <div className="text-[10px] text-[#A78BFA] font-mono font-semibold">{portalRole} WORKSPACE</div>
+          <div className="overflow-hidden truncate">
+            <div className="text-xs font-bold text-[#F1F5F9] tracking-wide truncate">AVSEC SALEM</div>
+            <div className="text-[10px] text-[#A78BFA] font-mono font-semibold flex items-center space-x-1 truncate">
+              <span>{portalRole}</span>
+              <span className="text-[#64748B]">•</span>
+              <span className="text-[#22D3EE] font-sans truncate">{activeTab}</span>
+            </div>
           </div>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-1.5 shrink-0">
           <ThemeToggle />
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2 rounded-lg bg-[#12161F] text-[#F1F5F9] hover:bg-[#202633]"
+            aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+            className="touch-target p-2 rounded-xl bg-[#12161F] text-[#F1F5F9] hover:bg-[#202633] active:scale-95 border border-[#252B36] transition-all"
           >
-            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {mobileMenuOpen ? <X className="w-5 h-5 text-rose-400" /> : <Menu className="w-5 h-5 text-[#A78BFA]" />}
           </button>
         </div>
       </div>
 
-      {/* DESKTOP SIDEBAR NAVIGATION */}
+      {/* MOBILE / DESKTOP SIDEBAR NAVIGATION */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#0D1017] border-r border-[#252B36] flex flex-col transition-transform duration-300 ease-in-out md:static md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-[#0D1017] border-r border-[#252B36] flex flex-col transition-transform duration-300 ease-in-out md:static md:w-64 md:translate-x-0 ${
           mobileMenuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
         }`}
       >
         {/* Sidebar Header Brand */}
-        <div className="p-4 border-b border-[#252B36] flex items-center space-x-3 bg-[#0D1017]">
-          <img 
-            src="/images/avsec-salem-logo.png" 
-            alt="AVSEC Salem Logo" 
-            className="h-9 w-auto object-contain shrink-0 drop-shadow-[0_0_10px_rgba(167,139,250,0.35)]" 
-          />
-          <div className="overflow-hidden">
-            <div className="text-xs font-extrabold text-[#F1F5F9] tracking-wider truncate">AVSEC - SALEM</div>
-            <div className="text-[10px] text-[#22D3EE] font-mono font-bold tracking-wider uppercase truncate">
-              AI & DS {portalRole}
+        <div className="p-4 pt-safe border-b border-[#252B36] flex items-center justify-between bg-[#0D1017]">
+          <div className="flex items-center space-x-3 overflow-hidden">
+            <img
+              src="/images/avsec-salem-logo.png"
+              alt="AVSEC Salem Logo"
+              className="h-8 sm:h-9 w-auto object-contain shrink-0 drop-shadow-[0_0_10px_rgba(167,139,250,0.35)]"
+            />
+            <div className="overflow-hidden">
+              <div className="text-xs font-extrabold text-[#F1F5F9] tracking-wider truncate">AVSEC - SALEM</div>
+              <div className="text-[10px] text-[#22D3EE] font-mono font-bold tracking-wider uppercase truncate">
+                AI & DS {portalRole}
+              </div>
             </div>
           </div>
+          {/* Mobile close button inside drawer */}
+          <button
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close navigation"
+            className="md:hidden touch-target p-1.5 rounded-lg bg-[#12161F] text-[#94A3B8] hover:text-white border border-[#252B36]"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
         {/* User Identity Profile Card inside Sidebar */}
-        <div className="p-4 border-b border-[#252B36] bg-[#12161F]">
+        <div className="p-3.5 sm:p-4 border-b border-[#252B36] bg-[#12161F]">
           <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[#171C26] border border-[#252B36] flex items-center justify-center text-xs font-bold text-[#A78BFA] shadow-md">
+            <div className="w-8 h-8 rounded-lg bg-[#171C26] border border-[#252B36] flex items-center justify-center text-xs font-bold text-[#A78BFA] shadow-md shrink-0">
               {userName ? userName.charAt(0).toUpperCase() : 'U'}
             </div>
-            <div className="overflow-hidden">
+            <div className="overflow-hidden min-w-0">
               <div className="text-xs font-bold text-[#F1F5F9] truncate">{userName}</div>
-              <span className={`inline-block text-[9px] px-2 py-0.2 rounded-full font-bold border ${getRoleBadgeColor()}`}>
+              <span className={`inline-block text-[9px] px-2 py-0.5 rounded-full font-bold border ${getRoleBadgeColor()}`}>
                 {userRoleTitle}
               </span>
             </div>
           </div>
           {subtitle && (
-            <p className="text-[10px] text-[#94A3B8] font-mono mt-2 leading-tight">
+            <p className="text-[10px] text-[#94A3B8] font-mono mt-2 leading-tight truncate">
               {subtitle}
             </p>
           )}
         </div>
+
+        {/* Mobile Header Actions inside Drawer */}
+        {headerActions && (
+          <div className="md:hidden p-3 border-b border-[#252B36] bg-[#080A0F]/60">
+            {headerActions}
+          </div>
+        )}
 
         {/* Menu Items List */}
         <nav className="flex-1 overflow-y-auto p-3 space-y-1 scrollbar-thin scrollbar-thumb-[#171C26]">
@@ -145,10 +167,10 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                       setMobileMenuOpen(false);
                     }
                   }}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                  className={`w-full flex items-center justify-between px-3 py-2.5 min-h-[44px] rounded-xl text-xs font-semibold transition-all ${
                     isActive
                       ? 'sidebar-nav-active bg-[#171C26] text-[#F1F5F9] font-bold border-l-2 border-[#A78BFA] shadow-sm'
-                      : 'text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#12161F]'
+                      : 'text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#12161F] active:bg-[#171C26]'
                   }`}
                 >
                   <div className="flex items-center space-x-2.5 truncate">
@@ -158,7 +180,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                   <div className="flex items-center space-x-1.5">
                     {item.badge && (
                       <span
-                        className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full ${
+                        className={`text-[9px] font-mono px-1.5 py-0.5 rounded-full ${
                           isActive ? 'bg-[#202633] text-[#A78BFA] border border-[#A78BFA]/30 font-bold' : 'bg-[#12161F] text-[#94A3B8]'
                         }`}
                       >
@@ -175,7 +197,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
                 {/* Render Collapsible Children Submenu */}
                 {isCollapsible && isExpanded && item.childrenItems && (
-                  <div className="pl-4 pr-1 py-1 space-y-1 border-l border-[#252B36] ml-3">
+                  <div className="pl-3 pr-1 py-1 space-y-1 border-l border-[#252B36] ml-3">
                     {item.childrenItems.map((child) => {
                       const ChildIcon = child.icon || Sparkles;
                       const isChildActive = activeTab === child.id;
@@ -186,10 +208,10 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                             onSelectTab(child.id);
                             setMobileMenuOpen(false);
                           }}
-                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                          className={`w-full flex items-center justify-between px-2.5 py-2 min-h-[40px] rounded-lg text-[11px] font-semibold transition-all ${
                             isChildActive
                               ? 'sidebar-nav-active bg-[#171C26] text-[#F1F5F9] font-bold border-l-2 border-[#A78BFA]'
-                              : 'text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#12161F]'
+                              : 'text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#12161F] active:bg-[#171C26]'
                           }`}
                         >
                           <div className="flex items-center space-x-2 truncate">
@@ -207,12 +229,15 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         </nav>
 
         {/* Sidebar Footer Logout */}
-        <div className="p-3 border-t border-[#252B36] bg-[#0D1017]">
+        <div className="p-3 pb-safe border-t border-[#252B36] bg-[#0D1017]">
           <button
-            onClick={onLogout}
-            className="w-full flex items-center justify-center space-x-2 bg-[#12161F] hover:bg-rose-950/80 hover:text-white border border-[#252B36] text-[#94A3B8] py-2 rounded-xl text-xs font-bold transition-all btn-action"
+            onClick={() => {
+              setMobileMenuOpen(false);
+              onLogout();
+            }}
+            className="w-full min-h-[44px] flex items-center justify-center space-x-2 bg-[#12161F] hover:bg-rose-950/80 hover:text-white border border-[#252B36] hover:border-rose-800 text-[#94A3B8] py-2.5 rounded-xl text-xs font-bold transition-all btn-action active:scale-95"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="w-4 h-4 text-rose-400" />
             <span>Logout Portal</span>
           </button>
         </div>
@@ -229,7 +254,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       {/* MAIN CONTENT AREA */}
       <div className="flex-1 flex flex-col min-w-0 bg-[#080A0F]">
         {/* Top Desktop Header Bar */}
-        <header className="hidden md:flex bg-[#0D1017] border-b border-[#252B36] px-6 py-3.5 items-center justify-between z-30 sticky top-0">
+        <header className="hidden md:flex bg-[#0D1017] border-b border-[#252B36] px-6 py-3.5 items-center justify-between z-30 sticky top-0 shadow-md">
           <div className="flex items-center space-x-3">
             <span className={`text-xs font-bold px-3 py-1 rounded-full border ${getRoleBadgeColor()}`}>
               {portalRole} PORTAL
@@ -244,7 +269,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             {headerActions}
             <button
               onClick={onLogout}
-              className="flex items-center space-x-2 bg-[#12161F] hover:bg-rose-950/80 hover:text-white border border-[#252B36] text-[#94A3B8] px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all btn-action"
+              className="flex items-center space-x-2 bg-[#12161F] hover:bg-rose-950/80 hover:text-white border border-[#252B36] hover:border-rose-800 text-[#94A3B8] px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all btn-action"
             >
               <LogOut className="w-3.5 h-3.5 text-[#64748B]" />
               <span>Logout</span>
@@ -253,7 +278,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         </header>
 
         {/* Page Content Body */}
-        <main className="flex-1 p-4 md:p-6 overflow-y-auto min-w-0 bg-[#080A0F] text-[#94A3B8]">
+        <main className="flex-1 p-3 sm:p-4 md:p-6 pb-safe overflow-y-auto min-w-0 bg-[#080A0F] text-[#94A3B8]">
           {children}
         </main>
       </div>

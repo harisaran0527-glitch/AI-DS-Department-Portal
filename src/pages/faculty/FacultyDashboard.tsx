@@ -1910,8 +1910,114 @@ export const FacultyDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* ROSTER DISPLAY TABLE */}
-              <div className="overflow-x-auto rounded-xl border border-slate-800/80">
+              {/* ROSTER MOBILE CARDS (< md) */}
+              <div className="md:hidden space-y-3 font-mono">
+                {filteredMyStudents.length === 0 ? (
+                  <div className="py-8 text-center text-slate-500 font-mono text-xs">
+                    No students found matching current filters.
+                  </div>
+                ) : (
+                  filteredMyStudents.map((stu) => {
+                    const isSelected = selectedStudent?.id === stu.id;
+                    const regNo = stu.registerNo || (stu as any).register_no || '';
+                    const entryType = stu.entryType || (stu as any).entry_type || 'Regular';
+
+                    return (
+                      <div
+                        key={stu.id}
+                        onClick={() => handleSelectStudent(stu)}
+                        className={`bg-slate-950 border p-4 rounded-xl space-y-3 cursor-pointer transition-all shadow-sm ${
+                          isSelected ? 'border-sky-500 bg-sky-950/30' : 'border-slate-800 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <span className="text-sky-400 font-bold text-xs">{regNo}</span>
+                            <h4 className="text-white font-bold font-sans text-sm">{stu.name}</h4>
+                            <p className="text-slate-400 text-[11px] mt-0.5 truncate max-w-[220px]">
+                              {stu.collegeEmail || stu.email}
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end space-y-1 shrink-0">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              entryType === 'Lateral Entry'
+                                ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                                : 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                            }`}>
+                              {entryType}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              stu.isActive !== false
+                                ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                : 'bg-red-950 text-red-400 border border-red-800'
+                            }`}>
+                              {stu.isActive !== false ? 'Active' : 'Disabled'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-900">
+                          <span>Year {stu.year || assignedYear} • Sec {stu.section || assignedSection}</span>
+                          <span className="text-indigo-400 font-semibold">{stu.department || 'AI & DS'}</span>
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-900" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => handleViewStudent(stu)}
+                            className="flex-1 bg-cyan-600/20 hover:bg-cyan-600 border border-cyan-500/50 hover:text-white text-cyan-300 font-semibold py-1.5 px-2 rounded-lg text-xs inline-flex items-center justify-center space-x-1 cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>View</span>
+                          </button>
+                          <button
+                            onClick={() => handleOpenEditStudent(stu)}
+                            className="flex-1 bg-amber-600/20 hover:bg-amber-600 border border-amber-500/50 hover:text-white text-amber-300 font-semibold py-1.5 px-2 rounded-lg text-xs inline-flex items-center justify-center space-x-1 cursor-pointer"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            <span>Edit</span>
+                          </button>
+                          <button
+                            onClick={() => handleSelectStudent(stu)}
+                            className="flex-1 bg-sky-600/20 hover:bg-sky-600 border border-sky-500/50 hover:text-white text-sky-300 font-semibold py-1.5 px-2 rounded-lg text-xs inline-flex items-center justify-center space-x-1 cursor-pointer"
+                          >
+                            <UserCheck className="w-3.5 h-3.5" />
+                            <span>Manage</span>
+                          </button>
+
+                          {isClassCoordinator && (
+                            <>
+                              <button
+                                onClick={() => setResetStudentTarget(stu)}
+                                className="bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/50 text-indigo-300 hover:text-white p-1.5 rounded-lg text-xs cursor-pointer"
+                                title="Reset Password"
+                              >
+                                <Key className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleToggleStudentStatus(stu)}
+                                className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer"
+                              >
+                                {stu.isActive !== false ? 'Disable' : 'Enable'}
+                              </button>
+                              <button
+                                onClick={() => setDeleteStudentTarget(stu)}
+                                className="bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 hover:text-white p-1.5 rounded-lg text-xs cursor-pointer"
+                                title="Delete Student Account"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* ROSTER DISPLAY TABLE (hidden on mobile, visible md+) */}
+              <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-800/80">
                 <table className="w-full text-xs text-left">
                   <thead>
                     <tr className="bg-slate-950 text-slate-400 border-b border-slate-800 font-mono uppercase text-[11px] tracking-wider">
@@ -3222,8 +3328,117 @@ export const FacultyDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                {/* 4. EXACT CR ATTENDANCE ROSTER DATA TABLE */}
-                <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
+                {/* 4. ATTENDANCE ROSTER - MOBILE CARDS (< md) */}
+                <div className="md:hidden space-y-3 font-sans">
+                  {(() => {
+                    const list = students
+                      .filter((s) => {
+                        const isLat = (s.entryType === 'Lateral Entry' || (s as any).entry_type === 'Lateral Entry');
+                        return attGroup === 'LATERAL' ? isLat : !isLat;
+                      })
+                      .filter((s) => {
+                        if (!attSearch.trim()) return true;
+                        const q = attSearch.toLowerCase();
+                        return s.name.toLowerCase().includes(q) || s.registerNo.toLowerCase().includes(q);
+                      });
+
+                    if (list.length === 0) {
+                      return (
+                        <div className="py-8 text-center text-slate-500 font-mono text-xs">
+                          No {attGroup === 'LATERAL' ? 'Lateral Entry' : 'Regular'} students match your filter or roster selection.
+                        </div>
+                      );
+                    }
+
+                    return list.map((stu, idx) => {
+                      const currentStatus = attStudentStatuses[stu.id] || 'UNMARKED';
+                      const isSelected = selectedStudent?.id === stu.id;
+
+                      return (
+                        <div
+                          key={stu.id}
+                          className={`bg-slate-950 border p-4 rounded-xl space-y-3 transition-all shadow-sm ${
+                            isSelected ? 'border-indigo-500 bg-indigo-950/20' : 'border-slate-800'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center space-x-3">
+                              <span className="text-slate-500 font-mono text-xs font-bold w-5">{idx + 1}.</span>
+                              <div>
+                                <span className="font-mono font-bold text-cyan-400 text-xs tracking-wide">{stu.registerNo}</span>
+                                <h4 className="text-white font-bold text-sm leading-snug">{stu.name}</h4>
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  Year {stu.year} | Sec {stu.section}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div>
+                              {currentStatus === 'PRESENT' && (
+                                <span className="inline-flex items-center space-x-1 bg-emerald-950 border border-emerald-700 text-emerald-300 text-[10px] font-mono px-2 py-0.5 rounded-full font-bold">
+                                  <CheckCircle className="w-3 h-3 text-emerald-400" />
+                                  <span>PRESENT</span>
+                                </span>
+                              )}
+                              {currentStatus === 'ABSENT' && (
+                                <span className="inline-flex items-center space-x-1 bg-red-950 border border-red-700 text-red-300 text-[10px] font-mono px-2 py-0.5 rounded-full font-bold">
+                                  <XCircle className="w-3 h-3 text-red-400" />
+                                  <span>ABSENT</span>
+                                </span>
+                              )}
+                              {currentStatus === 'OD' && (
+                                <span className="inline-flex items-center space-x-1 bg-amber-950 border border-amber-700 text-amber-300 text-[10px] font-mono px-2 py-0.5 rounded-full font-bold">
+                                  <Star className="w-3 h-3 text-amber-400" />
+                                  <span>ON DUTY</span>
+                                </span>
+                              )}
+                              {(currentStatus === 'LEAVE' || currentStatus === 'ML') && (
+                                <span className="inline-flex items-center space-x-1 bg-sky-950 border border-sky-700 text-sky-300 text-[10px] font-mono px-2 py-0.5 rounded-full font-bold">
+                                  <FileText className="w-3 h-3 text-sky-400" />
+                                  <span>LEAVE</span>
+                                </span>
+                              )}
+                              {currentStatus === 'UNMARKED' && (
+                                <span className="inline-flex items-center space-x-1 bg-slate-900 border border-slate-800 text-slate-400 text-[10px] font-mono px-2 py-0.5 rounded-full font-semibold">
+                                  <span>UNMARKED</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Attendance Mark Action Buttons - Touch friendly */}
+                          <div className="grid grid-cols-4 gap-1.5 pt-1 border-t border-slate-900">
+                            {[
+                              { key: 'PRESENT', label: 'Present', color: 'bg-emerald-600 text-white shadow-emerald-900/50' },
+                              { key: 'ABSENT', label: 'Absent', color: 'bg-red-600 text-white shadow-red-900/50' },
+                              { key: 'OD', label: 'OD', color: 'bg-amber-600 text-white shadow-amber-900/50' },
+                              { key: 'LEAVE', label: 'Leave', color: 'bg-sky-600 text-white shadow-sky-900/50' }
+                            ].map((opt) => {
+                              const isActive = currentStatus === opt.key;
+                              return (
+                                <button
+                                  key={opt.key}
+                                  type="button"
+                                  onClick={() => setAttStudentStatuses({ ...attStudentStatuses, [stu.id]: opt.key })}
+                                  className={`py-2 px-1 rounded-xl text-xs font-bold font-mono transition-all text-center min-h-[40px] flex items-center justify-center ${
+                                    isActive
+                                      ? `${opt.color} shadow-md scale-[1.02]`
+                                      : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800'
+                                  }`}
+                                >
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+
+                {/* 4. EXACT CR ATTENDANCE ROSTER DATA TABLE (hidden on mobile, visible md+) */}
+                <div className="hidden md:block bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse font-sans text-xs">
                       <thead>
@@ -3424,7 +3639,67 @@ export const FacultyDashboard: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
+                {/* MOBILE MONTHLY SUMMARY CARDS (< md) */}
+                <div className="md:hidden space-y-3">
+                  {monthlySummaryList.length === 0 ? (
+                    <div className="p-8 text-center text-slate-500 font-mono text-xs bg-slate-950 rounded-xl border border-slate-800">
+                      {isSummaryLoading ? (
+                        <div className="flex items-center justify-center space-x-2 text-indigo-400">
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <span>Calculating monthly summary...</span>
+                        </div>
+                      ) : (
+                        'No attendance records logged yet for this section. Use Daily View or Monthly Bulk Import to log attendance.'
+                      )}
+                    </div>
+                  ) : (
+                    monthlySummaryList.map((stu: any, idx: number) => {
+                      const pct = typeof stu.percentage === 'number' ? stu.percentage : parseFloat(stu.percentage || '0');
+                      let badgeStyle = 'bg-emerald-950 text-emerald-300 border-emerald-800';
+                      if (pct < 65) badgeStyle = 'bg-red-950 text-red-300 border-red-800';
+                      else if (pct < 75) badgeStyle = 'bg-amber-950 text-amber-300 border-amber-800';
+
+                      return (
+                        <div key={stu.studentId || idx} className="bg-slate-950 border border-slate-800/80 rounded-xl p-3.5 space-y-2.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="font-bold text-white text-sm truncate">{stu.studentName}</div>
+                              <div className="font-mono text-cyan-400 text-xs font-bold mt-0.5">{stu.registerNo}</div>
+                            </div>
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full font-bold text-xs border ${badgeStyle} shrink-0`}>
+                              {pct.toFixed(1)}%
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-5 gap-1.5 text-center font-mono text-[10px] pt-1 border-t border-slate-900">
+                            <div className="bg-slate-900/60 p-1.5 rounded">
+                              <span className="text-slate-500 block text-[9px]">Total</span>
+                              <span className="text-white font-bold">{stu.totalWorkingDays || 0}</span>
+                            </div>
+                            <div className="bg-emerald-950/40 p-1.5 rounded">
+                              <span className="text-emerald-500 block text-[9px]">Pres</span>
+                              <span className="text-emerald-300 font-bold">{stu.presentDays || 0}</span>
+                            </div>
+                            <div className="bg-red-950/40 p-1.5 rounded">
+                              <span className="text-red-500 block text-[9px]">Abs</span>
+                              <span className="text-red-300 font-bold">{stu.absentDays || 0}</span>
+                            </div>
+                            <div className="bg-amber-950/40 p-1.5 rounded">
+                              <span className="text-amber-500 block text-[9px]">OD</span>
+                              <span className="text-amber-300 font-bold">{stu.odDays || 0}</span>
+                            </div>
+                            <div className="bg-sky-950/40 p-1.5 rounded">
+                              <span className="text-sky-500 block text-[9px]">ML</span>
+                              <span className="text-sky-300 font-bold">{stu.mlDays || 0}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* DESKTOP MONTHLY SUMMARY TABLE (>= md) */}
+                <div className="hidden md:block bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
                   <div className="overflow-x-auto">
                     <table className="w-full text-left font-sans text-xs">
                       <thead>

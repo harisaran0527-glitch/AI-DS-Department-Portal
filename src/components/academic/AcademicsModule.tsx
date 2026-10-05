@@ -526,30 +526,65 @@ export const AcademicsModule: React.FC<AcademicsModuleProps> = ({
               No students found in current assignment roster.
             </div>
           ) : (
-            <div className="overflow-x-auto border border-slate-800 rounded-xl">
-              <table className="w-full text-xs text-left text-slate-300 font-mono">
-                <thead className="bg-slate-950 text-cyan-400 border-b border-slate-800">
-                  <tr>
-                    <th className="p-3">Register No</th>
-                    <th className="p-3">Student Name</th>
-                    <th className="p-3">Year / Section</th>
-                    <th className="p-3">CGPA</th>
-                    <th className="p-3">Overall Department Score</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800">
-                  {students.map((s) => (
-                    <tr key={s.id} className="hover:bg-slate-800/50">
-                      <td className="p-3 font-bold text-cyan-300">{s.register_no || s.registerNo}</td>
-                      <td className="p-3 text-white">{s.name}</td>
-                      <td className="p-3">{s.year} - Sec {s.section}</td>
-                      <td className="p-3 font-bold text-amber-300">{s.cgpa ? Number(s.cgpa).toFixed(2) : 'N/A'}</td>
-                      <td className="p-3 font-bold text-emerald-400">{s.overall_score || s.overallScore || 0}/100</td>
+            <>
+              {/* MOBILE CARDS (< md) */}
+              <div className="md:hidden space-y-3 font-mono">
+                {students.map((s) => (
+                  <div key={s.id} className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-2.5 shadow-sm">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="text-cyan-300 font-bold text-xs">{s.register_no || s.registerNo}</span>
+                        <h4 className="text-white font-bold font-sans text-sm">{s.name}</h4>
+                      </div>
+                      <span className="bg-slate-900 border border-slate-800 text-slate-400 text-[10px] px-2 py-0.5 rounded font-bold">
+                        {s.year} • Sec {s.section}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-800/80">
+                      <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+                        <span className="text-slate-400 text-[10px] block">CGPA</span>
+                        <span className="text-amber-300 font-bold text-sm">
+                          {s.cgpa ? Number(s.cgpa).toFixed(2) : 'N/A'}
+                        </span>
+                      </div>
+                      <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800">
+                        <span className="text-slate-400 text-[10px] block">DEPT SCORE</span>
+                        <span className="text-emerald-400 font-bold text-sm">
+                          {s.overall_score || s.overallScore || 0}/100
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* TABLE (hidden on mobile, visible md+) */}
+              <div className="hidden md:block overflow-x-auto border border-slate-800 rounded-xl">
+                <table className="w-full text-xs text-left text-slate-300 font-mono">
+                  <thead className="bg-slate-950 text-cyan-400 border-b border-slate-800">
+                    <tr>
+                      <th className="p-3">Register No</th>
+                      <th className="p-3">Student Name</th>
+                      <th className="p-3">Year / Section</th>
+                      <th className="p-3">CGPA</th>
+                      <th className="p-3">Overall Department Score</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {students.map((s) => (
+                      <tr key={s.id} className="hover:bg-slate-800/50">
+                        <td className="p-3 font-bold text-cyan-300">{s.register_no || s.registerNo}</td>
+                        <td className="p-3 text-white">{s.name}</td>
+                        <td className="p-3">{s.year} - Sec {s.section}</td>
+                        <td className="p-3 font-bold text-amber-300">{s.cgpa ? Number(s.cgpa).toFixed(2) : 'N/A'}</td>
+                        <td className="p-3 font-bold text-emerald-400">{s.overall_score || s.overallScore || 0}/100</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       )}

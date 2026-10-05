@@ -109,10 +109,10 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(63,75,218,0.4),rgba(27,32,95,0.95)_75%)] pointer-events-none z-0" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_25%,rgba(34,211,238,0.15),transparent_60%)] pointer-events-none z-0" />
 
-      {/* CENTERED 3D BOOK CONTAINER WITH PERSPECTIVE */}
-      <div className="relative w-full max-w-[700px] h-[560px] flex items-center justify-center [perspective:1400px]">
+      {/* CENTERED RESPONSIVE CONTAINER WITH PERSPECTIVE */}
+      <div className="relative w-full max-w-[440px] md:max-w-[700px] min-h-[480px] md:h-[560px] flex items-center justify-center md:[perspective:1400px] px-2 sm:px-0">
 
-        {/* 3D BOOK COMPOSITION */}
+        {/* 3D BOOK COMPOSITION (DESKTOP) / RESPONSIVE CARD (MOBILE) */}
         <motion.div 
           initial={{ rotateX: 15, rotateY: -10, scale: 0.9, opacity: 0 }}
           animate={{ 
@@ -122,17 +122,17 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
             opacity: 1 
           }}
           transition={{ duration: 0.8, ease: 'easeOut' }}
-          className="relative w-[620px] h-[480px] bg-[#1B205F] border-2 border-white/14 rounded-2xl shadow-2xl flex items-center justify-between p-3 sm:p-4 [transform-style:preserve-3d]"
+          className="relative w-full md:w-[640px] min-h-[460px] md:h-[490px] bg-[#1B205F] border-2 border-white/14 rounded-2xl shadow-2xl flex flex-col md:flex-row items-center justify-center md:justify-between p-3 sm:p-4 [transform-style:preserve-3d]"
         >
-          {/* Central Book Spine */}
-          <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-8 bg-slate-950 border-x border-slate-800 shadow-2xl z-30 flex items-center justify-center">
+          {/* Central Book Spine (Hidden on small mobile, visible on md+) */}
+          <div className="hidden md:flex absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-8 bg-slate-950 border-x border-slate-800 shadow-2xl z-30 items-center justify-center">
             <div className="w-1 h-full bg-cyan-500/30" />
             {/* Bookmark Ribbon */}
             <div className="absolute bottom-0 w-3 h-10 bg-sky-600 rounded-b shadow-md" />
           </div>
 
-          {/* LEFT PAGE STACK (OPEN BOOK) */}
-          <div className="w-[48%] h-full bg-[#0a1120] border border-cyan-900/50 rounded-l-xl p-4 shadow-inner relative flex flex-col justify-between overflow-hidden">
+          {/* LEFT PAGE STACK (OPEN BOOK - Desktop Only) */}
+          <div className="hidden md:flex w-[48%] h-full bg-[#0a1120] border border-cyan-900/50 rounded-l-xl p-4 shadow-inner relative flex-col justify-between overflow-hidden">
             <div className="absolute inset-3 border border-cyan-500/20 rounded-lg p-3 text-[9px] font-mono text-cyan-300/70 leading-relaxed overflow-hidden">
               <div className="font-extrabold text-center border-b border-cyan-500/30 mb-2 pb-1 text-cyan-200 tracking-widest">
                 AVSEC SALEM AI & DS
@@ -145,20 +145,14 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
             </div>
           </div>
 
-          {/* RIGHT PAGE STACK / REVEALED LOGIN FORM PAGE */}
-          <div className="w-[48%] h-full bg-[#0a1120] border border-cyan-900/50 rounded-r-xl p-4 shadow-inner relative flex flex-col items-center justify-center overflow-hidden">
+          {/* RIGHT PAGE STACK / REVEALED LOGIN FORM PAGE (Full width on mobile, 48% on desktop) */}
+          <div className="w-full md:w-[48%] min-h-[430px] md:h-full bg-[#0a1120] border border-cyan-900/50 rounded-xl md:rounded-r-xl md:rounded-l-none p-4 sm:p-5 shadow-inner relative flex flex-col items-center justify-center overflow-hidden">
             
             {/* Background Holographic Grid Accent */}
             <div className="absolute inset-0 bg-[linear-gradient(to_right,#082f4915_1px,transparent_1px),linear-gradient(to_bottom,#082f4915_1px,transparent_1px)] bg-[size:14px_14px] pointer-events-none" />
 
-            {/* PHASE 4: REVEALED LOGIN FORM PRINTED ON THE OPEN BOOK PAGE */}
-            {animPhase >= 4 && authStatus !== 'closing' && (
-              <motion.div 
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6 }}
-                className="w-full flex flex-col items-center space-y-3 relative z-20"
-              >
+            {/* REVEALED LOGIN FORM */}
+            <div className="w-full flex flex-col items-center space-y-3 relative z-20">
                 {/* SUCCESS REVEAL DISPLAY */}
                 {authStatus === 'success' ? (
                   <motion.div 
@@ -286,8 +280,7 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
                     </button>
                   </form>
                 )}
-              </motion.div>
-            )}
+            </div>
           </div>
 
           {/* SEQUENTIAL 3D FLIPPING PAGES (Phases 2 & 3) */}

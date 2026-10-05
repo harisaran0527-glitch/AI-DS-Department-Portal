@@ -255,45 +255,95 @@ export const HODDashboard: React.FC = () => {
                   No uploaded students found in database matching current filters.
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left">
-                    <thead>
-                      <tr className="text-slate-400 border-b border-slate-800 font-mono uppercase">
-                        <th className="py-3 px-3">Year</th>
-                        <th className="py-3 px-3">Reg No</th>
-                        <th className="py-3 px-3">Student Name</th>
-                        <th className="py-3 px-3">Faculty / Staff</th>
-                        <th className="py-3 px-3">Section</th>
-                        <th className="py-3 px-3">College Mail</th>
-                        <th className="py-3 px-3 text-center">CGPA</th>
-                        <th className="py-3 px-3 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800">
-                      {filteredStudents.map((stu: any) => (
-                        <tr key={stu.id} className="hover:bg-slate-950 font-mono">
-                          <td className="py-3 px-3 text-slate-300">{stu.year}</td>
-                          <td className="py-3 px-3 font-bold text-amber-400">{stu.registerNo}</td>
-                          <td className="py-3 px-3 font-bold text-white font-sans">{stu.name}</td>
-                          <td className="py-3 px-3 text-indigo-300 font-sans font-medium text-[11px]">{stu.facultyName || stu.faculty_name || stu.classCoordinatorName || 'Unassigned'}</td>
-                          <td className="py-3 px-3 text-slate-300">Sec {stu.section}</td>
-                          <td className="py-3 px-3 text-slate-400">{stu.email}</td>
-                          <td className="py-3 px-3 text-center font-bold text-emerald-400">
-                            {(stu.cgpa !== null && stu.cgpa !== undefined && stu.cgpa !== '') ? Number(stu.cgpa).toFixed(2) : 'N/A'}
-                          </td>
-                          <td className="py-3 px-3 text-right font-sans">
-                            <button
-                              onClick={() => handleOpenHOD360(stu)}
-                              className="bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/50 text-indigo-300 hover:text-white px-2.5 py-1 rounded-lg text-xs font-semibold"
-                            >
-                              360° Profile
-                            </button>
-                          </td>
+                <>
+                  {/* Desktop Table View */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-xs text-left">
+                      <thead>
+                        <tr className="text-slate-400 border-b border-slate-800 font-mono uppercase">
+                          <th className="py-3 px-3">Year</th>
+                          <th className="py-3 px-3">Reg No</th>
+                          <th className="py-3 px-3">Student Name</th>
+                          <th className="py-3 px-3">Faculty / Staff</th>
+                          <th className="py-3 px-3">Section</th>
+                          <th className="py-3 px-3">College Mail</th>
+                          <th className="py-3 px-3 text-center">CGPA</th>
+                          <th className="py-3 px-3 text-right">Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {filteredStudents.map((stu: any) => (
+                          <tr key={stu.id} className="hover:bg-slate-950 font-mono">
+                            <td className="py-3 px-3 text-slate-300">{stu.year}</td>
+                            <td className="py-3 px-3 font-bold text-amber-400">{stu.registerNo}</td>
+                            <td className="py-3 px-3 font-bold text-white font-sans">{stu.name}</td>
+                            <td className="py-3 px-3 text-indigo-300 font-sans font-medium text-[11px]">{stu.facultyName || stu.faculty_name || stu.classCoordinatorName || 'Unassigned'}</td>
+                            <td className="py-3 px-3 text-slate-300">Sec {stu.section}</td>
+                            <td className="py-3 px-3 text-slate-400">{stu.email}</td>
+                            <td className="py-3 px-3 text-center font-bold text-emerald-400">
+                              {(stu.cgpa !== null && stu.cgpa !== undefined && stu.cgpa !== '') ? Number(stu.cgpa).toFixed(2) : 'N/A'}
+                            </td>
+                            <td className="py-3 px-3 text-right font-sans">
+                              <button
+                                onClick={() => handleOpenHOD360(stu)}
+                                className="bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/50 text-indigo-300 hover:text-white px-2.5 py-1 rounded-lg text-xs font-semibold"
+                              >
+                                360° Profile
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile Card View */}
+                  <div className="md:hidden space-y-3">
+                    {filteredStudents.map((stu: any) => (
+                      <div
+                        key={stu.id}
+                        className="bg-slate-950 border border-slate-800/80 rounded-xl p-3.5 space-y-2.5 shadow-sm"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="font-bold text-white text-sm truncate">{stu.name}</div>
+                            <div className="flex items-center gap-2 mt-0.5 text-xs">
+                              <span className="font-mono font-bold text-amber-400">{stu.registerNo}</span>
+                              <span className="text-slate-500">•</span>
+                              <span className="text-slate-300">{stu.year} Sec {stu.section}</span>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="text-[10px] text-slate-500 block uppercase font-mono">CGPA</span>
+                            <span className="font-mono font-bold text-emerald-400 text-sm">
+                              {(stu.cgpa !== null && stu.cgpa !== undefined && stu.cgpa !== '') ? Number(stu.cgpa).toFixed(2) : 'N/A'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-xs text-slate-400 space-y-0.5 pt-1 border-t border-slate-900">
+                          <div className="flex justify-between items-center text-[11px]">
+                            <span className="text-slate-500">Coordinator:</span>
+                            <span className="text-indigo-300 font-medium truncate max-w-[180px]">
+                              {stu.facultyName || stu.faculty_name || stu.classCoordinatorName || 'Unassigned'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center text-[11px]">
+                            <span className="text-slate-500">Email:</span>
+                            <span className="text-slate-400 font-mono truncate max-w-[200px]">{stu.email || '—'}</span>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => handleOpenHOD360(stu)}
+                          className="w-full mt-2 bg-indigo-600/25 hover:bg-indigo-600 active:bg-indigo-700 border border-indigo-500/50 text-indigo-200 hover:text-white py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 touch-target transition-colors"
+                        >
+                          View 360° Profile
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -302,28 +352,28 @@ export const HODDashboard: React.FC = () => {
 
       {/* HOD 360 INSPECTION & PROOF MANAGEMENT MODAL */}
       {selectedHODStudent && hod360Data && (
-        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-4xl rounded-2xl p-6 shadow-2xl space-y-6 max-h-[92vh] overflow-y-auto text-xs">
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-4xl rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-6 max-h-[92vh] overflow-y-auto text-xs">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <div>
-                <h3 className="text-lg font-bold text-white flex items-center space-x-2">
+                <h3 className="text-base sm:text-lg font-bold text-white flex flex-wrap items-center gap-2">
                   <span>HOD Department 360° Student Profile</span>
                   <span className="bg-amber-950 border border-amber-700 text-amber-300 text-[10px] font-mono px-2.5 py-0.5 rounded-full font-bold">
                     READ-ONLY VIEW
                   </span>
                 </h3>
-                <p className="text-slate-400 font-mono">Student: <strong className="text-white">{selectedHODStudent.name}</strong> | Reg No: {selectedHODStudent.registerNo} | {selectedHODStudent.year} Section {selectedHODStudent.section}</p>
+                <p className="text-slate-400 font-mono text-[11px] sm:text-xs mt-1">Student: <strong className="text-white">{selectedHODStudent.name}</strong> | Reg No: {selectedHODStudent.registerNo} | {selectedHODStudent.year} Section {selectedHODStudent.section}</p>
               </div>
-              <button onClick={() => setSelectedHODStudent(null)} className="bg-slate-800 text-slate-300 p-1 rounded-lg">✕</button>
+              <button onClick={() => setSelectedHODStudent(null)} className="bg-slate-800 text-slate-300 p-2 rounded-lg touch-target">✕</button>
             </div>
 
             {/* 11 Category Tabs inside Modal */}
-            <div className="flex items-center space-x-2 overflow-x-auto pb-2 border-b border-slate-800 font-semibold">
+            <div className="flex items-center space-x-2 overflow-x-auto pb-2 border-b border-slate-800 font-semibold no-scrollbar">
               {['academics', 'arrears', 'skilledge', 'nptel', 'attendance', 'discipline', 'certificates', 'participation', 'leetcode', 'projects', 'achievements'].map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setHodModalTab(cat as any)}
-                  className={`px-3 py-1.5 rounded-lg capitalize ${hodModalTab === cat ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-950 text-slate-400'}`}
+                  className={`px-3 py-2 rounded-lg capitalize whitespace-nowrap touch-target text-xs ${hodModalTab === cat ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-950 text-slate-400'}`}
                 >
                   {cat}
                 </button>
