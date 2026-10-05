@@ -17,13 +17,9 @@ export const SimpleAdminLogin: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [authenticatedName, setAuthenticatedName] = useState('');
 
-  // Load remembered admin email on mount
+  // Clean up any stale remembered emails on mount to guarantee fresh blank fields
   useEffect(() => {
-    const saved = localStorage.getItem('remembered_email_admin');
-    if (saved) {
-      setIdentifier(saved);
-      setRememberMe(true);
-    }
+    localStorage.removeItem('remembered_email_admin');
   }, []);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {

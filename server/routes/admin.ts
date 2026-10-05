@@ -239,22 +239,83 @@ router.delete('/students/:id', async (req: AuthRequest, res: Response) => {
 // POST Reset Faculty Portal Password
 router.post('/faculty/:id/reset-password', async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string;
-  const { newPassword } = req.body;
+  const targetPassword = req.body.newPassword || req.body.password || req.body.new_password;
 
-  if (!newPassword || newPassword.length < 6) {
+  if (!targetPassword || String(targetPassword).length < 6) {
     return res.status(400).json({ error: 'New password must be at least 6 characters.' });
   }
 
-  const targetUser = await db.getUserById(id);
-  if (!targetUser || targetUser.role !== 'FACULTY') {
+  let targetUser = await db.getUserById(id);
+  if (!targetUser) {
+    targetUser = await db.findUserByIdentifier(id, 'FACULTY');
+  }
+  if (!targetUser) {
+    targetUser = await db.findUserByIdentifier(id);
+  }
+
+  if (!targetUser || targetUser.role.trim().toUpperCase() !== 'FACULTY') {
     return res.status(404).json({ error: 'Faculty account not found.' });
   }
 
-  const hash = await bcrypt.hash(newPassword, 10);
-  await db.updateUserPassword(id, hash);
+  const hash = await bcrypt.hash(String(targetPassword), 10);
+  await db.updateUserPassword(targetUser.id, hash);
   await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'RESET_FACULTY_PASSWORD', `FACULTY:${targetUser.email}`);
 
-  return res.json({ message: 'Faculty portal password reset successfully.' });
+  return res.json({ message: `Faculty portal password reset successfully for ${targetUser.name}.` });
+});
+
+// POST Reset Generic User Password by Admin
+router.post('/users/:id/reset-password', async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
+  const targetPassword = req.body.newPassword || req.body.password || req.body.new_password;
+
+  if (!targetPassword || String(targetPassword).length < 6) {
+    return res.status(400).json({ error: 'New password must be at least 6 characters.' });
+  }
+
+  let targetUser = await db.getUserById(id);
+  if (!targetUser) {
+    targetUser = await db.findUserByIdentifier(id);
+  }
+
+  if (!targetUser) {
+    return res.status(404).json({ error: 'User account not found.' });
+  }
+
+  const hash = await bcrypt.hash(String(targetPassword), 10);
+  await db.updateUserPassword(targetUser.id, hash);
+  await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'RESET_USER_PASSWORD', `${targetUser.role}:${targetUser.email}`);
+
+  return res.json({ message: `Password reset successfully for ${targetUser.name} (${targetUser.role}).` });
+});
+
+// POST Reset Student Password by Admin
+router.post('/students/:id/reset-password', async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
+  const targetPassword = req.body.newPassword || req.body.password || req.body.new_password;
+
+  if (!targetPassword || String(targetPassword).length < 6) {
+    return res.status(400).json({ error: 'New password must be at least 6 characters.' });
+  }
+
+  let targetStudent = await db.getStudentById(id);
+  let targetUser = await db.getUserById(id);
+  if (!targetUser && targetStudent) {
+    targetUser = await db.findUserByIdentifier(targetStudent.register_no, 'STUDENT');
+  }
+  if (!targetUser) {
+    targetUser = await db.findUserByIdentifier(id);
+  }
+
+  if (!targetUser) {
+    return res.status(404).json({ error: 'Student user account not found.' });
+  }
+
+  const hash = await bcrypt.hash(String(targetPassword), 10);
+  await db.updateUserPassword(targetUser.id, hash);
+  await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'RESET_STUDENT_PASSWORD', `STUDENT:${targetUser.email || targetUser.identifier}`);
+
+  return res.json({ message: 'Student portal password reset successfully.' });
 });
 
 // PUT Toggle Faculty Active Status
@@ -509,19 +570,26 @@ router.post('/hod/:id/status', async (req: AuthRequest, res: Response) => {
 // POST Reset HOD Portal Password
 router.post('/hod/:id/reset-password', async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string;
-  const { password } = req.body;
+  const targetPassword = req.body.password || req.body.newPassword || req.body.new_password;
 
-  if (!password || password.length < 6) {
+  if (!targetPassword || String(targetPassword).length < 6) {
     return res.status(400).json({ error: 'Portal password must be at least 6 characters long.' });
   }
 
-  const targetHOD = await db.getUserById(id);
-  if (!targetHOD || targetHOD.role !== 'HOD') {
+  let targetHOD = await db.getUserById(id);
+  if (!targetHOD) {
+    targetHOD = await db.findUserByIdentifier(id, 'HOD');
+  }
+  if (!targetHOD) {
+    targetHOD = await db.findUserByIdentifier(id);
+  }
+
+  if (!targetHOD || targetHOD.role.trim().toUpperCase() !== 'HOD') {
     return res.status(404).json({ error: 'HOD account not found.' });
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
-  await db.updateUserPassword(id, passwordHash);
+  const passwordHash = await bcrypt.hash(String(targetPassword), 10);
+  await db.updateUserPassword(targetHOD.id, passwordHash);
   await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'RESET_HOD_PASSWORD', `HOD:${targetHOD.email}`);
 
   return res.json({ message: `Portal password reset successfully for HOD ${targetHOD.name}.` });

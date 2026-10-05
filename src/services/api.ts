@@ -33,6 +33,10 @@ export function clearSessionAuth(): void {
   if (typeof localStorage !== 'undefined') {
     localStorage.removeItem('aids_session_token');
     localStorage.removeItem('aids_token');
+    localStorage.removeItem('remembered_email_admin');
+    localStorage.removeItem('remembered_email_hod');
+    localStorage.removeItem('remembered_email_faculty');
+    localStorage.removeItem('remembered_email_student');
   }
   if (typeof sessionStorage !== 'undefined') {
     sessionStorage.removeItem('aids_session_token');
@@ -292,7 +296,7 @@ export const API = {
   resetFacultyPassword: async (id: string, newPassword: string) => {
     return request<{ message: string }>(`/admin/faculty/${id}/reset-password`, {
       method: 'POST',
-      body: JSON.stringify({ newPassword })
+      body: JSON.stringify({ newPassword, password: newPassword })
     });
   },
 
@@ -399,7 +403,7 @@ export const API = {
   resetHODPassword: async (id: string, password: string) => {
     return request<{ message: string }>(`/admin/hod/${id}/reset-password`, {
       method: 'POST',
-      body: JSON.stringify({ password })
+      body: JSON.stringify({ password, newPassword: password })
     });
   },
 

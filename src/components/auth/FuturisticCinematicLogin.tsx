@@ -55,7 +55,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
+  const [rememberMe, setRememberMe] = useState(false);
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
 
   // Field Focus States
@@ -66,13 +66,9 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
   const [errorMessage, setErrorMessage] = useState('');
   const [authenticatedName, setAuthenticatedName] = useState('');
 
-  // Pre-fill remembered email on mount
+  // Clean up any stale remembered emails on mount to guarantee fresh blank fields
   useEffect(() => {
-    const saved = localStorage.getItem(`remembered_email_${portalRole.toLowerCase()}`);
-    if (saved) {
-      setIdentifier(saved);
-      setRememberMe(true);
-    }
+    localStorage.removeItem(`remembered_email_${portalRole.toLowerCase()}`);
   }, [portalRole]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
