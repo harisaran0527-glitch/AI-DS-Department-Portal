@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { API } from '../../services/api';
+import { API, getValidSessionToken } from '../../services/api';
 import type { Role, UserSession } from '../../types';
 import { ShieldAlert, LogOut, LayoutDashboard } from 'lucide-react';
 
@@ -21,13 +21,20 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   useEffect(() => {
     let isMounted = true;
+    const token = getValidSessionToken();
+    if (!token) {
+      if (isMounted) setStatus('unauthorized');
+      return;
+    }
 
     API.getMe()
       .then((res) => {
         if (!isMounted) return;
         if (res && res.user) {
           setSession(res.user);
-          if (allowedRoles.includes(res.user.role)) {
+          const userRole = String(res.user.role || '').toUpperCase();
+          const normalizedAllowed = allowedRoles.map(r => String(r).toUpperCase());
+          if (normalizedAllowed.includes(userRole)) {
             setStatus('authorized');
           } else {
             setStatus('forbidden');
@@ -46,6 +53,12 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     };
   }, [allowedRoles]);
 
+  useEffect(() => {
+    if (status === 'unauthorized') {
+      navigate(loginRoute, { replace: true });
+    }
+  }, [status, loginRoute, navigate]);
+
   if (status === 'checking') {
     return (
       <div className="min-h-screen bg-[#080A0F] text-[#F1F5F9] flex flex-col items-center justify-center font-sans space-y-3">
@@ -56,8 +69,6 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   }
 
   if (status === 'unauthorized') {
-    // Redirect unauthenticated user to the specific role login page
-    navigate(loginRoute, { replace: true });
     return null;
   }
 

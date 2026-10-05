@@ -25,8 +25,31 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
   if (!authHeader && req.headers.Authorization && typeof req.headers.Authorization === 'string') {
     authHeader = req.headers.Authorization;
   }
-  const tokenFromHeader = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : undefined;
-  const token = tokenFromHeader || req.cookies?.aids_session_token;
+
+  let tokenFromHeader: string | undefined;
+  if (authHeader && typeof authHeader === 'string') {
+    const parts = authHeader.trim().split(/\s+/);
+    if (parts.length === 2 && parts[0].toLowerCase() === 'bearer') {
+      const candidate = parts[1].trim();
+      if (candidate && candidate !== 'null' && candidate !== 'undefined' && candidate !== '""' && candidate !== "''") {
+        tokenFromHeader = candidate;
+      }
+    }
+  }
+
+  // Check cookie as secondary option if Bearer header was not provided
+  let tokenFromCookie: string | undefined;
+  const cookieCandidate = req.cookies?.aids_session_token;
+  if (cookieCandidate && typeof cookieCandidate === 'string') {
+    const trimmed = cookieCandidate.trim();
+    if (trimmed && trimmed !== 'null' && trimmed !== 'undefined' && trimmed !== '""' && trimmed !== "''") {
+      tokenFromCookie = trimmed;
+    }
+  }
+
+  // Priority: 1. Authorization: Bearer token (explicit in request header)
+  //           2. HttpOnly cookie aids_session_token
+  const token = tokenFromHeader || tokenFromCookie;
 
   if (!token) {
     return res.status(401).json({ error: 'Unauthorized: Missing authentication session token.' });
@@ -34,6 +57,9 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
+    if (decoded && decoded.role) {
+      decoded.role = String(decoded.role).trim().toUpperCase();
+    }
     req.user = decoded;
     next();
   } catch {
@@ -44,7 +70,7 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
 export function requireRole(...roles: string[]) {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      return res.status(401).json({ error: 'Unauthorized: Missing authentication session token.' });
     }
 
     const userRole = (req.user.role || '').toString().trim().toUpperCase();

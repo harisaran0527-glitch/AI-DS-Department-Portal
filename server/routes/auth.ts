@@ -55,15 +55,22 @@ router.post('/login', async (req, res) => {
     ipAttempts[clientIp] = currIp;
   };
 
-  let match = await db.findUserByIdentifier(cleanId, role);
+  const cleanRole = String(role || '').trim().toUpperCase();
+  let match = await db.findUserByIdentifier(cleanId, cleanRole);
 
   if (!match) {
     recordFailedAttempt();
-    return res.status(401).json({ error: 'Invalid credentials. Please check your identifier or portal password.' });
+    return res.status(401).json({
+      error: 'Invalid credentials. Please check your identifier or portal password.',
+      message: 'Invalid credentials'
+    });
   }
 
   if (!match.is_active) {
-    return res.status(401).json({ error: 'Account is currently deactivated. Please contact your department administrator.' });
+    return res.status(401).json({
+      error: 'Account is currently deactivated. Please contact your department administrator.',
+      message: 'Account is currently deactivated'
+    });
   }
 
   let isPasswordValid = await bcrypt.compare(password, match.password_hash);
@@ -73,22 +80,27 @@ router.post('/login', async (req, res) => {
 
   if (!isPasswordValid) {
     recordFailedAttempt();
-    return res.status(401).json({ error: 'Invalid credentials. Please check your identifier or portal password.' });
+    return res.status(401).json({
+      error: 'Invalid credentials. Please check your identifier or portal password.',
+      message: 'Invalid credentials'
+    });
   }
 
   delete failedAttempts[cleanId];
   if (ipAttempts[clientIp]) delete ipAttempts[clientIp];
+
+  const normalizedRole = match.role.trim().toUpperCase() as 'STUDENT' | 'FACULTY' | 'HOD' | 'ADMIN';
 
   // Token payload contains ONLY necessary identity claim — ZERO password hash exposed!
   const tokenPayload = {
     id: match.id,
     email: match.email,
     name: match.name,
-    role: match.role,
+    role: normalizedRole,
     assignedYear: match.year,
     assignedSection: match.section,
-    registerNo: match.role === 'STUDENT' ? match.identifier : undefined,
-    studentId: match.role === 'STUDENT' ? match.id : undefined
+    registerNo: normalizedRole === 'STUDENT' ? match.identifier : undefined,
+    studentId: normalizedRole === 'STUDENT' ? match.id : undefined
   };
 
   const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '8h' });
@@ -103,7 +115,7 @@ router.post('/login', async (req, res) => {
     maxAge: 8 * 3600 * 1000
   });
 
-  await db.logAudit(match.id, match.email, match.role, 'LOGIN_SUCCESS', 'AUTH_PORTAL');
+  await db.logAudit(match.id, match.email, normalizedRole, 'LOGIN_SUCCESS', 'AUTH_PORTAL');
 
   return res.json({
     message: 'Login successful',
@@ -112,11 +124,32 @@ router.post('/login', async (req, res) => {
   });
 });
 
-router.post('/logout', authenticateToken, async (req: AuthRequest, res: Response) => {
-  if (req.user) {
-    await db.logAudit(req.user.id, req.user.email, req.user.role, 'LOGOUT', 'AUTH_PORTAL');
-  }
-  res.clearCookie('aids_session_token');
+router.post('/logout', async (req: AuthRequest, res: Response) => {
+  try {
+    let authHeader = req.headers.authorization || req.headers.Authorization;
+    let token: string | undefined;
+    if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1]?.trim();
+    }
+    if (!token) {
+      token = req.cookies?.aids_session_token;
+    }
+    if (token && token !== 'null' && token !== 'undefined' && token !== '""') {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET) as any;
+        if (decoded && decoded.id) {
+          await db.logAudit(decoded.id, decoded.email, decoded.role, 'LOGOUT', 'AUTH_PORTAL');
+        }
+      } catch {}
+    }
+  } catch {}
+
+  const isSecure = process.env.NODE_ENV === 'production' || Boolean(req.secure) || req.headers['x-forwarded-proto'] === 'https';
+  res.clearCookie('aids_session_token', {
+    httpOnly: true,
+    secure: Boolean(isSecure),
+    sameSite: isSecure ? 'none' : 'lax'
+  });
   return res.json({ message: 'Logout successful' });
 });
 

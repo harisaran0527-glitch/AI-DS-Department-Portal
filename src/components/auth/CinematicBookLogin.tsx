@@ -82,13 +82,16 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
         setAuthenticatedName(res.user.name);
         setAuthStatus('success');
 
+        const redirectTarget = sessionStorage.getItem('redirect_after_login');
+        sessionStorage.removeItem('redirect_after_login');
+
         // Post-Login Book Reveal Transition (1.2s)
         setTimeout(() => {
           setAuthStatus('closing');
         }, 1000);
 
         setTimeout(() => {
-          navigate(destinationRoute);
+          navigate(redirectTarget || destinationRoute);
         }, 2200);
       }
     } catch (err: any) {

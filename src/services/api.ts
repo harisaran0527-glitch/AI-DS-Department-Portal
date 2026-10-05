@@ -16,6 +16,30 @@ export const API_BASE = getApiBaseUrl();
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export function getValidSessionToken(): string | null {
+  if (typeof localStorage === 'undefined') return null;
+  const token = localStorage.getItem('aids_session_token') || localStorage.getItem('aids_token');
+  if (!token) return null;
+  const trimmed = token.trim();
+  if (!trimmed || trimmed === 'null' || trimmed === 'undefined' || trimmed === '""' || trimmed === "''") {
+    localStorage.removeItem('aids_session_token');
+    localStorage.removeItem('aids_token');
+    return null;
+  }
+  return trimmed;
+}
+
+export function clearSessionAuth(): void {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('aids_session_token');
+    localStorage.removeItem('aids_token');
+  }
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.removeItem('aids_session_token');
+    sessionStorage.removeItem('redirect_after_login');
+  }
+}
+
 export async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const defaultHeaders: Record<string, string> = isFormData ? {} : { 'Content-Type': 'application/json' };
@@ -38,8 +62,9 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   }
   const url = cleanEndpoint;
 
-  const savedToken = typeof localStorage !== 'undefined' ? (localStorage.getItem('aids_session_token') || localStorage.getItem('aids_token')) : null;
-  const authHeader: Record<string, string> = savedToken ? { Authorization: `Bearer ${savedToken}` } : {};
+  const isLoginRequest = url.includes('/auth/login');
+  const validToken = !isLoginRequest ? getValidSessionToken() : null;
+  const authHeader: Record<string, string> = validToken ? { Authorization: `Bearer ${validToken}` } : {};
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const controller = new AbortController();
@@ -69,9 +94,26 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
       const data = await response.json().catch(() => ({}));
       const errorMessage = data.error || data.message;
 
-      // Do NOT retry 4xx validation/auth errors
+      // Handle 401 Unauthorized
+      if (response.status === 401) {
+        if (!isLoginRequest) {
+          clearSessionAuth();
+        }
+        const errorMsg = isLoginRequest
+          ? (data.error || data.message || 'Invalid credentials')
+          : (data.error || data.message || 'Session expired. Please log in again.');
+        throw new Error(errorMsg);
+      }
+
+      // Handle 403 Forbidden
+      if (response.status === 403) {
+        const errorMsg = data.error || data.message || 'Forbidden: Insufficient permissions.';
+        throw new Error(errorMsg);
+      }
+
+      // Do NOT retry other 4xx client errors
       if (response.status < 500 && response.status !== 408) {
-        throw new Error(errorMessage || `Authentication/Client Error (${response.status})`);
+        throw new Error(errorMessage || `Client Error (${response.status})`);
       }
 
       // 5xx Transient Gateway Errors (502, 503, 504) - retry safe/idempotent or cold start proxy responses
@@ -133,8 +175,9 @@ export async function fetchWithResilience(url: string, options: RequestInit = {}
     cleanEndpoint = `${base}${path}`;
   }
   const targetUrl = cleanEndpoint;
-  const savedToken = typeof localStorage !== 'undefined' ? (localStorage.getItem('aids_session_token') || localStorage.getItem('aids_token')) : null;
-  const authHeader: Record<string, string> = savedToken ? { Authorization: `Bearer ${savedToken}` } : {};
+  const isLoginRequest = targetUrl.includes('/auth/login');
+  const validToken = !isLoginRequest ? getValidSessionToken() : null;
+  const authHeader: Record<string, string> = validToken ? { Authorization: `Bearer ${validToken}` } : {};
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const controller = new AbortController();
@@ -191,10 +234,19 @@ export async function fetchWithResilience(url: string, options: RequestInit = {}
 export const API = {
   // Auth
   login: async (identifier: string, password: string, role: string) => {
+    // 1. Clear stale authentication state before fresh login attempt
+    clearSessionAuth();
+
     const res = await request<{ message: string; user: UserSession; token?: string }>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ identifier, password, role })
+      body: JSON.stringify({
+        identifier: identifier.trim(),
+        password,
+        role: role.trim().toUpperCase()
+      })
     });
+
+    // 2. Store authoritative token
     if (res && res.token && typeof localStorage !== 'undefined') {
       localStorage.setItem('aids_session_token', res.token);
       localStorage.setItem('aids_token', res.token);
@@ -207,11 +259,10 @@ export const API = {
       return await request<{ message: string }>('/auth/logout', {
         method: 'POST'
       });
+    } catch {
+      return { message: 'Logged out' };
     } finally {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem('aids_session_token');
-        localStorage.removeItem('aids_token');
-      }
+      clearSessionAuth();
     }
   },
 
