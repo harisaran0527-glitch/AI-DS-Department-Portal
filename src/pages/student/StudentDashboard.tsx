@@ -160,15 +160,15 @@ export const StudentDashboard: React.FC = () => {
       onSelectTab={setActiveTab}
       onLogout={handleLogout}
       headerActions={
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setShowForgotModal(true)}
-            className="text-xs text-indigo-300 hover:text-white bg-indigo-950/80 border border-indigo-700/60 px-3 py-1 rounded-xl font-mono flex items-center space-x-1.5"
+            className="min-h-[44px] text-xs text-indigo-300 hover:text-white bg-indigo-950/80 border border-indigo-700/60 px-3.5 py-2 rounded-xl font-mono flex items-center space-x-1.5 cursor-pointer shadow-sm"
           >
             <Lock className="w-3.5 h-3.5 text-indigo-400" />
             <span>Forgot Password?</span>
           </button>
-          <div className="flex items-center space-x-2 text-xs text-indigo-300 bg-indigo-950/80 border border-indigo-700/60 px-3 py-1 rounded-xl font-mono">
+          <div className="min-h-[44px] flex items-center space-x-2 text-xs text-indigo-300 bg-indigo-950/80 border border-indigo-700/60 px-3.5 py-2 rounded-xl font-mono">
             <Lock className="w-3.5 h-3.5 text-emerald-400" />
             <span className="font-semibold">100% View-Only Mode</span>
           </div>

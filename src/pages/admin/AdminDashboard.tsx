@@ -1916,13 +1916,13 @@ export const AdminDashboard: React.FC = () => {
       {/* ADD / EDIT HOD FORM MODAL */}
       {showHODModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-4 sm:p-6 space-y-4 shadow-2xl max-h-[92dvh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <h3 className="text-base font-bold text-white flex items-center space-x-2">
                 <Crown className="w-4 h-4 text-amber-400" />
                 <span>{editingHOD ? 'Edit HOD Account' : 'Add HOD Account'}</span>
               </h3>
-              <button onClick={() => setShowHODModal(false)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setShowHODModal(false)} className="touch-target p-2 text-slate-400 hover:text-white rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1953,7 +1953,7 @@ export const AdminDashboard: React.FC = () => {
                     placeholder="Full HOD Name"
                     value={hodNameInput}
                     onChange={(e) => setHodNameInput(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-base sm:text-xs text-white min-h-[44px]"
                   />
                 </div>
 
@@ -1966,7 +1966,7 @@ export const AdminDashboard: React.FC = () => {
                     value={hodIdInput}
                     onChange={(e) => setHodIdInput(e.target.value)}
                     disabled={Boolean(editingHOD)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono disabled:opacity-60"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-base sm:text-xs text-white font-mono disabled:opacity-60 min-h-[44px]"
                   />
                 </div>
               </div>
@@ -1980,7 +1980,7 @@ export const AdminDashboard: React.FC = () => {
                     placeholder="hod@aids.edu"
                     value={hodEmailInput}
                     onChange={(e) => setHodEmailInput(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-base sm:text-xs text-white font-mono min-h-[44px]"
                   />
                 </div>
 
@@ -1990,7 +1990,7 @@ export const AdminDashboard: React.FC = () => {
                     type="text"
                     disabled
                     value="AI & DS"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-amber-400 font-bold"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-base sm:text-xs text-amber-400 font-bold min-h-[44px]"
                   />
                 </div>
               </div>
@@ -2000,7 +2000,7 @@ export const AdminDashboard: React.FC = () => {
                 <select
                   value={hodIsActive ? 'Active' : 'Disabled'}
                   onChange={(e) => setHodIsActive(e.target.value === 'Active')}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-semibold"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-base sm:text-xs text-white font-semibold min-h-[44px]"
                 >
                   <option value="Active">Active HOD</option>
                   <option value="Disabled">Disabled</option>
@@ -2018,15 +2018,15 @@ export const AdminDashboard: React.FC = () => {
                         placeholder="••••••••"
                         value={hodPasswordInput}
                         onChange={(e) => setHodPasswordInput(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-9 py-2 text-white font-mono"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-10 py-2.5 text-base sm:text-xs text-white font-mono min-h-[44px]"
                       />
                       <button
                         type="button"
                         aria-label={showHodPassword ? 'Hide password' : 'Show password'}
                         onClick={() => setShowHodPassword(!showHodPassword)}
-                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-white"
                       >
-                        {showHodPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        {showHodPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>
@@ -2040,15 +2040,15 @@ export const AdminDashboard: React.FC = () => {
                         placeholder="••••••••"
                         value={hodConfirmPasswordInput}
                         onChange={(e) => setHodConfirmPasswordInput(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-9 py-2 text-white font-mono"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-10 py-2.5 text-base sm:text-xs text-white font-mono min-h-[44px]"
                       />
                       <button
                         type="button"
                         aria-label={showHodConfirmPassword ? 'Hide password' : 'Show password'}
                         onClick={() => setShowHodConfirmPassword(!showHodConfirmPassword)}
-                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-white"
                       >
-                        {showHodConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        {showHodConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>
@@ -2059,14 +2059,14 @@ export const AdminDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowHODModal(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl font-semibold"
+                  className="min-h-[44px] px-4 py-2 bg-slate-800 text-slate-300 rounded-xl font-semibold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSavingHOD}
-                  className="px-5 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold rounded-xl shadow-lg shadow-amber-500/20 flex items-center space-x-2"
+                  className="min-h-[44px] px-5 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold rounded-xl shadow-lg shadow-amber-500/20 flex items-center space-x-2"
                 >
                   {isSavingHOD ? (
                     <>
@@ -2086,7 +2086,7 @@ export const AdminDashboard: React.FC = () => {
       {/* RESET HOD PASSWORD MODAL */}
       {resetTargetHOD && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-4 sm:p-6 space-y-4 shadow-2xl max-h-[92dvh] overflow-y-auto">
             <h3 className="text-base font-bold text-white border-b border-slate-800 pb-2">Reset HOD Portal Password</h3>
             <p className="text-xs text-slate-400 font-mono">
               HOD: <strong className="text-white">{resetTargetHOD.name}</strong> ({resetTargetHOD.email})
@@ -2109,15 +2109,15 @@ export const AdminDashboard: React.FC = () => {
                     placeholder="••••••••"
                     value={newHODPasswordInput}
                     onChange={(e) => setNewHODPasswordInput(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-9 py-2 text-xs text-white font-mono"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-10 py-2.5 text-base sm:text-xs text-white font-mono min-h-[44px]"
                   />
                   <button
                     type="button"
                     aria-label={showResetHODPassword ? 'Hide password' : 'Show password'}
                     onClick={() => setShowResetHODPassword(!showResetHODPassword)}
-                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-white"
                   >
-                    {showResetHODPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    {showResetHODPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
@@ -2127,14 +2127,14 @@ export const AdminDashboard: React.FC = () => {
                   type="button"
                   onClick={() => setResetTargetHOD(null)}
                   disabled={isResettingPass}
-                  className="px-3 py-1.5 bg-slate-800 text-slate-300 text-xs rounded-xl font-semibold disabled:opacity-50"
+                  className="min-h-[44px] px-4 py-2 bg-slate-800 text-slate-300 text-xs rounded-xl font-semibold disabled:opacity-50 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isResettingPass}
-                  className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 text-xs font-bold rounded-xl shadow-lg shadow-amber-500/20 flex items-center space-x-2 cursor-pointer"
+                  className="min-h-[44px] px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 text-xs font-bold rounded-xl shadow-lg shadow-amber-500/20 flex items-center space-x-2 cursor-pointer"
                 >
                   {isResettingPass ? (
                     <>
@@ -2154,12 +2154,12 @@ export const AdminDashboard: React.FC = () => {
       {/* ADD / EDIT FACULTY FORM MODAL */}
       {showAddModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-4 sm:p-6 space-y-4 shadow-2xl max-h-[92dvh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <h3 className="text-base font-bold text-white">
                 {editingFaculty ? 'Edit Faculty Assignment' : 'Add Faculty Account'}
               </h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setShowAddModal(false)} className="touch-target p-2 text-slate-400 hover:text-white rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -2182,7 +2182,7 @@ export const AdminDashboard: React.FC = () => {
                     value={formFacultyName}
                     onChange={(e) => setFormFacultyName(e.target.value)}
                     disabled={Boolean(editingFaculty)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white disabled:opacity-60"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-base sm:text-xs text-white disabled:opacity-60 min-h-[44px]"
                   />
                 </div>
 
@@ -2195,7 +2195,7 @@ export const AdminDashboard: React.FC = () => {
                     value={formFacultyId}
                     onChange={(e) => setFormFacultyId(e.target.value)}
                     disabled={Boolean(editingFaculty)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono disabled:opacity-60"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-base sm:text-xs text-white font-mono disabled:opacity-60 min-h-[44px]"
                   />
                 </div>
               </div>
@@ -2209,7 +2209,7 @@ export const AdminDashboard: React.FC = () => {
                   value={formEmail}
                   onChange={(e) => setFormEmail(e.target.value)}
                   disabled={Boolean(editingFaculty)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono disabled:opacity-60"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-base sm:text-xs text-white font-mono disabled:opacity-60 min-h-[44px]"
                 />
               </div>
 
@@ -2220,7 +2220,7 @@ export const AdminDashboard: React.FC = () => {
                     type="text"
                     disabled
                     value={formDepartment}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-400 font-bold"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-base sm:text-xs text-slate-400 font-bold min-h-[44px]"
                   />
                 </div>
 
@@ -2229,7 +2229,7 @@ export const AdminDashboard: React.FC = () => {
                   <select
                     value={formYear}
                     onChange={(e) => setFormYear(e.target.value as any)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-semibold"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-base sm:text-xs text-white font-semibold min-h-[44px]"
                   >
                     <option value="1st Year">1st Year</option>
                     <option value="2nd Year">2nd Year</option>
@@ -2243,7 +2243,7 @@ export const AdminDashboard: React.FC = () => {
                   <select
                     value={formSection}
                     onChange={(e) => setFormSection(e.target.value as any)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-semibold"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-base sm:text-xs text-white font-semibold min-h-[44px]"
                   >
                     <option value="A">Section A</option>
                     <option value="B">Section B</option>
@@ -2258,7 +2258,7 @@ export const AdminDashboard: React.FC = () => {
                   <select
                     value={formRole}
                     onChange={(e) => setFormRole(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-semibold"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-base sm:text-xs text-white font-semibold min-h-[44px]"
                   >
                     <option value="Class Coordinator">Class Coordinator</option>
                     <option value="Subject Faculty">Subject Faculty</option>
@@ -2270,7 +2270,7 @@ export const AdminDashboard: React.FC = () => {
                   <select
                     value={formIsActive ? 'Active' : 'Disabled'}
                     onChange={(e) => setFormIsActive(e.target.value === 'Active')}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-semibold"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-base sm:text-xs text-white font-semibold min-h-[44px]"
                   >
                     <option value="Active">Active</option>
                     <option value="Disabled">Disabled</option>
@@ -2289,15 +2289,15 @@ export const AdminDashboard: React.FC = () => {
                         placeholder="••••••••"
                         value={formPassword}
                         onChange={(e) => setFormPassword(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-9 py-2 text-white font-mono"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-10 py-2.5 text-base sm:text-xs text-white font-mono min-h-[44px]"
                       />
                       <button
                         type="button"
                         aria-label={showFormPassword ? 'Hide password' : 'Show password'}
                         onClick={() => setShowFormPassword(!showFormPassword)}
-                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-white"
                       >
-                        {showFormPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        {showFormPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>
@@ -2311,15 +2311,15 @@ export const AdminDashboard: React.FC = () => {
                         placeholder="••••••••"
                         value={formConfirmPassword}
                         onChange={(e) => setFormConfirmPassword(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-9 py-2 text-white font-mono"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-10 py-2.5 text-base sm:text-xs text-white font-mono min-h-[44px]"
                       />
                       <button
                         type="button"
                         aria-label={showFormConfirmPassword ? 'Hide password' : 'Show password'}
                         onClick={() => setShowFormConfirmPassword(!showFormConfirmPassword)}
-                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-white"
                       >
-                        {showFormConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        {showFormConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>
@@ -2330,14 +2330,14 @@ export const AdminDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl font-semibold"
+                  className="min-h-[44px] px-4 py-2 bg-slate-800 text-slate-300 rounded-xl font-semibold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSavingFaculty}
-                  className="px-5 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 font-bold rounded-xl shadow-lg shadow-cyan-500/20 flex items-center space-x-2"
+                  className="min-h-[44px] px-5 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 font-bold rounded-xl shadow-lg shadow-cyan-500/20 flex items-center space-x-2"
                 >
                   {isSavingFaculty ? (
                     <>
@@ -2357,7 +2357,7 @@ export const AdminDashboard: React.FC = () => {
       {/* RESET FACULTY PASSWORD MODAL */}
       {resetTargetFaculty && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-4 sm:p-6 space-y-4 shadow-2xl max-h-[92dvh] overflow-y-auto">
             <h3 className="text-base font-bold text-white border-b border-slate-800 pb-2">Reset Portal Password</h3>
             <p className="text-xs text-slate-400 font-mono">
               Faculty: <strong className="text-white">{resetTargetFaculty.name}</strong> ({resetTargetFaculty.email})
@@ -2380,15 +2380,15 @@ export const AdminDashboard: React.FC = () => {
                     placeholder="••••••••"
                     value={newPasswordInput}
                     onChange={(e) => setNewPasswordInput(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-9 py-2 text-xs text-white font-mono"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-10 py-2.5 text-base sm:text-xs text-white font-mono min-h-[44px]"
                   />
                   <button
                     type="button"
                     aria-label={showResetPassword ? 'Hide password' : 'Show password'}
                     onClick={() => setShowResetPassword(!showResetPassword)}
-                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-white"
                   >
-                    {showResetPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    {showResetPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
@@ -2398,14 +2398,14 @@ export const AdminDashboard: React.FC = () => {
                   type="button"
                   onClick={() => setResetTargetFaculty(null)}
                   disabled={isResettingPass}
-                  className="px-3 py-1.5 bg-slate-800 text-slate-300 text-xs rounded-xl font-semibold disabled:opacity-50"
+                  className="min-h-[44px] px-4 py-2 bg-slate-800 text-slate-300 text-xs rounded-xl font-semibold disabled:opacity-50 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isResettingPass}
-                  className="px-4 py-1.5 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 text-xs font-bold rounded-xl shadow-lg shadow-cyan-500/20 flex items-center space-x-2 cursor-pointer"
+                  className="min-h-[44px] px-4 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 text-xs font-bold rounded-xl shadow-lg shadow-cyan-500/20 flex items-center space-x-2 cursor-pointer"
                 >
                   {isResettingPass ? (
                     <>
@@ -2425,13 +2425,13 @@ export const AdminDashboard: React.FC = () => {
       {/* ADMIN SELF CHANGE PASSWORD MODAL */}
       {showAdminChangePasswordModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-4 sm:p-6 space-y-4 shadow-2xl max-h-[92dvh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-slate-800 pb-2">
               <h3 className="text-base font-bold text-white flex items-center space-x-2">
                 <Lock className="w-4 h-4 text-indigo-400" />
                 <span>Change Admin Password</span>
               </h3>
-              <button onClick={() => setShowAdminChangePasswordModal(false)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setShowAdminChangePasswordModal(false)} className="touch-target p-2 text-slate-400 hover:text-white rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -2460,15 +2460,15 @@ export const AdminDashboard: React.FC = () => {
                     placeholder="••••••••"
                     value={adminCurrentPassword}
                     onChange={(e) => setAdminCurrentPassword(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-9 py-2 text-white font-mono"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-10 py-2.5 text-base sm:text-xs text-white font-mono min-h-[44px]"
                   />
                   <button
                     type="button"
                     aria-label={showAdminCurrentPassword ? 'Hide password' : 'Show password'}
                     onClick={() => setShowAdminCurrentPassword(!showAdminCurrentPassword)}
-                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-white"
                   >
-                    {showAdminCurrentPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    {showAdminCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
@@ -2482,15 +2482,15 @@ export const AdminDashboard: React.FC = () => {
                     placeholder="••••••••"
                     value={adminNewPassword}
                     onChange={(e) => setAdminNewPassword(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-9 py-2 text-white font-mono"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-10 py-2.5 text-base sm:text-xs text-white font-mono min-h-[44px]"
                   />
                   <button
                     type="button"
                     aria-label={showAdminNewPassword ? 'Hide password' : 'Show password'}
                     onClick={() => setShowAdminNewPassword(!showAdminNewPassword)}
-                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-white"
                   >
-                    {showAdminNewPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    {showAdminNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
@@ -2504,15 +2504,15 @@ export const AdminDashboard: React.FC = () => {
                     placeholder="••••••••"
                     value={adminConfirmPassword}
                     onChange={(e) => setAdminConfirmPassword(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-9 py-2 text-white font-mono"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-10 py-2.5 text-base sm:text-xs text-white font-mono min-h-[44px]"
                   />
                   <button
                     type="button"
                     aria-label={showAdminConfirmPassword ? 'Hide password' : 'Show password'}
                     onClick={() => setShowAdminConfirmPassword(!showAdminConfirmPassword)}
-                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-white"
                   >
-                    {showAdminConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    {showAdminConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
@@ -2522,14 +2522,14 @@ export const AdminDashboard: React.FC = () => {
                   type="button"
                   onClick={() => setShowAdminChangePasswordModal(false)}
                   disabled={isChangingAdminPass}
-                  className="px-3 py-1.5 bg-slate-800 text-slate-300 text-xs rounded-xl font-semibold disabled:opacity-50"
+                  className="min-h-[44px] px-4 py-2 bg-slate-800 text-slate-300 text-xs rounded-xl font-semibold disabled:opacity-50 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isChangingAdminPass}
-                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/30 flex items-center space-x-2 cursor-pointer"
+                  className="min-h-[44px] px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/30 flex items-center space-x-2 cursor-pointer"
                 >
                   {isChangingAdminPass ? (
                     <>

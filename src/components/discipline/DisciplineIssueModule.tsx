@@ -601,7 +601,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by student name, reg no, issue, remarks..."
-              className="w-full bg-slate-950 border border-slate-800 text-white pl-10 pr-4 py-2 rounded-xl text-xs focus:border-cyan-500 focus:outline-none transition-all placeholder:text-slate-500"
+              className="w-full bg-slate-950 border border-slate-800 text-white pl-10 pr-10 py-2.5 rounded-xl text-base sm:text-xs min-h-[44px] focus:border-cyan-500 focus:outline-none transition-all placeholder:text-slate-500"
             />
             {searchQuery && (
               <button
@@ -1192,7 +1192,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
               <button
                 type="button"
                 onClick={() => setDeletingId(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
+                className="min-h-[44px] px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
               >
                 Cancel
               </button>
@@ -1200,7 +1200,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
                 type="button"
                 onClick={handleDeleteRecord}
                 disabled={isDeleting}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center space-x-1.5 cursor-pointer"
+                className="min-h-[44px] px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center space-x-1.5 cursor-pointer"
               >
                 {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                 <span>Confirm Delete</span>

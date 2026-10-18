@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Menu, X, LogOut, ShieldCheck, UserCheck, GraduationCap, Crown, Sparkles, ChevronDown, ChevronRight } from 'lucide-react';
 
 export type MenuItem = {
@@ -40,6 +40,29 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   children,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Lock body scroll when mobile navigation drawer is active
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileMenuOpen]);
+
+  // Handle escape key to close drawer
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && mobileMenuOpen) {
+        setMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [mobileMenuOpen]);
 
   // Dynamic role badges
   const getRoleBadgeColor = () => {
@@ -208,7 +231,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                             onSelectTab(child.id);
                             setMobileMenuOpen(false);
                           }}
-                          className={`w-full flex items-center justify-between px-2.5 py-2 min-h-[40px] rounded-lg text-[11px] font-semibold transition-all ${
+                          className={`w-full flex items-center justify-between px-2.5 py-2 min-h-[44px] rounded-lg text-[11px] font-semibold transition-all ${
                             isChildActive
                               ? 'sidebar-nav-active bg-[#171C26] text-[#F1F5F9] font-bold border-l-2 border-[#A78BFA]'
                               : 'text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#12161F] active:bg-[#171C26]'
@@ -278,7 +301,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         </header>
 
         {/* Page Content Body */}
-        <main className="flex-1 p-3 sm:p-4 md:p-6 pb-safe overflow-y-auto min-w-0 bg-[#080A0F] text-[#94A3B8]">
+        <main className="flex-1 p-3 sm:p-4 md:p-6 pb-safe overflow-y-auto overflow-x-hidden min-w-0 max-w-full bg-[#080A0F] text-[#94A3B8]">
           {children}
         </main>
       </div>

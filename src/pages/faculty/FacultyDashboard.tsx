@@ -1775,10 +1775,10 @@ export const FacultyDashboard: React.FC = () => {
       onSelectTab={setActiveTab}
       onLogout={handleLogout}
       headerActions={
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setActiveTab('discipline-issues')}
-            className={`touch-target text-xs px-3.5 py-1.5 rounded-xl font-mono flex items-center space-x-1.5 cursor-pointer shadow-sm transition-all min-h-[40px] ${
+            className={`touch-target text-xs px-3.5 py-2 rounded-xl font-mono flex items-center space-x-1.5 cursor-pointer shadow-sm transition-all min-h-[44px] ${
               activeTab === 'discipline-issues' || activeTab === 'discipline' || activeTab === 'bth-discipline'
                 ? 'bg-rose-600 text-white font-bold shadow-rose-900/40'
                 : 'text-rose-300 hover:text-white bg-rose-950/80 border border-rose-700/60 hover:bg-rose-900/60'
@@ -1790,7 +1790,7 @@ export const FacultyDashboard: React.FC = () => {
           </button>
           <button
             onClick={() => setShowForgotModal(true)}
-            className="text-xs text-sky-300 hover:text-white bg-sky-950/80 border border-sky-700/60 px-3 py-1.5 min-h-[40px] rounded-xl font-mono flex items-center space-x-1.5 cursor-pointer shadow-sm"
+            className="text-xs text-sky-300 hover:text-white bg-sky-950/80 border border-sky-700/60 px-3.5 py-2 min-h-[44px] rounded-xl font-mono flex items-center space-x-1.5 cursor-pointer shadow-sm"
           >
             <Lock className="w-3.5 h-3.5 text-sky-400" />
             <span>Forgot Password?</span>

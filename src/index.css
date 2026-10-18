@@ -1012,7 +1012,33 @@ html, body {
 
 /* --- Mobile Form Optimization --- */
 @media (max-width: 640px) {
-  /* All interactive inputs get comfortable touch sizes */
+  /* All interactive inputs get comfortable touch sizes without overriding icon paddings */
+  input[type="text"]:not([class*="pl-"]),
+  input[type="email"]:not([class*="pl-"]),
+  input[type="password"]:not([class*="pl-"]),
+  input[type="number"]:not([class*="pl-"]),
+  input[type="tel"]:not([class*="pl-"]),
+  input[type="search"]:not([class*="pl-"]),
+  input[type="url"]:not([class*="pl-"]),
+  input[type="date"]:not([class*="pl-"]),
+  select:not([class*="pl-"]),
+  textarea:not([class*="pl-"]) {
+    padding-left: 12px;
+  }
+
+  input[type="text"]:not([class*="pr-"]),
+  input[type="email"]:not([class*="pr-"]),
+  input[type="password"]:not([class*="pr-"]),
+  input[type="number"]:not([class*="pr-"]),
+  input[type="tel"]:not([class*="pr-"]),
+  input[type="search"]:not([class*="pr-"]),
+  input[type="url"]:not([class*="pr-"]),
+  input[type="date"]:not([class*="pr-"]),
+  select:not([class*="pr-"]),
+  textarea:not([class*="pr-"]) {
+    padding-right: 12px;
+  }
+
   input[type="text"],
   input[type="email"],
   input[type="password"],
@@ -1025,14 +1051,20 @@ html, body {
   textarea {
     min-height: 44px;
     font-size: 16px !important; /* Prevents iOS zoom on focus */
-    padding-left: 12px;
-    padding-right: 12px;
     border-radius: 12px;
   }
 
+  /* Explicit protected padding rules for icon-bearing inputs */
+  input[class*="pl-12"], [class*="pl-12"] { padding-left: 48px !important; }
+  input[class*="pl-11"], [class*="pl-11"] { padding-left: 44px !important; }
+  input[class*="pl-10"], [class*="pl-10"] { padding-left: 40px !important; }
+  input[class*="pr-12"], [class*="pr-12"] { padding-right: 48px !important; }
+  input[class*="pr-11"], [class*="pr-11"] { padding-right: 44px !important; }
+  input[class*="pr-10"], [class*="pr-10"] { padding-right: 40px !important; }
+
   /* Buttons get comfortable touch sizes */
   button:not(.touch-target) {
-    min-height: 40px;
+    min-height: 44px;
   }
 
   /* Full-width form labels */

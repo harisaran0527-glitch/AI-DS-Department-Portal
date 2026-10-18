@@ -142,7 +142,7 @@ export const HODDashboard: React.FC = () => {
       headerActions={
         <button
           onClick={() => setShowForgotModal(true)}
-          className="text-xs text-indigo-300 hover:text-white bg-indigo-950/80 border border-indigo-700/60 px-3 py-1 rounded-xl font-mono flex items-center space-x-1.5"
+          className="min-h-[44px] text-xs text-indigo-300 hover:text-white bg-indigo-950/80 border border-indigo-700/60 px-3.5 py-2 rounded-xl font-mono flex items-center space-x-1.5 cursor-pointer shadow-sm"
         >
           <Key className="w-3.5 h-3.5 text-indigo-400" />
           <span>Forgot Password?</span>
@@ -151,15 +151,15 @@ export const HODDashboard: React.FC = () => {
     >
       <div className="space-y-6">
         {/* YEAR & SECTION CONTROLLER */}
-        <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center space-x-2 text-xs">
-            <span className="text-slate-400 font-mono font-bold">Year Filter:</span>
+        <div className="bg-slate-900 border border-slate-800 p-3 sm:p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 sm:gap-4">
+          <div className="flex flex-wrap items-center gap-2 text-xs w-full sm:w-auto">
+            <span className="text-slate-400 font-mono font-bold shrink-0">Year Filter:</span>
             {['ALL', '1st Year', '2nd Year', '3rd Year', '4th Year'].map((y) => (
               <button
                 key={y}
                 onClick={() => setSelectedYear(y as any)}
-                className={`px-3 py-1 rounded-lg font-semibold transition-all ${
-                  selectedYear === y ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-950 text-slate-400 hover:text-white'
+                className={`min-h-[38px] px-3.5 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                  selectedYear === y ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20' : 'bg-slate-950 text-slate-400 hover:text-white'
                 }`}
               >
                 {y}
@@ -167,14 +167,14 @@ export const HODDashboard: React.FC = () => {
             ))}
           </div>
 
-          <div className="flex items-center space-x-2 text-xs">
-            <span className="text-slate-400 font-mono font-bold">Section Filter:</span>
+          <div className="flex flex-wrap items-center gap-2 text-xs w-full sm:w-auto">
+            <span className="text-slate-400 font-mono font-bold shrink-0">Section Filter:</span>
             {['ALL', 'A', 'B', 'C'].map((s) => (
               <button
                 key={s}
                 onClick={() => setSelectedSection(s as any)}
-                className={`px-3 py-1 rounded-lg font-semibold transition-all ${
-                  selectedSection === s ? 'bg-indigo-600 text-white font-bold' : 'bg-slate-950 text-slate-400 hover:text-white'
+                className={`min-h-[38px] px-3.5 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                  selectedSection === s ? 'bg-indigo-600 text-white font-bold shadow-md shadow-indigo-600/20' : 'bg-slate-950 text-slate-400 hover:text-white'
                 }`}
               >
                 Sec {s}
@@ -239,13 +239,13 @@ export const HODDashboard: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
                 <h2 className="text-lg font-bold text-white font-sans">Department Student Overview</h2>
 
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-3 w-full sm:w-auto">
                   <input
                     type="text"
                     placeholder="Search student..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono"
+                    className="w-full sm:w-auto bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-base sm:text-xs text-white font-mono min-h-[44px]"
                   />
                 </div>
               </div>
@@ -364,7 +364,7 @@ export const HODDashboard: React.FC = () => {
                 </h3>
                 <p className="text-slate-400 font-mono text-[11px] sm:text-xs mt-1">Student: <strong className="text-white">{selectedHODStudent.name}</strong> | Reg No: {selectedHODStudent.registerNo} | {selectedHODStudent.year} Section {selectedHODStudent.section}</p>
               </div>
-              <button onClick={() => setSelectedHODStudent(null)} className="bg-slate-800 text-slate-300 p-2 rounded-lg touch-target">✕</button>
+              <button onClick={() => setSelectedHODStudent(null)} aria-label="Close Profile" className="bg-slate-800 text-slate-300 p-2 rounded-lg touch-target min-w-[44px] min-h-[44px] flex items-center justify-center cursor-pointer">✕</button>
             </div>
 
             {/* 11 Category Tabs inside Modal */}
@@ -440,7 +440,7 @@ export const HODDashboard: React.FC = () => {
             )}
 
             <div className="flex justify-end pt-4 border-t border-slate-800">
-              <button onClick={() => setSelectedHODStudent(null)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl font-bold">Close Profile</button>
+              <button onClick={() => setSelectedHODStudent(null)} className="min-h-[44px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-5 py-2.5 rounded-xl font-bold cursor-pointer">Close Profile</button>
             </div>
           </div>
         </div>
