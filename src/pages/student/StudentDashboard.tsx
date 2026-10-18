@@ -103,7 +103,7 @@ export const StudentDashboard: React.FC = () => {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#080A0F] text-[#F1F5F9] flex flex-col items-center justify-center font-sans space-y-4">
-        <img src="/images/avsec-salem-logo.png" alt="AVSEC Salem Logo" className="h-16 w-auto object-contain animate-pulse" />
+        <img src="/images/avsec-salem-logo.png" alt="AVSEC Salem Logo" className="h-9 w-auto max-h-9 max-w-[36px] object-contain animate-pulse" />
         <div className="flex items-center space-x-3 text-[#A78BFA]">
           <Sparkles className="w-5 h-5 animate-spin" />
           <span className="text-sm font-mono tracking-wider">Loading 360° Student Performance Profile...</span>
@@ -116,7 +116,7 @@ export const StudentDashboard: React.FC = () => {
     return (
       <div className="min-h-screen bg-[#080A0F] text-[#F1F5F9] flex items-center justify-center font-sans p-6">
         <div className="bg-[#12161F] border border-[#252B36] p-8 rounded-2xl max-w-md text-center space-y-4 shadow-2xl">
-          <img src="/images/avsec-salem-logo.png" alt="AVSEC Salem Logo" className="h-14 w-auto object-contain mx-auto" />
+          <img src="/images/avsec-salem-logo.png" alt="AVSEC Salem Logo" className="h-9 w-auto max-h-9 max-w-[36px] object-contain mx-auto" />
           <h3 className="text-lg font-bold text-[#F1F5F9]">No Student Profile Linked Yet</h3>
           <p className="text-xs text-[#94A3B8] leading-relaxed">
             {errorMsg || 'Your student account is authenticated, but your 360 performance record has not been imported by the department admin yet.'}

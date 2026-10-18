@@ -208,11 +208,11 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                 <i />
                 <i />
               </div>
-              <div className="relative z-10 w-12 h-12 flex items-center justify-center rounded-xl bg-[#071A3D] border border-[#1E4D8F] shadow-[0_0_20px_rgba(34,211,238,0.2)]">
+              <div className="relative z-10 w-10 h-10 flex items-center justify-center rounded-xl bg-[#071A3D] border border-[#1E4D8F] shadow-[0_0_16px_rgba(34,211,238,0.2)]">
                 <img
                   src="/images/avsec-salem-logo.png"
                   alt="AVS Engineering College Logo"
-                  className="h-9 w-auto object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.6)]"
+                  className="h-8 w-auto max-h-8 max-w-[32px] object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.6)]"
                   onError={(e) => {
                     (e.target as HTMLElement).style.display = 'none';
                   }}
@@ -289,7 +289,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                   <div className="edge-dot b" />
                   <div className="field-inner">
                     <div className="field-icon">
-                      <User className="w-4 h-4" />
+                      <User className="w-[18px] h-[18px]" />
                     </div>
                     <input
                       type="text"
@@ -317,7 +317,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                   <div className="edge-dot b" />
                   <div className="field-inner">
                     <div className="field-icon">
-                      <Lock className="w-4 h-4" />
+                      <Lock className="w-[18px] h-[18px]" />
                     </div>
                     <input
                       type={showPassword ? 'text' : 'password'}
@@ -332,13 +332,14 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="eye absolute right-2 top-1/2 -translate-y-1/2"
+                      className="eye"
                       title={showPassword ? "Hide password" : "Show password"}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
                     >
                       {showPassword ? (
-                        <EyeOff className="w-4 h-4 text-[#22D3EE]" />
+                        <EyeOff className="w-[18px] h-[18px] text-[#22D3EE]" />
                       ) : (
-                        <Eye className="w-4 h-4 text-slate-400 hover:text-white" />
+                        <Eye className="w-[18px] h-[18px] text-slate-400 hover:text-white" />
                       )}
                     </button>
                     <div className="caret-glow" />

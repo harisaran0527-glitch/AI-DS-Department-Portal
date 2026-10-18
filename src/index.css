@@ -595,15 +595,15 @@ html.light ::-webkit-scrollbar-thumb:hover {
 /* LOGO ORBIT RINGS */
 .logo {
   position: relative;
-  width: 72px;
-  height: 72px;
-  margin: 0 auto 10px;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 8px;
   display: grid;
   place-items: center;
 }
 .logo-glow {
   position: absolute;
-  inset: -40%;
+  inset: -35%;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(34, 211, 238, 0.3) 0%, rgba(18, 58, 115, 0.1) 42%, transparent 70%);
   animation: logoGlow 3.6s ease-in-out infinite;
@@ -619,12 +619,12 @@ html.light ::-webkit-scrollbar-thumb:hover {
   border: 1px solid rgba(30, 90, 175, 0.4);
 }
 .ring.r1 { inset: 0; border-top-color: rgba(34, 211, 238, 0.85); border-right-color: rgba(30, 90, 175, 0.6); animation: spin 9s linear infinite; }
-.ring.r2 { inset: 9px; border-style: dashed; border-color: rgba(34, 211, 238, 0.35); animation: spin 14s linear infinite reverse; }
-.ring.r3 { inset: 18px; border-color: rgba(30, 90, 175, 0.5); border-bottom-color: rgba(255, 255, 255, 0.9); animation: spin 6s linear infinite; }
+.ring.r2 { inset: 7px; border-style: dashed; border-color: rgba(34, 211, 238, 0.35); animation: spin 14s linear infinite reverse; }
+.ring.r3 { inset: 14px; border-color: rgba(30, 90, 175, 0.5); border-bottom-color: rgba(255, 255, 255, 0.9); animation: spin 6s linear infinite; }
 
 .orbit {
   position: absolute;
-  inset: -6px;
+  inset: -4px;
   animation: spin 5.5s linear infinite;
 }
 .orbit i {
@@ -691,7 +691,7 @@ html.light ::-webkit-scrollbar-thumb:hover {
 
 .field-inner {
   position: relative;
-  padding: 12px 14px 12px 42px;
+  padding: 12px 14px 12px 48px;
   display: flex;
   align-items: center;
 }
@@ -701,10 +701,14 @@ html.light ::-webkit-scrollbar-thumb:hover {
   left: 14px;
   top: 50%;
   transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
   color: #94A3B8;
   transition: color 0.3s ease, filter 0.3s ease;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
 }
 .field.focused .field-icon {
   color: #22D3EE;
@@ -723,7 +727,7 @@ html.light ::-webkit-scrollbar-thumb:hover {
   color: #FFFFFF !important;
   font-size: 13.5px;
   letter-spacing: 0.03em;
-  padding: 0 36px 0 0;
+  padding: 0 48px 0 0 !important;
   box-sizing: border-box;
   caret-color: #22D3EE;
   min-height: 24px;
@@ -732,6 +736,30 @@ html.light ::-webkit-scrollbar-thumb:hover {
 .field input::placeholder {
   color: rgba(148, 163, 184, 0.65) !important;
   font-size: 13px;
+}
+
+.eye {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #94A3B8;
+  cursor: pointer;
+  transition: color 0.2s ease;
+  z-index: 10;
+}
+.eye:hover {
+  color: #FFFFFF;
 }
 
 html.light .field {
@@ -1187,11 +1215,11 @@ img, video, iframe, embed, object, svg {
   .field input {
     font-size: 16px !important;
     min-height: 44px !important;
-    padding: 10px 36px 10px 0 !important;
+    padding: 10px 48px 10px 0 !important;
   }
 
   .field-inner {
-    padding: 14px 14px 14px 42px !important;
+    padding: 14px 14px 14px 48px !important;
   }
 
   .btn {

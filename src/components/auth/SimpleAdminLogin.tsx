@@ -94,7 +94,7 @@ export const SimpleAdminLogin: React.FC = () => {
               <img 
                 src="/images/avsec-salem-logo.png" 
                 alt="AVSEC Salem Official Logo" 
-                className="h-9 w-auto object-contain drop-shadow-[0_0_15px_rgba(6,182,212,0.5)] mb-1" 
+                className="h-9 w-auto max-h-9 max-w-[36px] object-contain drop-shadow-[0_0_15px_rgba(6,182,212,0.5)] mb-1" 
               />
               <span className="text-xs font-mono font-extrabold text-slate-300 tracking-wider">
                 AI & DATA SCIENCE
@@ -121,14 +121,14 @@ export const SimpleAdminLogin: React.FC = () => {
                 Email / College Gmail
               </label>
               <div className="relative group">
-                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-400 group-focus-within:text-cyan-200 transition-colors pointer-events-none" />
+                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-cyan-400 group-focus-within:text-cyan-200 transition-colors pointer-events-none" />
                 <input
                   type="text"
                   required
                   placeholder="Enter admin email or ID"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  className="w-full bg-slate-900/90 border border-cyan-500/50 rounded-xl py-2.5 pl-10 pr-3 min-h-[44px] text-base sm:text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all"
+                  className="w-full bg-slate-900/90 border border-cyan-500/50 rounded-xl py-2.5 pl-12 pr-4 min-h-[44px] text-base sm:text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all"
                 />
               </div>
             </div>
@@ -139,22 +139,22 @@ export const SimpleAdminLogin: React.FC = () => {
                 Portal Password
               </label>
               <div className="relative group">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-400 group-focus-within:text-cyan-200 transition-colors pointer-events-none" />
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-cyan-400 group-focus-within:text-cyan-200 transition-colors pointer-events-none" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
                   placeholder="Enter admin password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-900/90 border border-cyan-500/50 rounded-xl py-2.5 pl-10 pr-10 min-h-[44px] text-base sm:text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all"
+                  className="w-full bg-slate-900/90 border border-cyan-500/50 rounded-xl py-2.5 pl-12 pr-12 min-h-[44px] text-base sm:text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all"
                 />
                 <button
                   type="button"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-cyan-400 hover:text-white transition-colors cursor-pointer"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center text-cyan-400 hover:text-white transition-colors cursor-pointer rounded-lg"
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
                 </button>
               </div>
             </div>

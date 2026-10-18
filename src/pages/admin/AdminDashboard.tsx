@@ -795,9 +795,9 @@ export const AdminDashboard: React.FC = () => {
           <div className="space-y-6">
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="flex items-center space-x-4">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-500 to-indigo-600 p-0.5 shadow-xl shrink-0">
-                  <div className="w-full h-full bg-slate-950 rounded-xl flex items-center justify-center p-1.5">
-                    <img src="/images/avsec-salem-logo.png" alt="AVSEC Salem Logo" className="w-full h-full object-contain drop-shadow" />
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 p-0.5 shadow-lg shrink-0">
+                  <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center p-1">
+                    <img src="/images/avsec-salem-logo.png" alt="AVSEC Salem Logo" className="h-7 w-7 object-contain drop-shadow" />
                   </div>
                 </div>
                 <div>

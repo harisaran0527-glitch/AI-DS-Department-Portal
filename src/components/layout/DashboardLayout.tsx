@@ -63,7 +63,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           <img
             src="/images/avsec-salem-logo.png"
             alt="AVSEC Salem Logo"
-            className="h-7 w-auto object-contain shrink-0 drop-shadow-[0_0_8px_rgba(167,139,250,0.3)]"
+            className="h-7 w-auto max-h-7 max-w-[28px] object-contain shrink-0 drop-shadow-[0_0_8px_rgba(167,139,250,0.3)]"
           />
           <div className="overflow-hidden truncate">
             <div className="text-xs font-bold text-[#F1F5F9] tracking-wide truncate">AVSEC SALEM</div>
@@ -98,7 +98,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
             <img
               src="/images/avsec-salem-logo.png"
               alt="AVSEC Salem Logo"
-              className="h-8 sm:h-9 w-auto object-contain shrink-0 drop-shadow-[0_0_10px_rgba(167,139,250,0.35)]"
+              className="h-8 w-auto max-h-8 max-w-[32px] object-contain shrink-0 drop-shadow-[0_0_10px_rgba(167,139,250,0.35)]"
             />
             <div className="overflow-hidden">
               <div className="text-xs font-extrabold text-[#F1F5F9] tracking-wider truncate">AVSEC - SALEM</div>

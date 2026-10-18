@@ -180,7 +180,7 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
                       <img 
                         src="/images/avsec-salem-logo.png" 
                         alt="AVSEC Salem Official Logo" 
-                        className="h-9 sm:h-10 w-auto object-contain drop-shadow-[0_0_12px_rgba(6,182,212,0.6)]" 
+                        className="h-9 w-auto max-h-9 max-w-[36px] object-contain drop-shadow-[0_0_12px_rgba(6,182,212,0.6)]" 
                       />
                       <div className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-500/50">
                         <Sparkles className="w-2.5 h-2.5 text-cyan-400 animate-pulse" />
@@ -204,14 +204,14 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
                         Gmail / Email
                       </label>
                       <div className="relative group">
-                        <User className="absolute left-3 top-2.5 w-3.5 h-3.5 text-cyan-400 group-focus-within:text-cyan-200 transition-colors" />
+                        <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-cyan-400 group-focus-within:text-cyan-200 transition-colors pointer-events-none" />
                         <input
                           type="text"
                           required
                           placeholder={placeholderIdentifier}
                           value={identifier}
                           onChange={(e) => setIdentifier(e.target.value)}
-                          className="w-full bg-slate-950/90 border border-cyan-500/50 rounded-lg py-2 pl-9 pr-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-1 focus:ring-cyan-400/50 shadow-[0_0_10px_rgba(6,182,212,0.2)] transition-all"
+                          className="w-full bg-slate-950/90 border border-cyan-500/50 rounded-lg py-2.5 pl-12 pr-3 min-h-[44px] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-1 focus:ring-cyan-400/50 shadow-[0_0_10px_rgba(6,182,212,0.2)] transition-all"
                         />
                       </div>
                     </div>
@@ -222,22 +222,22 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
                         Password
                       </label>
                       <div className="relative group">
-                        <Lock className="absolute left-3 top-2.5 w-3.5 h-3.5 text-cyan-400 group-focus-within:text-cyan-200 transition-colors" />
+                        <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-cyan-400 group-focus-within:text-cyan-200 transition-colors pointer-events-none" />
                         <input
                           type={showPassword ? 'text' : 'password'}
                           required
                           placeholder="Enter password"
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
-                          className="w-full bg-slate-950/90 border border-cyan-500/50 rounded-lg py-2 pl-9 pr-9 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-1 focus:ring-cyan-400/50 shadow-[0_0_10px_rgba(6,182,212,0.2)] transition-all"
+                          className="w-full bg-slate-950/90 border border-cyan-500/50 rounded-lg py-2.5 pl-12 pr-12 min-h-[44px] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-1 focus:ring-cyan-400/50 shadow-[0_0_10px_rgba(6,182,212,0.2)] transition-all"
                         />
                         <button
                           type="button"
                           aria-label={showPassword ? 'Hide password' : 'Show password'}
                           onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-2.5 text-cyan-400 hover:text-white transition-colors"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center text-cyan-400 hover:text-white transition-colors rounded-lg cursor-pointer"
                         >
-                          {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
                         </button>
                       </div>
                     </div>
@@ -294,7 +294,7 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
                 transition={{ duration: 0.6, ease: 'easeInOut' }}
                 className="absolute inset-y-2 left-1/2 right-2 bg-slate-900 border-2 border-cyan-700/80 rounded-r-xl shadow-2xl origin-left z-40 flex flex-col items-center justify-center p-4 text-center"
               >
-                <img src="/images/avsec-salem-logo.png" alt="AVSEC Salem Logo" className="h-12 w-auto mb-2 opacity-80" />
+                <img src="/images/avsec-salem-logo.png" alt="AVSEC Salem Logo" className="h-9 w-auto max-h-9 max-w-[36px] object-contain mb-2 opacity-80" />
                 <span className="text-xs font-mono text-cyan-300 tracking-widest uppercase font-bold">AVSEC SALEM</span>
               </motion.div>
             )}
