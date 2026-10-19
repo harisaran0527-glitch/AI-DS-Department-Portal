@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { API, getValidSessionToken } from '../../services/api';
+import { API, getValidSessionToken, clearSessionAuth } from '../../services/api';
 import type { Role } from '../../types';
 
 interface LoginRouteProps {
@@ -38,11 +38,13 @@ export const LoginRoute: React.FC<LoginRouteProps> = ({ role, children }) => {
               case 'HOD': navigate('/hod/dashboard', { replace: true }); break;
               case 'ADMIN': navigate('/admin/dashboard', { replace: true }); break;
             }
+          } else {
+            clearSessionAuth(role);
           }
         }
       })
       .catch(() => {
-        // Token was invalid or expired; stay on the login page cleanly
+        clearSessionAuth(role);
       });
 
     return () => {

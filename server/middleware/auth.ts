@@ -37,44 +37,32 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
     }
   }
 
-  // Check cookie as secondary option if Bearer header was not provided
-  let tokenFromCookie: string | undefined;
-  const portalRole = (req.headers['x-portal-role'] as string || '').toLowerCase();
+  // Determine target role strictly from request header or path prefix
+  const portalRole = (req.headers['x-portal-role'] as string || '').trim().toLowerCase();
   const path = (req.originalUrl || req.path || '').toLowerCase();
 
-  const getCookieForRole = (r: string) => {
-    switch (r) {
-      case 'admin': return req.cookies?.aids_admin_token;
-      case 'hod': return req.cookies?.aids_hod_token;
-      case 'faculty': return req.cookies?.aids_faculty_token;
-      case 'student': return req.cookies?.aids_student_token;
-      default: return undefined;
-    }
-  };
-
-  if (portalRole) {
-    tokenFromCookie = getCookieForRole(portalRole);
-  } else if (path.includes('/admin')) {
-    tokenFromCookie = req.cookies?.aids_admin_token;
-  } else if (path.includes('/hod')) {
-    tokenFromCookie = req.cookies?.aids_hod_token;
-  } else if (path.includes('/faculty')) {
-    tokenFromCookie = req.cookies?.aids_faculty_token;
-  } else if (path.includes('/student')) {
-    tokenFromCookie = req.cookies?.aids_student_token;
+  let targetRole: string | undefined = portalRole || undefined;
+  if (!targetRole) {
+    if (path.includes('/admin')) targetRole = 'admin';
+    else if (path.includes('/hod')) targetRole = 'hod';
+    else if (path.includes('/faculty')) targetRole = 'faculty';
+    else if (path.includes('/student')) targetRole = 'student';
   }
 
-  if (!tokenFromCookie) {
-    tokenFromCookie = req.cookies?.aids_admin_token ||
-                      req.cookies?.aids_hod_token ||
-                      req.cookies?.aids_faculty_token ||
-                      req.cookies?.aids_student_token ||
-                      req.cookies?.aids_session_token;
+  // Check role-specific cookie ONLY if Bearer header was not provided
+  let tokenFromCookie: string | undefined;
+  if (targetRole) {
+    switch (targetRole) {
+      case 'admin': tokenFromCookie = req.cookies?.aids_admin_token; break;
+      case 'hod': tokenFromCookie = req.cookies?.aids_hod_token; break;
+      case 'faculty': tokenFromCookie = req.cookies?.aids_faculty_token; break;
+      case 'student': tokenFromCookie = req.cookies?.aids_student_token; break;
+    }
   }
 
   // Priority: 1. Authorization: Bearer token (explicit in request header)
-  //           2. Role-specific HttpOnly cookie (aids_admin_token, etc.)
-  //           3. General HttpOnly cookie aids_session_token
+  //           2. Role-specific HttpOnly cookie (aids_admin_token, aids_faculty_token, etc.)
+  // NEVER fall back to another role's cookie or general session cookie!
   const token = tokenFromHeader || tokenFromCookie;
 
   if (!token) {
@@ -86,6 +74,16 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
     if (decoded && decoded.role) {
       decoded.role = String(decoded.role).trim().toUpperCase();
     }
+
+    // Role Consistency Validation:
+    // If request explicitly declared a portal role (via X-Portal-Role header),
+    // verify that the provided token belongs to that exact role.
+    if (portalRole && decoded.role !== portalRole.toUpperCase()) {
+      return res.status(401).json({
+        error: `Unauthorized: Session token is for ${decoded.role}, but portal requires ${portalRole.toUpperCase()}. Please log in as ${portalRole.toUpperCase()}.`
+      });
+    }
+
     req.user = decoded;
     next();
   } catch {

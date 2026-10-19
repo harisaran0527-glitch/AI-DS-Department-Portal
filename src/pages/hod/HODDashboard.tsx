@@ -41,7 +41,7 @@ export const HODDashboard: React.FC = () => {
 
   const handleLogout = async () => {
     try {
-      await API.logout();
+      await API.logout('HOD');
     } catch {}
     navigate('/hod');
   };
@@ -86,7 +86,7 @@ export const HODDashboard: React.FC = () => {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const meRes = await API.getMe();
+      const meRes = await API.getMe('HOD');
       if (!meRes.user || meRes.user.role !== 'HOD') {
         navigate('/hod');
         return;

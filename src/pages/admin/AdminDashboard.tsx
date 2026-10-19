@@ -234,7 +234,7 @@ export const AdminDashboard: React.FC = () => {
   const fetchAdminData = React.useCallback(async () => {
     try {
       setIsStudentsLoading(true);
-      const meRes = await API.getMe();
+      const meRes = await API.getMe('ADMIN');
       if (!meRes.user || meRes.user.role !== 'ADMIN') {
         navigate('/admin');
         return;
@@ -625,7 +625,7 @@ export const AdminDashboard: React.FC = () => {
 
   const handleLogout = async () => {
     try {
-      await API.logout();
+      await API.logout('ADMIN');
     } catch {}
     navigate('/admin');
   };

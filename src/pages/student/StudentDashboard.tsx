@@ -58,7 +58,7 @@ export const StudentDashboard: React.FC = () => {
 
   const fetchProfile = React.useCallback(async () => {
     try {
-      const meRes = await API.getMe();
+      const meRes = await API.getMe('STUDENT');
       if (!meRes.user || meRes.user.role !== 'STUDENT') {
         navigate('/student');
         return;
@@ -85,7 +85,7 @@ export const StudentDashboard: React.FC = () => {
 
   const handleLogout = async () => {
     try {
-      await API.logout();
+      await API.logout('STUDENT');
     } catch {}
     navigate('/student');
   };

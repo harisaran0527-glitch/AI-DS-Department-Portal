@@ -34,51 +34,51 @@ export function getActivePortalRole(): Role | null {
   return null;
 }
 
+export function inferRoleFromEndpoint(endpoint: string): Role | null {
+  const lower = endpoint.toLowerCase();
+  if (lower.includes('/admin/') || lower.endsWith('/admin')) return 'ADMIN';
+  if (lower.includes('/hod/') || lower.endsWith('/hod')) return 'HOD';
+  if (lower.includes('/faculty/') || lower.endsWith('/faculty')) return 'FACULTY';
+  if (lower.includes('/student/') || lower.endsWith('/student')) return 'STUDENT';
+  return null;
+}
+
 export function getValidSessionToken(roleHint?: Role): string | null {
   if (typeof window === 'undefined') return null;
   const role = roleHint || getActivePortalRole();
+  if (!role) return null;
+
+  const roleKey = `aids_token_${role.toLowerCase()}`;
 
   // 1. Check tab-scoped sessionStorage for role-specific token
-  if (role && typeof sessionStorage !== 'undefined') {
-    const tabToken = sessionStorage.getItem(`aids_token_${role.toLowerCase()}`);
+  if (typeof sessionStorage !== 'undefined') {
+    const tabToken = sessionStorage.getItem(roleKey);
     if (isValidToken(tabToken)) return tabToken!.trim();
   }
 
-  // 2. Check general tab sessionStorage
-  if (typeof sessionStorage !== 'undefined') {
-    const sessionToken = sessionStorage.getItem('aids_session_token');
-    if (isValidToken(sessionToken)) return sessionToken!.trim();
-  }
-
-  // 3. Check persistent role-scoped localStorage (keeps installed PWAs isolated across restarts)
-  if (role && typeof localStorage !== 'undefined') {
-    const roleToken = localStorage.getItem(`aids_token_${role.toLowerCase()}`);
+  // 2. Check persistent role-scoped localStorage (keeps installed PWAs isolated across restarts)
+  if (typeof localStorage !== 'undefined') {
+    const roleToken = localStorage.getItem(roleKey);
     if (isValidToken(roleToken)) return roleToken!.trim();
   }
 
-  // 4. Fallback to generic localStorage token
-  if (typeof localStorage !== 'undefined') {
-    const generic = localStorage.getItem('aids_session_token') || localStorage.getItem('aids_token');
-    if (isValidToken(generic)) return generic!.trim();
-  }
-
+  // Strict isolation: Never fall back to generic aids_session_token or other roles' tokens!
   return null;
 }
 
 export function setSessionAuth(token: string, role?: string): void {
-  const normRole = (role || getActivePortalRole() || 'STUDENT').toUpperCase();
+  const normRole = (role || getActivePortalRole() || 'STUDENT').toUpperCase() as Role;
   const roleKey = `aids_token_${normRole.toLowerCase()}`;
 
   if (typeof sessionStorage !== 'undefined') {
     sessionStorage.setItem('aids_active_role', normRole);
-    sessionStorage.setItem('aids_session_token', token);
     sessionStorage.setItem(roleKey, token);
   }
   if (typeof localStorage !== 'undefined') {
     localStorage.setItem(roleKey, token);
-    // Maintain legacy keys for backwards compatibility
-    localStorage.setItem('aids_session_token', token);
-    localStorage.setItem('aids_token', token);
+    // Purge legacy shared keys to eliminate cross-portal session collisions
+    localStorage.removeItem('aids_session_token');
+    localStorage.removeItem('aids_token');
   }
 }
 
@@ -93,13 +93,20 @@ export function clearSessionAuth(role?: string): void {
       localStorage.removeItem(roleKey);
     }
   } else {
-    ['student', 'faculty', 'hod', 'admin'].forEach((r) => {
-      sessionStorage?.removeItem(`aids_token_${r}`);
-      localStorage?.removeItem(`aids_token_${r}`);
+    (['STUDENT', 'FACULTY', 'HOD', 'ADMIN'] as Role[]).forEach((r) => {
+      const k = `aids_token_${r.toLowerCase()}`;
+      sessionStorage?.removeItem(k);
+      localStorage?.removeItem(k);
     });
   }
-  sessionStorage?.removeItem('aids_session_token');
-  sessionStorage?.removeItem('aids_active_role');
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.removeItem('aids_session_token');
+    sessionStorage.removeItem('aids_active_role');
+  }
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('aids_session_token');
+    localStorage.removeItem('aids_token');
+  }
 }
 
 const inFlightGetRequests = new Map<string, Promise<any>>();
@@ -128,7 +135,11 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   const maxAttempts = isLoginRequest ? 1 : 3;
   let lastError: any = null;
 
-  const activeRole = getActivePortalRole();
+  // Resolve target role: explicit option header > endpoint URL path > current active portal role
+  const explicitRole = (options.headers as Record<string, string>)?.[`X-Portal-Role`] as Role | undefined;
+  const endpointRole = inferRoleFromEndpoint(endpoint);
+  const activeRole = explicitRole || endpointRole || getActivePortalRole();
+
   const validToken = !isLoginRequest ? getValidSessionToken(activeRole || undefined) : null;
   const authHeader: Record<string, string> = {
     ...(validToken ? { Authorization: `Bearer ${validToken}` } : {}),
@@ -187,7 +198,7 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
       // Handle 401 Unauthorized
       if (response.status === 401) {
         if (!isLoginRequest) {
-          clearSessionAuth();
+          clearSessionAuth(activeRole || undefined);
         }
         const errorMsg = isLoginRequest
           ? (errorMessage || 'Invalid credentials. Please verify your email/ID and password.')
@@ -305,7 +316,10 @@ export async function fetchWithResilience(url: string, options: RequestInit = {}
   const maxAttempts = isLoginRequest ? 1 : 3;
   let lastError: any = null;
 
-  const activeRole = getActivePortalRole();
+  const explicitRole = (options.headers as Record<string, string>)?.[`X-Portal-Role`] as Role | undefined;
+  const endpointRole = inferRoleFromEndpoint(url);
+  const activeRole = explicitRole || endpointRole || getActivePortalRole();
+
   const validToken = !isLoginRequest ? getValidSessionToken(activeRole || undefined) : null;
   const authHeader: Record<string, string> = {
     ...(validToken ? { Authorization: `Bearer ${validToken}` } : {}),

@@ -121,8 +121,6 @@ router.post('/login', async (req, res) => {
 
   // Set role-specific cookie so simultaneous portal logins do not overwrite each other
   res.cookie(`aids_${roleLower}_token`, token, cookieOptions);
-  // Also set general cookie for backwards compatibility
-  res.cookie('aids_session_token', token, cookieOptions);
 
   await db.logAudit(match.id, match.email, normalizedRole, 'LOGIN_SUCCESS', 'AUTH_PORTAL');
 
@@ -167,8 +165,8 @@ router.post('/logout', async (req: AuthRequest, res: Response) => {
     ['admin', 'hod', 'faculty', 'student'].forEach((r) => {
       res.clearCookie(`aids_${r}_token`, clearOptions);
     });
+    res.clearCookie('aids_session_token', clearOptions);
   }
-  res.clearCookie('aids_session_token', clearOptions);
   return res.json({ message: 'Logout successful' });
 });
 

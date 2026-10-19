@@ -324,7 +324,7 @@ export const FacultyDashboard: React.FC = () => {
 
   // Load Session & Roster on Mount
   useEffect(() => {
-    API.getMe()
+    API.getMe('FACULTY')
       .then((res) => {
         setSession(res.user);
         fetchRoster();
@@ -1395,7 +1395,7 @@ export const FacultyDashboard: React.FC = () => {
 
   const handleLogout = async () => {
     try {
-      await API.logout();
+      await API.logout('FACULTY');
     } catch {}
     setStudents([]);
     setSelectedStudent(null);
@@ -1405,8 +1405,6 @@ export const FacultyDashboard: React.FC = () => {
     setAttStudentStatuses({});
     setSearchQuery('');
     setSession(null);
-    localStorage.clear();
-    sessionStorage.clear();
     navigate('/faculty');
   };
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { API, getValidSessionToken } from '../../services/api';
+import { API, getValidSessionToken, clearSessionAuth } from '../../services/api';
 import type { Role, UserSession } from '../../types';
 import { ShieldAlert, LogOut, LayoutDashboard } from 'lucide-react';
 
@@ -38,14 +38,18 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
           if (normalizedAllowed.includes(userRole)) {
             setStatus('authorized');
           } else {
-            setStatus('forbidden');
+            // Role mismatch in active portal token: clear this specific portal's stale token
+            clearSessionAuth(requiredRole);
+            setStatus('unauthorized');
           }
         } else {
+          clearSessionAuth(requiredRole);
           setStatus('unauthorized');
         }
       })
       .catch(() => {
         if (!isMounted) return;
+        clearSessionAuth(requiredRole);
         setStatus('unauthorized');
       });
 
