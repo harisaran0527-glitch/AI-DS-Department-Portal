@@ -6,6 +6,7 @@ import {
   computeEliteStudentScore,
   computeTeamHeadScore
 } from '../scoringEngine.js';
+import { geminiKeyManager, DEFAULT_GEMINI_MODELS } from './geminiKeyManager.js';
 
 export interface CategoryWinner {
   rank: 1 | 2;
@@ -65,87 +66,64 @@ export function isTestOrDemoRecord(stu: { name?: string; email?: string; registe
   return isTestName || isTestEmail || isTestReg;
 }
 
-const PREFERRED_GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-flash-latest'];
-
-let quotaExhaustedUntil = 0;
-let lastQuotaErrorMessage = '';
+const PREFERRED_GEMINI_MODELS = DEFAULT_GEMINI_MODELS;
 
 export function isQuotaExhausted(): boolean {
-  return Date.now() < quotaExhaustedUntil;
+  return geminiKeyManager.isAllKeysExhausted();
 }
 
 export function setQuotaExhausted(cooldownMs = 60000, errorMsg = 'Quota exceeded for Gemini API') {
-  quotaExhaustedUntil = Date.now() + cooldownMs;
-  lastQuotaErrorMessage = errorMsg;
+  const activeKey = geminiKeyManager.getEligibleKey();
+  if (activeKey) {
+    geminiKeyManager.markKeyExhausted(activeKey.id, cooldownMs, errorMsg);
+  }
 }
 
 /**
- * Utility to test live connectivity to Google Gemini REST API using available model aliases
+ * Utility to test live connectivity to Google Gemini REST API using centralized GeminiKeyManager
  */
-export async function testGeminiApiConnection(apiKey: string): Promise<{ success: boolean; text?: string; activeModel?: string; error?: string }> {
-  if (!apiKey || apiKey.trim().length === 0 || apiKey.includes('YOUR_GEMINI_API_KEY')) {
-    return { success: false, error: 'GEMINI_API_KEY is missing or contains placeholder in backend .env file.' };
+export async function testGeminiApiConnection(apiKey?: string): Promise<{ success: boolean; text?: string; activeModel?: string; error?: string }> {
+  const result = await geminiKeyManager.testConnection(apiKey);
+  return {
+    success: result.success,
+    text: result.text,
+    activeModel: result.activeModel,
+    error: result.error
+  };
+}
+
+// In-memory cache for top recognition rankings (30s TTL for fast query responsiveness)
+interface CachedRankingsResponse {
+  response: TopRecognitionResponse;
+  expiresAt: number;
+}
+const rankingsResponseCache = new Map<string, CachedRankingsResponse>();
+const RANKINGS_CACHE_TTL_MS = 30 * 1000;
+
+// In-memory cache for Gemini AI category rationales (15m TTL keyed by student ID + metrics hash)
+interface CachedRationale {
+  rationale: string;
+  expiresAt: number;
+}
+const rationaleCache = new Map<string, CachedRationale>();
+const RATIONALE_CACHE_TTL_MS = 15 * 60 * 1000;
+
+function getCachedRationale(key: string): string | null {
+  const item = rationaleCache.get(key);
+  if (!item) return null;
+  if (Date.now() > item.expiresAt) {
+    rationaleCache.delete(key);
+    return null;
   }
+  return item.rationale;
+}
 
-  if (isQuotaExhausted()) {
-    const remainingSec = Math.ceil((quotaExhaustedUntil - Date.now()) / 1000);
-    return {
-      success: false,
-      error: `Gemini API Rate Limit / Quota Exhausted. Cooldown active for ${remainingSec}s before next retry. (${lastQuotaErrorMessage})`
-    };
+function setCachedRationale(key: string, rationale: string): void {
+  if (rationaleCache.size > 2000) {
+    const firstKey = rationaleCache.keys().next().value;
+    if (firstKey) rationaleCache.delete(firstKey);
   }
-
-  const prompt = 'Respond with "Gemini API connection verified successfully."';
-
-  for (const model of PREFERRED_GEMINI_MODELS) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }]
-        }),
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-
-      if (resp.ok) {
-        const data = await resp.json();
-        const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (aiText && aiText.trim().length > 0) {
-          quotaExhaustedUntil = 0; // Clear quota error on success
-          return { success: true, text: aiText.trim(), activeModel: model };
-        }
-      } else if (resp.status === 429) {
-        const errJson = await resp.json().catch(() => ({}));
-        const msg = errJson.error?.message || 'HTTP 429 Too Many Requests / Quota Exceeded';
-        setQuotaExhausted(60000, msg);
-        return { success: false, error: `Google AI Studio returned: ${msg}` };
-      }
-    } catch (_err) {
-      // Continue to next model alias if network timeout or error occurs
-    }
-  }
-
-  // If all preferred models return errors, make one final call to gemini-3.8-flash to capture exact Google error message
-  try {
-    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey.trim()}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-    });
-    const errJson = await resp.json().catch(() => ({}));
-    const msg = errJson.error?.message || `HTTP ${resp.status}`;
-    if (resp.status === 429 || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('rate limit')) {
-      setQuotaExhausted(60000, msg);
-    }
-    return { success: false, error: `Google AI Studio returned: ${msg}` };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Network request failed.' };
-  }
+  rationaleCache.set(key, { rationale, expiresAt: Date.now() + RATIONALE_CACHE_TTL_MS });
 }
 
 /**
@@ -156,6 +134,12 @@ export async function getTopRecognitionRankings(
   sectionFilter?: string,
   includeTest = false
 ): Promise<TopRecognitionResponse> {
+  const responseCacheKey = `${yearFilter || 'ALL'}_${sectionFilter || 'ALL'}_${includeTest}`;
+  const cached = rankingsResponseCache.get(responseCacheKey);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.response;
+  }
+
   const allStudents = await db.getStudents(yearFilter, sectionFilter);
   const scoringConfig = await db.getScoringConfig();
   const allTeams = await db.getTeams();
@@ -257,15 +241,13 @@ export async function getTopRecognitionRankings(
     return (b.full360.leetcode?.totalSolved || 0) - (a.full360.leetcode?.totalSolved || 0);
   });
 
-  // Check Gemini API Key & Live Connection Status
-  const apiKey = (process.env.GEMINI_API_KEY || '').trim();
-  const hasApiKey = Boolean(apiKey.length > 0 && !apiKey.includes('YOUR_GEMINI_API_KEY'));
-
-  let apiSuccess = false;
+  // Check Gemini API Key & Live Connection Status via GeminiKeyManager
+  const mgrStatus = geminiKeyManager.getApiStatus();
+  let apiSuccess = mgrStatus.isConfigured;
   let apiErrorMessage = '';
 
-  if (hasApiKey) {
-    const testRes = await testGeminiApiConnection(apiKey);
+  if (mgrStatus.isConfigured) {
+    const testRes = await geminiKeyManager.testConnection();
     if (testRes.success) {
       apiSuccess = true;
     } else {
@@ -278,10 +260,12 @@ export async function getTopRecognitionRankings(
     isConfigured: apiSuccess,
     model: 'gemini-2.5-flash',
     statusMessage: apiSuccess
-      ? 'Gemini 2.5 Flash Active'
-      : hasApiKey
-      ? `Gemini API Error: ${apiErrorMessage}. Using deterministic rule engine fallback.`
-      : 'GEMINI_API_KEY environment variable is missing/unconfigured in backend .env. Using deterministic comparative rule engine fallback.'
+      ? (mgrStatus.availableKeysCount && mgrStatus.totalKeysConfigured && mgrStatus.totalKeysConfigured > 1
+          ? `Gemini 2.5 Flash Active (${mgrStatus.availableKeysCount}/${mgrStatus.totalKeysConfigured} keys available)`
+          : 'Gemini 2.5 Flash Active')
+      : mgrStatus.totalKeysConfigured === 0
+      ? 'GEMINI_API_KEY environment variable is missing/unconfigured in backend .env. Using deterministic comparative rule engine fallback.'
+      : `Gemini API Status: ${apiErrorMessage || mgrStatus.statusMessage}. Using deterministic rule engine fallback.`
   };
 
   // Build Category Results
@@ -325,7 +309,7 @@ export async function getTopRecognitionRankings(
     geminiApiStatus.isConfigured
   );
 
-  return {
+  const response: TopRecognitionResponse = {
     yearFilter,
     sectionFilter,
     calculatedAt: new Date().toISOString(),
@@ -335,6 +319,13 @@ export async function getTopRecognitionRankings(
     bestEliteStudent: bestEliteStudentCategory,
     bestLeetCodePerformer: bestLeetCodeCategory
   };
+
+  rankingsResponseCache.set(responseCacheKey, {
+    response,
+    expiresAt: Date.now() + RANKINGS_CACHE_TTL_MS
+  });
+
+  return response;
 }
 
 async function buildCategoryResult(
@@ -431,15 +422,23 @@ async function buildCategoryResult(
  * Uses official Gemini REST API if GEMINI_API_KEY exists, or structured AI insight engine.
  */
 async function generateGeminiExplanation(categoryKey: string, rank: 1 | 2, item: any, opponent: any, isApiActive = false): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
   const student = item.student;
   const breakdown = item.breakdown || {};
   const leetcode = item.full360?.leetcode;
   const allTeams = await db.getTeams();
   const teams = allTeams.filter((t) => t.team_head_student_id === student.id);
 
-  // 1. Live Gemini REST API call if GEMINI_API_KEY is present and connection test succeeded
-  if (isApiActive && apiKey && apiKey.trim().length > 0) {
+  // Check in-memory rationale cache first
+  const rationaleKey = `${categoryKey}_${rank}_${student.id}_${item.overallScore || 0}_${student.cgpa || 0}_${breakdown.skillEdge || 0}_${breakdown.nptel || 0}_${breakdown.attendance || 0}_${leetcode?.totalSolved || 0}_${teams.length}_${isApiActive}`;
+  const cached = getCachedRationale(rationaleKey);
+  if (cached) {
+    return cached;
+  }
+
+  let finalExplanation = '';
+
+  // 1. Live Gemini REST API call with automatic key failover if API is active
+  if (isApiActive) {
     const prompt = `Analyze this student performance data and write a concise, professional 2-sentence rationale for placing ${rank === 1 ? '1st Place' : '2nd Place'} in the category "${categoryKey}".
 Student Name: ${student.name} (${student.registerNo})
 Year/Section: ${student.year} Sec ${student.section}
@@ -457,31 +456,14 @@ Rules:
 - Highlight specific verified score numbers.
 - Do NOT invent or alter any metrics.`;
 
-    for (const model of PREFERRED_GEMINI_MODELS) {
-      try {
-        const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }]
-          })
-        });
+    const genResult = await geminiKeyManager.generateContent(prompt, {
+      preferredModels: PREFERRED_GEMINI_MODELS
+    });
 
-        if (resp.ok) {
-          const data = await resp.json();
-          const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (aiText && aiText.trim().length > 10) {
-            return `${aiText.trim()} [Gemini 2.5 Flash]`;
-          }
-        } else if (resp.status === 429) {
-          const errJson = await resp.json().catch(() => ({}));
-          const msg = errJson.error?.message || 'Quota Exceeded';
-          setQuotaExhausted(60000, msg);
-          break; // Stop querying for this request
-        }
-      } catch (_err) {
-        // Try next model alias
-      }
+    if (genResult.success && genResult.text && genResult.text.trim().length > 10) {
+      finalExplanation = `${genResult.text.trim()} [Gemini 2.5 Flash]`;
+      setCachedRationale(rationaleKey, finalExplanation);
+      return finalExplanation;
     }
   }
 
@@ -495,37 +477,34 @@ Rules:
 
   if (categoryKey === 'BEST_STUDENT') {
     if (rank === 1) {
-      return `Awarded 1st Place because ${student.name} (${student.registerNo || student.register_no}) achieved top overall composite score of ${item.overallScore.toFixed(1)}/100, outperforming the field with CGPA of ${formatCgpa(student.cgpa)}, SkillEdge completion of ${breakdown.skillEdge}%, and ${breakdown.attendance}% attendance. ${tag}`;
+      finalExplanation = `Awarded 1st Place because ${student.name} (${student.registerNo || student.register_no}) achieved top overall composite score of ${item.overallScore.toFixed(1)}/100, outperforming the field with CGPA of ${formatCgpa(student.cgpa)}, SkillEdge completion of ${breakdown.skillEdge}%, and ${breakdown.attendance}% attendance. ${tag}`;
     } else {
-      return `Awarded 2nd Place because ${student.name} (${student.registerNo || student.register_no}) demonstrated outstanding multi-module performance with overall composite score of ${item.overallScore.toFixed(1)}/100, ${formatCgpa(student.cgpa)} CGPA, and verified course certifications. ${tag}`;
+      finalExplanation = `Awarded 2nd Place because ${student.name} (${student.registerNo || student.register_no}) demonstrated outstanding multi-module performance with overall composite score of ${item.overallScore.toFixed(1)}/100, ${formatCgpa(student.cgpa)} CGPA, and verified course certifications. ${tag}`;
     }
-  }
-
-  if (categoryKey === 'BEST_TEAM_HEAD') {
+  } else if (categoryKey === 'BEST_TEAM_HEAD') {
     if (rank === 1) {
-      return `Awarded 1st Place because ${student.name} (${student.registerNo || student.register_no}) leads ${teams.length || 1} project teams with team score of ${item.teamHeadScore.toFixed(1)}/100, demonstrating exceptional technical leadership and academic balance (${formatCgpa(student.cgpa)} CGPA). ${tag}`;
+      finalExplanation = `Awarded 1st Place because ${student.name} (${student.registerNo || student.register_no}) leads ${teams.length || 1} project teams with team score of ${item.teamHeadScore.toFixed(1)}/100, demonstrating exceptional technical leadership and academic balance (${formatCgpa(student.cgpa)} CGPA). ${tag}`;
     } else {
-      return `Awarded 2nd Place because ${student.name} (${student.registerNo || student.register_no}) holds a strong team head score of ${item.teamHeadScore.toFixed(1)}/100 with verified team project contributions and ${formatCgpa(student.cgpa)} CGPA. ${tag}`;
+      finalExplanation = `Awarded 2nd Place because ${student.name} (${student.registerNo || student.register_no}) holds a strong team head score of ${item.teamHeadScore.toFixed(1)}/100 with verified team project contributions and ${formatCgpa(student.cgpa)} CGPA. ${tag}`;
     }
-  }
-
-  if (categoryKey === 'BEST_ELITE_STUDENT') {
+  } else if (categoryKey === 'BEST_ELITE_STUDENT') {
     if (rank === 1) {
-      return `Awarded 1st Place Elite Student because ${student.name} (${student.registerNo || student.register_no}) ranks #1 among designated Elite Students with Elite score of ${item.eliteScore.toFixed(1)}/100, combining ${formatCgpa(student.cgpa)} CGPA, ${breakdown.leetCode}/100 LeetCode, and ${breakdown.skillEdge}% SkillEdge. ${tag}`;
+      finalExplanation = `Awarded 1st Place Elite Student because ${student.name} (${student.registerNo || student.register_no}) ranks #1 among designated Elite Students with Elite score of ${item.eliteScore.toFixed(1)}/100, combining ${formatCgpa(student.cgpa)} CGPA, ${breakdown.leetCode}/100 LeetCode, and ${breakdown.skillEdge}% SkillEdge. ${tag}`;
     } else {
-      return `Awarded 2nd Place Elite Student because ${student.name} (${student.registerNo || student.register_no}) secured 2nd position among designated Elite Students with Elite score of ${item.eliteScore.toFixed(1)}/100 and verified multi-disciplinary project portfolios. ${tag}`;
+      finalExplanation = `Awarded 2nd Place Elite Student because ${student.name} (${student.registerNo || student.register_no}) secured 2nd position among designated Elite Students with Elite score of ${item.eliteScore.toFixed(1)}/100 and verified multi-disciplinary project portfolios. ${tag}`;
     }
-  }
-
-  if (categoryKey === 'BEST_LEETCODE') {
+  } else if (categoryKey === 'BEST_LEETCODE') {
     if (rank === 1) {
-      return `Awarded 1st Place because ${student.name} (${student.registerNo || student.register_no}) achieved top verified coding score of ${item.leetCodeScore.toFixed(1)}/100 with ${leetcode?.totalSolved || 0} Total Solved (Easy: ${leetcode?.easySolved || 0}, Med: ${leetcode?.mediumSolved || 0}, Hard: ${leetcode?.hardSolved || 0}) and Rating of ${leetcode?.contestRating || 1200}. ${tag}`;
+      finalExplanation = `Awarded 1st Place because ${student.name} (${student.registerNo || student.register_no}) achieved top verified coding score of ${item.leetCodeScore.toFixed(1)}/100 with ${leetcode?.totalSolved || 0} Total Solved (Easy: ${leetcode?.easySolved || 0}, Med: ${leetcode?.mediumSolved || 0}, Hard: ${leetcode?.hardSolved || 0}) and Rating of ${leetcode?.contestRating || 1200}. ${tag}`;
     } else {
-      return `Awarded 2nd Place because ${student.name} (${student.registerNo || student.register_no}) holds verified coding score of ${item.leetCodeScore.toFixed(1)}/100 with ${leetcode?.totalSolved || 0} Total Solved (Easy: ${leetcode?.easySolved || 0}, Med: ${leetcode?.mediumSolved || 0}, Hard: ${leetcode?.hardSolved || 0}). ${tag}`;
+      finalExplanation = `Awarded 2nd Place because ${student.name} (${student.registerNo || student.register_no}) holds verified coding score of ${item.leetCodeScore.toFixed(1)}/100 with ${leetcode?.totalSolved || 0} Total Solved (Easy: ${leetcode?.easySolved || 0}, Med: ${leetcode?.mediumSolved || 0}, Hard: ${leetcode?.hardSolved || 0}). ${tag}`;
     }
+  } else {
+    finalExplanation = `Awarded Rank #${rank} because ${student.name} (${student.registerNo || student.register_no}) demonstrated verified high performance across department evaluation metrics. ${tag}`;
   }
 
-  return `Awarded Rank #${rank} because ${student.name} (${student.registerNo || student.register_no}) demonstrated verified high performance across department evaluation metrics. ${tag}`;
+  setCachedRationale(rationaleKey, finalExplanation);
+  return finalExplanation;
 }
 
 /**

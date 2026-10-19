@@ -40,9 +40,13 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [authenticatedName, setAuthenticatedName] = useState('');
 
-  // Clean up any stale remembered emails on mount to guarantee fresh blank fields
+  // Clean up any stale remembered emails on mount and enforce fixed dark theme
   useEffect(() => {
     localStorage.removeItem(`remembered_email_${portalRole.toLowerCase()}`);
+    document.documentElement.classList.remove('light');
+    document.documentElement.classList.add('dark');
+    document.documentElement.setAttribute('data-theme', 'dark');
+    document.body.setAttribute('data-theme', 'dark');
   }, [portalRole]);
 
   // Execute 3D Book Opening Timeline
@@ -93,9 +97,9 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
     } catch (err: any) {
       setAuthStatus('error');
       const msg = err.message || '';
-      const isGenuineNetworkDrop = err instanceof TypeError || msg === 'Failed to fetch' || msg.includes('NetworkError') || msg.includes('Load failed');
-      if (isGenuineNetworkDrop) {
-        setErrorMessage('Network connection error. Please check your internet connection and try again.');
+      const isClientOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+      if (isClientOffline) {
+        setErrorMessage('No internet connection detected. Please check your network and try again.');
       } else {
         setErrorMessage(msg || 'Invalid credentials. Please verify your identifier and password.');
       }

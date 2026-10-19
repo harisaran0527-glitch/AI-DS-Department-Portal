@@ -50,9 +50,6 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   const method = (options.method || 'GET').toUpperCase();
   const isGetOrIdempotent = method === 'GET' || method === 'HEAD' || method === 'OPTIONS' || method === 'PUT';
 
-  const maxAttempts = 3;
-  let lastError: any = null;
-
   let cleanEndpoint = endpoint;
   if (!cleanEndpoint.startsWith('http://') && !cleanEndpoint.startsWith('https://')) {
     if (cleanEndpoint.startsWith('/api/')) {
@@ -67,6 +64,10 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   const url = cleanEndpoint;
 
   const isLoginRequest = url.includes('/auth/login');
+  // Never automatically retry password submissions per security requirements
+  const maxAttempts = isLoginRequest ? 1 : 3;
+  let lastError: any = null;
+
   const validToken = !isLoginRequest ? getValidSessionToken() : null;
   const authHeader: Record<string, string> = validToken ? { Authorization: `Bearer ${validToken}` } : {};
 
@@ -95,8 +96,23 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
         return data as T;
       }
 
-      const data = await response.json().catch(() => ({}));
+      let responseBodyText = '';
+      let data: any = {};
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        data = await response.json().catch(() => ({}));
+        responseBodyText = JSON.stringify(data);
+      } else {
+        responseBodyText = await response.text().catch(() => '');
+      }
+
       const errorMessage = data.error || data.message;
+      const renderRouting = response.headers.get('x-render-routing') || '';
+      const isRenderSuspended = renderRouting === 'suspend' || responseBodyText.toLowerCase().includes('service has been suspended');
+
+      if (isRenderSuspended) {
+        throw new Error('Backend server is suspended on Render. Please resume the service in your Render dashboard.');
+      }
 
       // Handle 401 Unauthorized
       if (response.status === 401) {
@@ -104,15 +120,37 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
           clearSessionAuth();
         }
         const errorMsg = isLoginRequest
-          ? (data.error || data.message || 'Invalid credentials')
-          : (data.error || data.message || 'Session expired. Please log in again.');
+          ? (errorMessage || 'Invalid credentials. Please verify your email/ID and password.')
+          : (errorMessage || 'Session expired. Please log in again.');
         throw new Error(errorMsg);
       }
 
       // Handle 403 Forbidden
       if (response.status === 403) {
-        const errorMsg = data.error || data.message || 'Forbidden: Insufficient permissions.';
+        const errorMsg = errorMessage || 'Forbidden: Insufficient permissions.';
         throw new Error(errorMsg);
+      }
+
+      // Handle 429 Rate Limit
+      if (response.status === 429) {
+        const errorMsg = errorMessage || 'Too many requests. Please wait a moment before trying again.';
+        throw new Error(errorMsg);
+      }
+
+      // 5xx Transient Gateway Errors (502, 503, 504) - retry safe/idempotent or cold start proxy responses (NEVER login)
+      const isGatewayTransient = response.status === 502 || response.status === 503 || response.status === 504;
+      if (!isLoginRequest && attempt < maxAttempts && (isGetOrIdempotent || isGatewayTransient)) {
+        console.warn(`⚠️ [API Resilience] Transient HTTP ${response.status} on ${method} ${url}. Retrying attempt ${attempt}/${maxAttempts}...`);
+        await delay(Math.pow(2, attempt - 1) * 800);
+        continue;
+      }
+
+      if (response.status === 503) {
+        throw new Error(errorMessage || 'Backend server is currently waking up or unavailable (HTTP 503). Please retry in a few moments.');
+      }
+
+      if (response.status === 502 || response.status === 504) {
+        throw new Error(errorMessage || `Backend gateway error (HTTP ${response.status}). The server may be starting up, please try again shortly.`);
       }
 
       // Do NOT retry other 4xx client errors
@@ -120,20 +158,17 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
         throw new Error(errorMessage || `Client Error (${response.status})`);
       }
 
-      // 5xx Transient Gateway Errors (502, 503, 504) - retry safe/idempotent or cold start proxy responses
-      const isGatewayTransient = response.status === 502 || response.status === 503 || response.status === 504;
-      if (attempt < maxAttempts && (isGetOrIdempotent || isGatewayTransient)) {
-        console.warn(`⚠️ [API Resilience] Transient HTTP ${response.status} on ${method} ${url}. Retrying attempt ${attempt}/${maxAttempts}...`);
-        await delay(Math.pow(2, attempt - 1) * 800);
-        continue;
-      }
-
       throw new Error(errorMessage || `Server Error (${response.status}). Please try again.`);
     } catch (err: any) {
       clearTimeout(timeoutId);
 
       const isAbort = err.name === 'AbortError';
-      const isBrowserFetchDrop = err instanceof TypeError && (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError') || err.message?.includes('Load failed'));
+      const isBrowserFetchDrop = err instanceof TypeError && (
+        err.message?.includes('Failed to fetch') ||
+        err.message?.includes('NetworkError') ||
+        err.message?.includes('Load failed') ||
+        err.message?.includes('fetch failed')
+      );
       const isNetworkOrTimeout = isAbort || isBrowserFetchDrop;
 
       if (!isNetworkOrTimeout) {
@@ -142,7 +177,7 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
 
       lastError = err;
 
-      if (attempt < maxAttempts) {
+      if (!isLoginRequest && attempt < maxAttempts) {
         const logMsg = isAbort ? 'Request timed out waiting for backend response' : (err.message || 'Network failure');
         console.warn(`⚠️ [API Resilience] ${logMsg} on ${method} ${url}. Retrying attempt ${attempt}/${maxAttempts}...`);
         await delay(Math.pow(2, attempt - 1) * 800);
@@ -150,7 +185,16 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
       }
 
       if (isAbort) {
-        throw new Error('Request timed out. Please try again.');
+        throw new Error('Request timed out waiting for server response. Please try again.');
+      }
+
+      if (isBrowserFetchDrop) {
+        const isClientOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+        if (isClientOffline) {
+          throw new Error('No internet connection detected. Please check your network and try again.');
+        } else {
+          throw new Error('Unable to connect to backend server. The server may be waking up from idle or temporarily unavailable. Please retry in a few moments.');
+        }
       }
 
       throw err;
@@ -163,9 +207,6 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
 export async function fetchWithResilience(url: string, options: RequestInit = {}): Promise<Response> {
   const method = (options.method || 'GET').toUpperCase();
   const isGetOrIdempotent = method === 'GET' || method === 'HEAD' || method === 'OPTIONS' || method === 'PUT';
-
-  const maxAttempts = 3;
-  let lastError: any = null;
 
   let cleanEndpoint = url;
   if (!cleanEndpoint.startsWith('http://') && !cleanEndpoint.startsWith('https://')) {
@@ -180,6 +221,9 @@ export async function fetchWithResilience(url: string, options: RequestInit = {}
   }
   const targetUrl = cleanEndpoint;
   const isLoginRequest = targetUrl.includes('/auth/login');
+  const maxAttempts = isLoginRequest ? 1 : 3;
+  let lastError: any = null;
+
   const validToken = !isLoginRequest ? getValidSessionToken() : null;
   const authHeader: Record<string, string> = validToken ? { Authorization: `Bearer ${validToken}` } : {};
 
@@ -201,8 +245,13 @@ export async function fetchWithResilience(url: string, options: RequestInit = {}
       const response = await fetch(targetUrl, config);
       clearTimeout(timeoutId);
 
+      const renderRouting = response.headers.get('x-render-routing') || '';
+      if (renderRouting === 'suspend') {
+        throw new Error('Backend server is suspended on Render. Please resume the service in your Render dashboard.');
+      }
+
       const isGatewayTransient = response.status === 502 || response.status === 503 || response.status === 504;
-      if (!response.ok && response.status >= 500 && attempt < maxAttempts && (isGetOrIdempotent || isGatewayTransient)) {
+      if (!isLoginRequest && !response.ok && response.status >= 500 && attempt < maxAttempts && (isGetOrIdempotent || isGatewayTransient)) {
         console.warn(`⚠️ [API Resilience] Transient HTTP ${response.status} on fetch ${method} ${targetUrl}. Retrying attempt ${attempt}/${maxAttempts}...`);
         await delay(Math.pow(2, attempt - 1) * 800);
         continue;
@@ -213,7 +262,12 @@ export async function fetchWithResilience(url: string, options: RequestInit = {}
       clearTimeout(timeoutId);
 
       const isAbort = err.name === 'AbortError';
-      const isBrowserFetchDrop = err instanceof TypeError && (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError') || err.message?.includes('Load failed'));
+      const isBrowserFetchDrop = err instanceof TypeError && (
+        err.message?.includes('Failed to fetch') ||
+        err.message?.includes('NetworkError') ||
+        err.message?.includes('Load failed') ||
+        err.message?.includes('fetch failed')
+      );
       const isNetworkOrTimeout = isAbort || isBrowserFetchDrop;
 
       if (!isNetworkOrTimeout) {
@@ -222,10 +276,23 @@ export async function fetchWithResilience(url: string, options: RequestInit = {}
 
       lastError = err;
 
-      if (attempt < maxAttempts) {
+      if (!isLoginRequest && attempt < maxAttempts) {
         console.warn(`⚠️ [API Resilience] Fetch drop/timeout on ${method} ${targetUrl}. Retrying attempt ${attempt}/${maxAttempts}...`);
         await delay(Math.pow(2, attempt - 1) * 800);
         continue;
+      }
+
+      if (isAbort) {
+        throw new Error('Request timed out waiting for server response. Please try again.');
+      }
+
+      if (isBrowserFetchDrop) {
+        const isClientOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+        if (isClientOffline) {
+          throw new Error('No internet connection detected. Please check your network and try again.');
+        } else {
+          throw new Error('Unable to connect to backend server. The server may be waking up from idle or temporarily unavailable. Please retry in a few moments.');
+        }
       }
 
       throw err;

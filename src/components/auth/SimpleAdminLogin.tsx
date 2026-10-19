@@ -17,9 +17,13 @@ export const SimpleAdminLogin: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [authenticatedName, setAuthenticatedName] = useState('');
 
-  // Clean up any stale remembered emails on mount to guarantee fresh blank fields
+  // Clean up any stale remembered emails on mount and enforce fixed dark theme
   useEffect(() => {
     localStorage.removeItem('remembered_email_admin');
+    document.documentElement.classList.remove('light');
+    document.documentElement.classList.add('dark');
+    document.documentElement.setAttribute('data-theme', 'dark');
+    document.body.setAttribute('data-theme', 'dark');
   }, []);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -49,9 +53,9 @@ export const SimpleAdminLogin: React.FC = () => {
     } catch (err: any) {
       setAuthStatus('error');
       const msg = err.message || '';
-      const isGenuineNetworkDrop = err instanceof TypeError || msg === 'Failed to fetch' || msg.includes('NetworkError') || msg.includes('Load failed');
-      if (isGenuineNetworkDrop) {
-        setErrorMessage('Network connection error. Please check your internet connection and try again.');
+      const isClientOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+      if (isClientOffline) {
+        setErrorMessage('No internet connection detected. Please check your network and try again.');
       } else {
         setErrorMessage(msg || 'Invalid admin credentials. Please verify your email/ID and password.');
       }
@@ -59,7 +63,7 @@ export const SimpleAdminLogin: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#3641C9] text-white flex items-center justify-center p-4 relative overflow-hidden font-sans select-none">
+    <div className="min-h-screen bg-[#3641C9] text-white flex items-center justify-center p-4 relative overflow-hidden font-sans select-none admin-login-screen">
       
       {/* 4K Minimal Radial Portal Glow (z-0) */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(63,75,218,0.4),rgba(27,32,95,0.95)_80%)] pointer-events-none z-0" />
@@ -125,10 +129,11 @@ export const SimpleAdminLogin: React.FC = () => {
                 <input
                   type="text"
                   required
+                  disabled={authStatus === 'loading'}
                   placeholder="Enter admin email or ID"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  className="w-full bg-slate-900/90 border border-cyan-500/50 rounded-xl py-2.5 pl-12 pr-4 min-h-[44px] text-base sm:text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all"
+                  className="w-full bg-slate-900/90 border border-cyan-500/50 rounded-xl py-2.5 pl-12 pr-4 min-h-[44px] text-base sm:text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all disabled:opacity-75 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -143,16 +148,18 @@ export const SimpleAdminLogin: React.FC = () => {
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
+                  disabled={authStatus === 'loading'}
                   placeholder="Enter admin password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-900/90 border border-cyan-500/50 rounded-xl py-2.5 pl-12 pr-12 min-h-[44px] text-base sm:text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all"
+                  className="w-full bg-slate-900/90 border border-cyan-500/50 rounded-xl py-2.5 pl-12 pr-12 min-h-[44px] text-base sm:text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all disabled:opacity-75 disabled:cursor-not-allowed"
                 />
                 <button
                   type="button"
+                  disabled={authStatus === 'loading'}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center text-cyan-400 hover:text-white transition-colors cursor-pointer rounded-lg"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center text-cyan-400 hover:text-white transition-colors cursor-pointer rounded-lg disabled:opacity-50"
                 >
                   {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
                 </button>
@@ -164,9 +171,10 @@ export const SimpleAdminLogin: React.FC = () => {
               <label className="flex items-center space-x-2 text-slate-300 cursor-pointer select-none">
                 <input
                   type="checkbox"
+                  disabled={authStatus === 'loading'}
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-4 h-4 rounded bg-slate-950 border-cyan-500/60 text-cyan-500 focus:ring-cyan-400 focus:ring-offset-slate-950 cursor-pointer"
+                  className="w-4 h-4 rounded bg-slate-950 border-cyan-500/60 text-cyan-500 focus:ring-cyan-400 focus:ring-offset-slate-950 cursor-pointer disabled:cursor-not-allowed"
                 />
                 <span className="text-[11px] font-medium text-slate-300">Remember Me</span>
               </label>

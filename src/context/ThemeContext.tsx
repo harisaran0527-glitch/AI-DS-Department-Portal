@@ -19,12 +19,22 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     localStorage.setItem('app_theme', theme);
-    document.documentElement.setAttribute('data-theme', theme);
-    document.body.setAttribute('data-theme', theme);
-    if (theme === 'light') {
-      document.documentElement.classList.add('light');
-      document.documentElement.classList.remove('dark');
+    // Only apply dashboard light theme if currently inside an authenticated dashboard
+    const isDashboard = typeof window !== 'undefined' && window.location.pathname.includes('/dashboard');
+    if (isDashboard) {
+      document.documentElement.setAttribute('data-theme', theme);
+      document.body.setAttribute('data-theme', theme);
+      if (theme === 'light') {
+        document.documentElement.classList.add('light');
+        document.documentElement.classList.remove('dark');
+      } else {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+      }
     } else {
+      // Outside dashboard (all login portals), strictly enforce fixed dark theme
+      document.documentElement.setAttribute('data-theme', 'dark');
+      document.body.setAttribute('data-theme', 'dark');
       document.documentElement.classList.add('dark');
       document.documentElement.classList.remove('light');
     }

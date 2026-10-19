@@ -260,7 +260,6 @@ html.light [class*="bg-[#0D1017]"],
 html.light [class*="bg-[#12161F]"],
 html.light [class*="bg-[#171C26]"],
 html.light [class*="bg-[#0B192E]"],
-html.light [class*="bg-[#061229]"],
 html.light [class*="bg-[#071A3D]"],
 html.light [class*="bg-slate-950"],
 html.light [class*="bg-slate-900"] {
@@ -762,15 +761,20 @@ html.light ::-webkit-scrollbar-thumb:hover {
   color: #FFFFFF;
 }
 
-html.light .field {
-  background: #FFFFFF !important;
-  border-color: #CBD5E1 !important;
+/* Strict Theme Isolation: Guaranteed Fixed Dark Theme for All Login Portals */
+.stage,
+.stage .field,
+.stage .field input,
+.admin-login-screen,
+.admin-login-screen input {
+  color-scheme: dark;
 }
-html.light .field input {
-  color: #0F172A !important;
-}
-html.light .field input::placeholder {
-  color: #94A3B8 !important;
+html.light .stage,
+html.light .stage .field,
+html.light .stage .field input,
+html.light .admin-login-screen,
+html.light .admin-login-screen input {
+  color: #FFFFFF !important;
 }
 
 .caret-glow {

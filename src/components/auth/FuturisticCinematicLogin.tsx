@@ -66,9 +66,13 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
   const [errorMessage, setErrorMessage] = useState('');
   const [authenticatedName, setAuthenticatedName] = useState('');
 
-  // Clean up any stale remembered emails on mount to guarantee fresh blank fields
+  // Clean up any stale remembered emails on mount and enforce fixed dark theme
   useEffect(() => {
     localStorage.removeItem(`remembered_email_${portalRole.toLowerCase()}`);
+    document.documentElement.classList.remove('light');
+    document.documentElement.classList.add('dark');
+    document.documentElement.setAttribute('data-theme', 'dark');
+    document.body.setAttribute('data-theme', 'dark');
   }, [portalRole]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -107,9 +111,9 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
     } catch (err: any) {
       setAuthStatus('error');
       const msg = err.message || '';
-      const isGenuineNetworkDrop = err instanceof TypeError || msg === 'Failed to fetch' || msg.includes('NetworkError') || msg.includes('Load failed');
-      if (isGenuineNetworkDrop) {
-        setErrorMessage('Network connection error. Please check your internet connection and try again.');
+      const isClientOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+      if (isClientOffline) {
+        setErrorMessage('No internet connection detected. Please check your network and try again.');
       } else {
         setErrorMessage(msg || `Invalid ${roleSubtitle} credentials. Verify your login details.`);
       }
@@ -294,6 +298,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                     <input
                       type="text"
                       required
+                      disabled={authStatus === 'loading'}
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
                       onFocus={() => setFocusedField('identifier')}
@@ -322,6 +327,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                     <input
                       type={showPassword ? 'text' : 'password'}
                       required
+                      disabled={authStatus === 'loading'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       onFocus={() => setFocusedField('password')}
@@ -331,6 +337,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                     />
                     <button
                       type="button"
+                      disabled={authStatus === 'loading'}
                       onClick={() => setShowPassword(!showPassword)}
                       className="eye"
                       title={showPassword ? "Hide password" : "Show password"}

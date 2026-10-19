@@ -31,7 +31,7 @@ if (isPgConfigured) {
       ssl: { rejectUnauthorized: false },
       max: 10,
       idleTimeoutMillis: 10000,
-      connectionTimeoutMillis: 5000,
+      connectionTimeoutMillis: 10000,
       keepAlive: true,
       keepAliveInitialDelayMillis: 5000,
       statement_timeout: 10000,

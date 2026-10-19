@@ -12,6 +12,12 @@ export const LoginRoute: React.FC<LoginRouteProps> = ({ role, children }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Strictly isolate all login screens to their fixed dark theme
+    document.documentElement.classList.remove('light');
+    document.documentElement.classList.add('dark');
+    document.documentElement.setAttribute('data-theme', 'dark');
+    document.body.setAttribute('data-theme', 'dark');
+
     let isMounted = true;
     const token = getValidSessionToken();
     if (!token) {
