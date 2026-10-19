@@ -2,6 +2,7 @@ import pg from 'pg';
 import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
+import { recordDbQuery, recordDbConn } from './metrics.js';
 
 dotenv.config();
 
@@ -91,8 +92,11 @@ export function toPgSql(sql: string): string {
 }
 
 async function runPgWithRetry<T>(queryFn: () => Promise<T>, fallbackFn?: () => T): Promise<T> {
+  const t0 = performance.now();
   try {
-    return await queryFn();
+    const res = await queryFn();
+    recordDbQuery(performance.now() - t0);
+    return res;
   } catch (err: any) {
     console.warn('⚠️ PostgreSQL query error, retrying on fresh pool connection:', err.message);
     if (fallbackFn && sqliteDb) {
@@ -100,8 +104,11 @@ async function runPgWithRetry<T>(queryFn: () => Promise<T>, fallbackFn?: () => T
         return fallbackFn();
       } catch (_e) {}
     }
+    const tRetry = performance.now();
     try {
-      return await queryFn();
+      const res = await queryFn();
+      recordDbQuery(performance.now() - tRetry);
+      return res;
     } catch (retryErr: any) {
       if (fallbackFn && sqliteDb) {
         return fallbackFn();
@@ -169,16 +176,21 @@ export async function executeTransaction<T>(
 ): Promise<T> {
   if (pgPool) {
     let client: pg.PoolClient | null = null;
+    const tConn0 = performance.now();
     try {
       client = await pgPool.connect();
+      recordDbConn(performance.now() - tConn0);
     } catch (connErr: any) {
       console.warn('⚠️ PostgreSQL transaction connect error, retrying:', connErr.message);
       client = await pgPool.connect();
+      recordDbConn(performance.now() - tConn0);
     }
+    const tTx0 = performance.now();
     try {
       await client.query('BEGIN');
       const result = await callback(client);
       await client.query('COMMIT');
+      recordDbQuery(performance.now() - tTx0);
       return result;
     } catch (err) {
       await client.query('ROLLBACK');

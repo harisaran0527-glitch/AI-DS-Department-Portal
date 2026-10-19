@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { db } from '../db.js';
 import { authenticateToken, AuthRequest, JWT_SECRET } from '../middleware/auth.js';
+import { recordBcrypt } from '../metrics.js';
 
 const router = Router();
 
@@ -73,10 +74,12 @@ router.post('/login', async (req, res) => {
     });
   }
 
+  const tBcrypt0 = performance.now();
   let isPasswordValid = await bcrypt.compare(password, match.password_hash);
   if (!isPasswordValid && password.trim() !== password) {
     isPasswordValid = await bcrypt.compare(password.trim(), match.password_hash);
   }
+  recordBcrypt(performance.now() - tBcrypt0);
 
   if (!isPasswordValid) {
     recordFailedAttempt();
@@ -173,7 +176,9 @@ router.post('/change-password', authenticateToken, async (req: AuthRequest, res:
     return res.status(404).json({ error: 'User account not found.' });
   }
 
+  const tBcrypt0 = performance.now();
   const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+  recordBcrypt(performance.now() - tBcrypt0);
   if (!isMatch) {
     return res.status(401).json({ error: 'Incorrect current password.' });
   }

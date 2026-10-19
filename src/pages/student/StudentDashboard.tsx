@@ -61,10 +61,11 @@ export const StudentDashboard: React.FC = () => {
       }
       setSession(meRes.user);
 
-      const full360 = await API.getStudentSelfProfile();
+      const [full360, connRes] = await Promise.all([
+        API.getStudentSelfProfile(),
+        API.getConnectedAccounts().catch(() => ({ connectedAccounts: [], externalMetrics: [] }))
+      ]);
       setStudent360(full360);
-
-      const connRes = await API.getConnectedAccounts().catch(() => ({ connectedAccounts: [], externalMetrics: [] }));
       setConnectedData(connRes);
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to fetch student profile.');

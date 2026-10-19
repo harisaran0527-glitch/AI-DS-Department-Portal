@@ -3,6 +3,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import fs from 'fs';
+import { metricsStorage, RequestMetrics } from './metrics.js';
 
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
@@ -53,16 +54,44 @@ app.use(
 // Performance & APM Timing Middleware
 app.use((req, res, next) => {
   const start = performance.now();
-  const originalEnd = res.end;
-  res.end = function (...args: any[]) {
-    const duration = (performance.now() - start).toFixed(2);
-    if (!res.headersSent) {
-      res.setHeader('Server-Timing', `app;dur=${duration};desc="Backend Execution"`);
-      res.setHeader('X-Response-Time', `${duration}ms`);
-    }
-    return (originalEnd as any).apply(this, args);
+  const metrics: RequestMetrics = {
+    startTime: start,
+    dbTimeMs: 0,
+    dbQueries: 0,
+    dbConnTimeMs: 0,
+    bcryptTimeMs: 0
   };
-  next();
+
+  metricsStorage.run(metrics, () => {
+    const originalEnd = res.end;
+    res.end = function (...args: any[]) {
+      const durationMs = performance.now() - start;
+      const durationStr = durationMs.toFixed(2);
+      if (!res.headersSent) {
+        let serverTiming = `app;dur=${durationStr};desc="Backend Total"`;
+        if (metrics.dbQueries > 0) {
+          const dbTimeStr = metrics.dbTimeMs.toFixed(2);
+          serverTiming += `, db;dur=${dbTimeStr};desc="PostgreSQL (${metrics.dbQueries}q)"`;
+          res.setHeader('X-DB-Time', `${dbTimeStr}ms`);
+          res.setHeader('X-DB-Queries', String(metrics.dbQueries));
+        }
+        if (metrics.dbConnTimeMs > 0) {
+          const connTimeStr = metrics.dbConnTimeMs.toFixed(2);
+          serverTiming += `, conn;dur=${connTimeStr};desc="DB Pool Connect"`;
+          res.setHeader('X-DB-Conn-Time', `${connTimeStr}ms`);
+        }
+        if (metrics.bcryptTimeMs > 0) {
+          const bcryptStr = metrics.bcryptTimeMs.toFixed(2);
+          serverTiming += `, bcrypt;dur=${bcryptStr};desc="Bcrypt Verify"`;
+          res.setHeader('X-Bcrypt-Time', `${bcryptStr}ms`);
+        }
+        res.setHeader('Server-Timing', serverTiming);
+        res.setHeader('X-Response-Time', `${durationStr}ms`);
+      }
+      return (originalEnd as any).apply(this, args);
+    };
+    next();
+  });
 });
 
 app.use(express.json());

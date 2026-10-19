@@ -80,3 +80,4 @@ async function applyIndexes() {
 }
 
 applyIndexes();
+
