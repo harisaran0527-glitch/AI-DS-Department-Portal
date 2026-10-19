@@ -50,6 +50,21 @@ app.use(
   })
 );
 
+// Performance & APM Timing Middleware
+app.use((req, res, next) => {
+  const start = performance.now();
+  const originalEnd = res.end;
+  res.end = function (...args: any[]) {
+    const duration = (performance.now() - start).toFixed(2);
+    if (!res.headersSent) {
+      res.setHeader('Server-Timing', `app;dur=${duration};desc="Backend Execution"`);
+      res.setHeader('X-Response-Time', `${duration}ms`);
+    }
+    return (originalEnd as any).apply(this, args);
+  };
+  next();
+});
+
 app.use(express.json());
 app.use(cookieParser());
 
