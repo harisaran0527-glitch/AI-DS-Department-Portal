@@ -53,24 +53,30 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
-// API Routes
+// API Routes (Mounted on both /api and direct root for Vercel Serverless Function compatibility)
 app.use('/api/auth', authRoutes);
+app.use('/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/admin', adminRoutes);
 app.use('/api/faculty', facultyRoutes);
+app.use('/faculty', facultyRoutes);
 app.use('/api/hod', hodRoutes);
+app.use('/hod', hodRoutes);
 app.use('/api/student', studentRoutes);
+app.use('/student', studentRoutes);
 app.use('/api/files', filesRoutes);
+app.use('/files', filesRoutes);
 app.use('/api/subjects', subjectsRoutes);
+app.use('/subjects', subjectsRoutes);
 app.use('/api/rankings', rankingsRoutes);
+app.use('/rankings', rankingsRoutes);
 app.use('/api/skilledge', skilledgeRoutes);
+app.use('/skilledge', skilledgeRoutes);
 app.use('/api/discipline', disciplineRoutes);
+app.use('/discipline', disciplineRoutes);
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', department: 'AI & Data Science', timestamp: new Date().toISOString() });
-});
-
-app.get('/health', (req, res) => {
+// Health check endpoint (Responds to /api/health, /health, and root /api)
+app.get(['/api/health', '/health', '/api', '/'], (req, res) => {
   res.json({ status: 'ok', department: 'AI & Data Science', timestamp: new Date().toISOString() });
 });
 
@@ -87,12 +93,38 @@ if (!process.env.VERCEL && fs.existsSync(DIST_PATH)) {
 }
 
 import { initSkillEdgeScheduler } from './services/skilledgeSync.js';
+import { pgPool } from './postgresAdapter.js';
 
 if (!process.env.VERCEL) {
-  app.listen(PORT, () => {
-    console.log(`🚀 AI & DS Department Server listening on http://127.0.0.1:${PORT}`);
+  const server = app.listen(Number(PORT), '0.0.0.0', () => {
+    console.log(`🚀 AI & DS Department Server listening on 0.0.0.0:${PORT}`);
     initSkillEdgeScheduler();
   });
+
+  const handleShutdown = (signal: string) => {
+    console.log(`🛑 [Graceful Shutdown] ${signal} signal received. Closing HTTP server and database pool...`);
+    server.close(async () => {
+      console.log('✅ [Graceful Shutdown] HTTP server closed.');
+      if (pgPool) {
+        try {
+          await pgPool.end();
+          console.log('✅ [Graceful Shutdown] PostgreSQL connection pool drained.');
+        } catch (err: any) {
+          console.warn('⚠️ [Graceful Shutdown] Error draining PostgreSQL pool:', err.message);
+        }
+      }
+      process.exit(0);
+    });
+
+    // Enforce termination if connections take longer than 10 seconds to close
+    setTimeout(() => {
+      console.error('⚠️ [Graceful Shutdown] Could not close connections in time, forcefully terminating.');
+      process.exit(1);
+    }, 10000).unref();
+  };
+
+  process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+  process.on('SIGINT', () => handleShutdown('SIGINT'));
 }
 
 export default app;

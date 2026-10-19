@@ -11,7 +11,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://ai-ds-department-portal.onrender.com/api/$1"
+      "destination": "/api/index.ts"
     },
     {
       "source": "/(.*)",

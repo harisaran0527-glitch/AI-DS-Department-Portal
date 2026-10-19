@@ -3,9 +3,9 @@ import type { Student, UserSession, TeamHead, Subject } from '../types';
 export function getApiBaseUrl(): string {
   const envBase = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL;
   if (envBase && typeof envBase === 'string' && envBase.trim() !== '') {
-    let trimmed = envBase.trim().replace(/\/$/, '');
-    if (trimmed.includes('aids-department-backend.onrender.com')) {
-      trimmed = 'https://ai-ds-department-portal.onrender.com';
+    const trimmed = envBase.trim().replace(/\/$/, '');
+    if (trimmed.includes('onrender.com')) {
+      return '/api';
     }
     return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
   }

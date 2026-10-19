@@ -26,11 +26,12 @@ export let sqliteDb: any = null;
 
 if (isPgConfigured) {
   try {
+    const isServerless = Boolean(process.env.VERCEL);
     pgPool = new Pool({
       connectionString,
       ssl: { rejectUnauthorized: false },
-      max: 10,
-      idleTimeoutMillis: 10000,
+      max: isServerless ? 2 : 10,
+      idleTimeoutMillis: isServerless ? 5000 : 10000,
       connectionTimeoutMillis: 10000,
       keepAlive: true,
       keepAliveInitialDelayMillis: 5000,
