@@ -30,11 +30,12 @@ if (isPgConfigured) {
     pgPool = new Pool({
       connectionString,
       ssl: { rejectUnauthorized: false },
-      max: isServerless ? 2 : 10,
-      idleTimeoutMillis: isServerless ? 5000 : 10000,
+      max: isServerless ? 5 : 10,
+      idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
+      allowExitOnIdle: true,
       keepAlive: true,
-      keepAliveInitialDelayMillis: 5000,
+      keepAliveInitialDelayMillis: 10000,
       statement_timeout: 10000,
       query_timeout: 10000
     });

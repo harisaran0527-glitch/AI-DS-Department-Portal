@@ -959,6 +959,23 @@ export interface ScoringConfig {
 }
 
 export class SQLiteDB {
+  private static scoringConfigCache: { data: ScoringConfig; expiry: number } | null = null;
+  private static subjectsCache: { data: SubjectRecord[]; expiry: number } | null = null;
+  private static facultyAssignmentCache = new Map<string, { data: FacultyAssignmentRecord | undefined; expiry: number }>();
+
+  public static invalidateScoringConfigCache(): void {
+    SQLiteDB.scoringConfigCache = null;
+  }
+
+  public static invalidateSubjectsCache(): void {
+    SQLiteDB.subjectsCache = null;
+  }
+
+  public static invalidateFacultyAssignmentCache(facultyId?: string): void {
+    if (facultyId) SQLiteDB.facultyAssignmentCache.delete(facultyId);
+    else SQLiteDB.facultyAssignmentCache.clear();
+  }
+
   public static async initSystemAccounts(): Promise<void> {
     await initDatabaseSchema();
   }
@@ -1025,11 +1042,13 @@ export class SQLiteDB {
   }
 
   public async updateUserStatus(userId: string, isActive: boolean): Promise<void> {
+    SQLiteDB.invalidateFacultyAssignmentCache(userId);
     await executeRun('UPDATE users SET is_active = ? WHERE id = ?', [isActive ? 1 : 0, userId]);
     await executeRun('UPDATE faculty_assignments SET is_active = ? WHERE faculty_id = ?', [isActive ? 1 : 0, userId]);
   }
 
   public async updateUserAssignment(userId: string, year: string, section: string, facultyRole: string): Promise<void> {
+    SQLiteDB.invalidateFacultyAssignmentCache(userId);
     await executeRun('UPDATE users SET year = ?, section = ?, faculty_role = ? WHERE id = ?', [year, section, facultyRole, userId]);
 
     const existingAssign = await queryOne('SELECT id FROM faculty_assignments WHERE faculty_id = ?', [userId]);
@@ -1044,7 +1063,14 @@ export class SQLiteDB {
   }
 
   public async getFacultyAssignment(facultyId: string): Promise<FacultyAssignmentRecord | undefined> {
-    return (await queryOne<FacultyAssignmentRecord>('SELECT * FROM faculty_assignments WHERE faculty_id = ? AND is_active = 1', [facultyId])) || undefined;
+    const now = Date.now();
+    const cached = SQLiteDB.facultyAssignmentCache.get(facultyId);
+    if (cached && cached.expiry > now) {
+      return cached.data;
+    }
+    const result = (await queryOne<FacultyAssignmentRecord>('SELECT * FROM faculty_assignments WHERE faculty_id = ? AND is_active = 1', [facultyId])) || undefined;
+    SQLiteDB.facultyAssignmentCache.set(facultyId, { data: result, expiry: now + 60000 });
+    return result;
   }
 
   public async getAllFacultyAssignments(): Promise<Record<string, FacultyAssignmentRecord>> {
@@ -1057,6 +1083,7 @@ export class SQLiteDB {
   }
 
   public async assignStudentsToFaculty(facultyId: string, studentIds: string[]): Promise<void> {
+    SQLiteDB.invalidateFacultyAssignmentCache(facultyId);
     for (const sid of studentIds) {
       await executeRun(`
         UPDATE students
@@ -1362,7 +1389,8 @@ export class SQLiteDB {
       achievements,
       nptelProofs,
       leetcodeProofs,
-      connectedAccounts
+      connectedAccounts,
+      dailyAttendanceLogs
     ] = await Promise.all([
       queryAll('SELECT * FROM academic_records WHERE student_id = ?', [studentId]),
       queryAll<ArrearRecord>('SELECT * FROM arrear_history WHERE student_id = ?', [studentId]),
@@ -1379,7 +1407,8 @@ export class SQLiteDB {
       queryAll<AchievementRecord>('SELECT * FROM achievement_records WHERE student_id = ?', [studentId]),
       this.getNptelProofs(studentId),
       this.getLeetcodeProofs(studentId),
-      this.getConnectedAccounts(studentId)
+      this.getConnectedAccounts(studentId),
+      queryAll('SELECT date, status, recorded_by, recorded_at FROM daily_attendance_records WHERE student_id = ? ORDER BY date DESC', [studentId])
     ]);
 
     const academics: AcademicRecord[] = academicsRaw.map((a) => ({
@@ -1430,11 +1459,6 @@ export class SQLiteDB {
       finalScore: n.final_score,
       status: n.status
     }));
-
-    const dailyAttendanceLogs = await queryAll(
-      'SELECT date, status, recorded_by, recorded_at FROM daily_attendance_records WHERE student_id = ? ORDER BY date DESC',
-      [studentId]
-    );
 
     let attendance: AttendanceRecord | undefined = undefined;
     if (attRaw || dailyAttendanceLogs.length > 0) {
@@ -2523,12 +2547,19 @@ export class SQLiteDB {
 
   public async getTeams(): Promise<any[]> {
     const teams = await queryAll('SELECT * FROM teams ORDER BY created_date DESC');
-    const result: any[] = [];
-    for (const t of teams) {
-      const members = await queryAll('SELECT student_id, role_in_team FROM team_members WHERE team_id = ?', [t.id]);
-      result.push({ ...t, members });
+    if (teams.length === 0) return [];
+    const allMembers = await queryAll<{ team_id: string; student_id: string; role_in_team: string }>(
+      'SELECT team_id, student_id, role_in_team FROM team_members'
+    );
+    const membersByTeam: Record<string, Array<{ student_id: string; role_in_team: string }>> = {};
+    for (const m of allMembers) {
+      if (!membersByTeam[m.team_id]) membersByTeam[m.team_id] = [];
+      membersByTeam[m.team_id].push({ student_id: m.student_id, role_in_team: m.role_in_team });
     }
-    return result;
+    return teams.map((t) => ({
+      ...t,
+      members: membersByTeam[t.id] || []
+    }));
   }
 
   // REPRESENTATIVE EVALUATIONS MODULE
@@ -3343,8 +3374,12 @@ export class SQLiteDB {
 
   // SCORING CONFIG
   public async getScoringConfig(): Promise<ScoringConfig> {
+    const now = Date.now();
+    if (SQLiteDB.scoringConfigCache && SQLiteDB.scoringConfigCache.expiry > now) {
+      return SQLiteDB.scoringConfigCache.data;
+    }
     const cfg = await queryOne('SELECT * FROM scoring_configuration WHERE id = \'default\'');
-    return {
+    const result: ScoringConfig = {
       academicWeight: cfg?.academic_weight ?? 25,
       skillEdgeWeight: cfg?.skilledge_weight ?? 15,
       nptelWeight: cfg?.nptel_weight ?? 10,
@@ -3355,9 +3390,12 @@ export class SQLiteDB {
       leetcodeWeight: cfg?.leetcode_weight ?? 10,
       projectsWeight: cfg?.projects_weight ?? 5
     };
+    SQLiteDB.scoringConfigCache = { data: result, expiry: now + 300000 };
+    return result;
   }
 
   public async saveScoringConfig(c: ScoringConfig): Promise<void> {
+    SQLiteDB.invalidateScoringConfigCache();
     await executeRun(`
       UPDATE scoring_configuration SET academic_weight = ?, skilledge_weight = ?, nptel_weight = ?, participation_weight = ?, certificates_weight = ?, attendance_weight = ?, discipline_weight = ?, leetcode_weight = ?, projects_weight = ?
       WHERE id = 'default'
@@ -3579,52 +3617,57 @@ export class SQLiteDB {
       searchFilter = search;
     }
 
-    let query = 'SELECT * FROM subjects WHERE 1=1';
-    const params: any[] = [];
+    const now = Date.now();
+    let allSubjects: SubjectRecord[];
+    if (SQLiteDB.subjectsCache && SQLiteDB.subjectsCache.expiry > now) {
+      allSubjects = SQLiteDB.subjectsCache.data;
+    } else {
+      const rows = await queryAll('SELECT * FROM subjects ORDER BY year ASC, semester ASC, subject_code ASC');
+      allSubjects = rows.map((r) => ({
+        id: r.id,
+        subjectCode: r.subject_code,
+        subject_code: r.subject_code,
+        subjectName: r.subject_name,
+        subject_name: r.subject_name,
+        department: r.department || 'AI & Data Science',
+        academicYear: r.academic_year,
+        academic_year: r.academic_year,
+        year: r.year,
+        semester: r.semester,
+        section: r.section,
+        subjectType: (r.subject_type as any) || 'Theory',
+        subject_type: r.subject_type || 'Theory',
+        credits: r.credits || 3,
+        facultyHandler: r.faculty_handler,
+        faculty_handler: r.faculty_handler,
+        createdByUserId: r.created_by_user_id,
+        created_by_user_id: r.created_by_user_id,
+        createdAt: r.created_at,
+        created_at: r.created_at
+      }));
+      SQLiteDB.subjectsCache = { data: allSubjects, expiry: now + 60000 };
+    }
 
+    let filtered = allSubjects;
     if (yearFilter && yearFilter !== 'ALL') {
-      query += ' AND year = ?';
-      params.push(yearFilter);
+      filtered = filtered.filter((s) => s.year === yearFilter);
     }
     if (semesterFilter && Number(semesterFilter) > 0) {
-      query += ' AND semester = ?';
-      params.push(Number(semesterFilter));
+      filtered = filtered.filter((s) => Number(s.semester) === Number(semesterFilter));
     }
     if (sectionFilter && sectionFilter !== 'ALL') {
-      query += " AND (section = ? OR section = 'ALL')";
-      params.push(sectionFilter);
+      filtered = filtered.filter((s) => s.section === sectionFilter || s.section === 'ALL');
     }
     if (searchFilter && String(searchFilter).trim()) {
-      const q = `%${String(searchFilter).trim().toLowerCase()}%`;
-      query += ' AND (LOWER(subject_code) LIKE ? OR LOWER(subject_name) LIKE ? OR LOWER(faculty_handler) LIKE ?)';
-      params.push(q, q, q);
+      const q = String(searchFilter).trim().toLowerCase();
+      filtered = filtered.filter((s) =>
+        (s.subjectCode && s.subjectCode.toLowerCase().includes(q)) ||
+        (s.subjectName && s.subjectName.toLowerCase().includes(q)) ||
+        (s.facultyHandler && s.facultyHandler.toLowerCase().includes(q))
+      );
     }
 
-    query += ' ORDER BY year ASC, semester ASC, subject_code ASC';
-    const rows = await queryAll(query, params);
-
-    return rows.map((r) => ({
-      id: r.id,
-      subjectCode: r.subject_code,
-      subject_code: r.subject_code,
-      subjectName: r.subject_name,
-      subject_name: r.subject_name,
-      department: r.department || 'AI & Data Science',
-      academicYear: r.academic_year,
-      academic_year: r.academic_year,
-      year: r.year,
-      semester: r.semester,
-      section: r.section,
-      subjectType: (r.subject_type as any) || 'Theory',
-      subject_type: r.subject_type || 'Theory',
-      credits: r.credits || 3,
-      facultyHandler: r.faculty_handler,
-      faculty_handler: r.faculty_handler,
-      createdByUserId: r.created_by_user_id,
-      created_by_user_id: r.created_by_user_id,
-      createdAt: r.created_at,
-      created_at: r.created_at
-    }));
+    return filtered;
   }
 
   public async getSubjectById(id: string): Promise<SubjectRecord | undefined> {
@@ -3694,6 +3737,7 @@ export class SQLiteDB {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [id, cleanCode, cleanName, cleanDept, cleanAcadYear, cleanYear, sem, cleanSec, cleanType, creditsNum, cleanHandler, userId, now]);
 
+    SQLiteDB.invalidateSubjectsCache();
     return (await this.getSubjectById(id))!;
   }
 
@@ -3741,11 +3785,13 @@ export class SQLiteDB {
       WHERE id = ?
     `, [cleanCode, cleanName, cleanDept, cleanAcadYear, cleanYear, sem, cleanSec, cleanType, creditsNum, cleanHandler, id]);
 
+    SQLiteDB.invalidateSubjectsCache();
     return (await this.getSubjectById(id))!;
   }
 
   public async deleteSubject(id: string): Promise<boolean> {
     const res = await executeRun('DELETE FROM subjects WHERE id = ?', [id]);
+    SQLiteDB.invalidateSubjectsCache();
     return res.changes > 0;
   }
 

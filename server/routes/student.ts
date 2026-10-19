@@ -65,14 +65,15 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
     return res.status(404).json({ error: 'Student profile 360 not found.' });
   }
 
-  const allAwards = await db.getFinalizedAwards();
+  const [allAwards, allTeams, representativeEvaluation, scoringConfig] = await Promise.all([
+    db.getFinalizedAwards(),
+    db.getTeams(),
+    db.getRepresentativeEvaluation(studentId),
+    db.getScoringConfig()
+  ]);
+
   const finalizedAwards = allAwards.filter((a: any) => a.winner_student_id === studentId || a.winnerStudentId === studentId);
-
-  const allTeams = await db.getTeams();
   const teams = allTeams.filter((t: any) => t.team_head_student_id === studentId || (t.members || []).some((m: any) => m.student_id === studentId));
-
-  const representativeEvaluation = await db.getRepresentativeEvaluation(studentId);
-  const scoringConfig = await db.getScoringConfig();
 
   const breakdown = calculateCategoryScores(
     full360.student as any,

@@ -177,6 +177,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       filters.search = search;
     }
 
+    res.setHeader('Cache-Control', 'private, max-age=30, stale-while-revalidate=60');
     const subjects = await db.getSubjects(filters);
     return res.json({ subjects });
   } catch (error: any) {

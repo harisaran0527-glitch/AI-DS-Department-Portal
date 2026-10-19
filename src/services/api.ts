@@ -44,6 +44,8 @@ export function clearSessionAuth(): void {
   }
 }
 
+const inFlightGetRequests = new Map<string, Promise<any>>();
+
 export async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const defaultHeaders: Record<string, string> = isFormData ? {} : { 'Content-Type': 'application/json' };
@@ -71,8 +73,14 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   const validToken = !isLoginRequest ? getValidSessionToken() : null;
   const authHeader: Record<string, string> = validToken ? { Authorization: `Bearer ${validToken}` } : {};
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const controller = new AbortController();
+  const dedupKey = method === 'GET' ? `${url}:${validToken || ''}` : '';
+  if (dedupKey && inFlightGetRequests.has(dedupKey)) {
+    return inFlightGetRequests.get(dedupKey) as Promise<T>;
+  }
+
+  const runRequest = async (): Promise<T> => {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const controller = new AbortController();
     const timeoutMs = 60000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -202,6 +210,17 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   }
 
   throw lastError || new Error('Request failed after retries');
+};
+
+  if (dedupKey) {
+    const promise = runRequest().finally(() => {
+      inFlightGetRequests.delete(dedupKey);
+    });
+    inFlightGetRequests.set(dedupKey, promise);
+    return promise;
+  }
+
+  return runRequest();
 }
 
 export async function fetchWithResilience(url: string, options: RequestInit = {}): Promise<Response> {
