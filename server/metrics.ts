@@ -35,3 +35,4 @@ export function recordBcrypt(durationMs: number): void {
     store.bcryptTimeMs += durationMs;
   }
 }
+

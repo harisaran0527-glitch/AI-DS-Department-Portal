@@ -111,12 +111,18 @@ router.post('/login', async (req, res) => {
   // BUG-02: Dynamic Secure Cookie Configuration
   const isSecure = process.env.NODE_ENV === 'production' || Boolean(req.secure) || req.headers['x-forwarded-proto'] === 'https';
 
-  res.cookie('aids_session_token', token, {
+  const roleLower = normalizedRole.toLowerCase();
+  const cookieOptions = {
     httpOnly: true,
     secure: Boolean(isSecure),
-    sameSite: isSecure ? 'none' : 'lax',
+    sameSite: (isSecure ? 'none' : 'lax') as 'none' | 'lax',
     maxAge: 8 * 3600 * 1000
-  });
+  };
+
+  // Set role-specific cookie so simultaneous portal logins do not overwrite each other
+  res.cookie(`aids_${roleLower}_token`, token, cookieOptions);
+  // Also set general cookie for backwards compatibility
+  res.cookie('aids_session_token', token, cookieOptions);
 
   await db.logAudit(match.id, match.email, normalizedRole, 'LOGIN_SUCCESS', 'AUTH_PORTAL');
 
@@ -148,11 +154,21 @@ router.post('/logout', async (req: AuthRequest, res: Response) => {
   } catch {}
 
   const isSecure = process.env.NODE_ENV === 'production' || Boolean(req.secure) || req.headers['x-forwarded-proto'] === 'https';
-  res.clearCookie('aids_session_token', {
+  const clearOptions = {
     httpOnly: true,
     secure: Boolean(isSecure),
-    sameSite: isSecure ? 'none' : 'lax'
-  });
+    sameSite: (isSecure ? 'none' : 'lax') as 'none' | 'lax'
+  };
+
+  const portalRole = (req.headers['x-portal-role'] as string || '').toLowerCase();
+  if (portalRole) {
+    res.clearCookie(`aids_${portalRole}_token`, clearOptions);
+  } else {
+    ['admin', 'hod', 'faculty', 'student'].forEach((r) => {
+      res.clearCookie(`aids_${r}_token`, clearOptions);
+    });
+  }
+  res.clearCookie('aids_session_token', clearOptions);
   return res.json({ message: 'Logout successful' });
 });
 

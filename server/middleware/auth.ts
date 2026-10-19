@@ -39,16 +39,42 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
 
   // Check cookie as secondary option if Bearer header was not provided
   let tokenFromCookie: string | undefined;
-  const cookieCandidate = req.cookies?.aids_session_token;
-  if (cookieCandidate && typeof cookieCandidate === 'string') {
-    const trimmed = cookieCandidate.trim();
-    if (trimmed && trimmed !== 'null' && trimmed !== 'undefined' && trimmed !== '""' && trimmed !== "''") {
-      tokenFromCookie = trimmed;
+  const portalRole = (req.headers['x-portal-role'] as string || '').toLowerCase();
+  const path = (req.originalUrl || req.path || '').toLowerCase();
+
+  const getCookieForRole = (r: string) => {
+    switch (r) {
+      case 'admin': return req.cookies?.aids_admin_token;
+      case 'hod': return req.cookies?.aids_hod_token;
+      case 'faculty': return req.cookies?.aids_faculty_token;
+      case 'student': return req.cookies?.aids_student_token;
+      default: return undefined;
     }
+  };
+
+  if (portalRole) {
+    tokenFromCookie = getCookieForRole(portalRole);
+  } else if (path.includes('/admin')) {
+    tokenFromCookie = req.cookies?.aids_admin_token;
+  } else if (path.includes('/hod')) {
+    tokenFromCookie = req.cookies?.aids_hod_token;
+  } else if (path.includes('/faculty')) {
+    tokenFromCookie = req.cookies?.aids_faculty_token;
+  } else if (path.includes('/student')) {
+    tokenFromCookie = req.cookies?.aids_student_token;
+  }
+
+  if (!tokenFromCookie) {
+    tokenFromCookie = req.cookies?.aids_admin_token ||
+                      req.cookies?.aids_hod_token ||
+                      req.cookies?.aids_faculty_token ||
+                      req.cookies?.aids_student_token ||
+                      req.cookies?.aids_session_token;
   }
 
   // Priority: 1. Authorization: Bearer token (explicit in request header)
-  //           2. HttpOnly cookie aids_session_token
+  //           2. Role-specific HttpOnly cookie (aids_admin_token, etc.)
+  //           3. General HttpOnly cookie aids_session_token
   const token = tokenFromHeader || tokenFromCookie;
 
   if (!token) {

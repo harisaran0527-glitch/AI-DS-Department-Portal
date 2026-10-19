@@ -19,13 +19,13 @@ export const LoginRoute: React.FC<LoginRouteProps> = ({ role, children }) => {
     document.body.setAttribute('data-theme', 'dark');
 
     let isMounted = true;
-    const token = getValidSessionToken();
+    const token = getValidSessionToken(role);
     if (!token) {
-      // User is not logged in; stay on the login screen cleanly without triggering 401
+      // User is not logged in with this role; stay on the login screen cleanly
       return;
     }
 
-    API.getMe()
+    API.getMe(role)
       .then((res) => {
         if (!isMounted) return;
         if (res && res.user) {

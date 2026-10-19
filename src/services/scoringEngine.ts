@@ -41,7 +41,8 @@ export function calculateCategoryScores(
   projects: ProjectRecord[]
 ): CategoryBreakdown {
   // 1. Academic Score (0-100)
-  let academicScore = (student.cgpa / 10) * 100;
+  const cgpaVal = typeof student.cgpa === 'number' ? student.cgpa : 0;
+  let academicScore = (cgpaVal / 10) * 100;
   const pendingArrears = arrears.filter((a) => a.status === 'PENDING').length;
   const clearedArrears = arrears.filter((a) => a.status === 'CLEARED').length;
   academicScore = Math.max(0, Math.min(100, academicScore - pendingArrears * 8 + clearedArrears * 2));
@@ -140,7 +141,7 @@ export function generateAIExplanation(
   const weakAreas: string[] = [];
   const eligibleAwards: string[] = [];
 
-  if (breakdown.academic >= 85) strengths.push(`Outstanding CGPA of ${student.cgpa.toFixed(2)} with strong academic consistency.`);
+  if (breakdown.academic >= 85) strengths.push(`Outstanding CGPA of ${typeof student.cgpa === 'number' ? student.cgpa.toFixed(2) : 'N/A'} with strong academic consistency.`);
   else if (breakdown.academic < 70) weakAreas.push('Academic CGPA needs improvement; focus on core semester subjects.');
 
   if (breakdown.skillEdge >= 80) strengths.push(`High SkillEdge lab progress across C, Python, and Data Science tracks (${breakdown.skillEdge}% completion).`);

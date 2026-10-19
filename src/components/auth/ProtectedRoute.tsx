@@ -21,13 +21,14 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   useEffect(() => {
     let isMounted = true;
-    const token = getValidSessionToken();
+    const requiredRole = allowedRoles[0];
+    const token = getValidSessionToken(requiredRole);
     if (!token) {
       if (isMounted) setStatus('unauthorized');
       return;
     }
 
-    API.getMe()
+    API.getMe(requiredRole)
       .then((res) => {
         if (!isMounted) return;
         if (res && res.user) {

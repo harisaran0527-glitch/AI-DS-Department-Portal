@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { API } from '../../services/api';
+import { API, API_BASE, fetchWithResilience } from '../../services/api';
 import type { UserSession, Student, AcademicYear, Section } from '../../types';
 import { DashboardLayout, type MenuItem } from '../../components/layout/DashboardLayout';
 import {
@@ -8,18 +8,27 @@ import {
   Users,
   BarChart3,
   Key,
-  BookOpen
+  BookOpen,
+  CheckCircle,
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
 
 import { ForgotPasswordModal } from '../../components/common/ForgotPasswordModal';
 import { SubjectManagement } from '../../components/academic/SubjectManagement';
 import { HodFacultyWorkspaceView } from '../../components/hod/HodFacultyWorkspaceView';
 import { HodAwardCandidatesView } from '../../components/ranking/HodAwardCandidatesView';
+import { ProofAttachmentControl } from '../../components/common/ProofAttachmentControl';
+import { ConfirmDeleteModal } from '../../components/common/ConfirmDeleteModal';
 
 export const HODDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [session, setSession] = useState<UserSession | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showForgotModal, setShowForgotModal] = useState(false);
+  const [_awardCandidates, setAwardCandidates] = useState<any | null>(null);
+  const [_scoringConfig, setScoringConfig] = useState<any | null>(null);
 
   // Filters
   const [selectedYear, setSelectedYear] = useState<AcademicYear | 'ALL'>('2nd Year');
@@ -74,6 +83,8 @@ export const HODDashboard: React.FC = () => {
   };
 
   const fetchDepartmentData = React.useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
     try {
       const meRes = await API.getMe();
       if (!meRes.user || meRes.user.role !== 'HOD') {
@@ -83,18 +94,21 @@ export const HODDashboard: React.FC = () => {
       setSession(meRes.user);
 
       const [stuRes, candRes, cfgRes] = await Promise.all([
-        API.getDepartmentStudents(selectedYear, selectedSection),
-        API.getAIAwardCandidates(selectedYear),
-        API.getScoringConfig()
+        API.getDepartmentStudents(selectedYear, selectedSection).catch(() => ({ students: [] })),
+        API.getAIAwardCandidates(selectedYear).catch(() => ({ candidates: [] })),
+        API.getScoringConfig().catch(() => ({ config: null }))
       ]);
 
-      setStudents(stuRes.students || []);
-      setAwardCandidates(candRes.candidates || null);
+      setStudents(stuRes?.students || []);
+      setAwardCandidates(candRes?.candidates || null);
       if (cfgRes?.config) {
         setScoringConfig(cfgRes.config);
       }
     } catch (err: any) {
-      console.error(err);
+      console.error('Failed to load HOD dashboard:', err);
+      setLoadError(err.message || 'Unable to connect to department backend server.');
+    } finally {
+      setIsLoading(false);
     }
   }, [navigate, selectedYear, selectedSection]);
 
@@ -121,11 +135,54 @@ export const HODDashboard: React.FC = () => {
     );
   }, [students, searchQuery]);
 
+  if (isLoading && !session) {
+    return (
+      <div className="min-h-screen bg-[#080A0F] text-[#F1F5F9] flex flex-col items-center justify-center font-sans space-y-4 p-4">
+        <div className="w-12 h-12 border-4 border-[#252B36] border-t-amber-500 rounded-full animate-spin" />
+        <div className="text-center">
+          <p className="text-sm font-bold text-white tracking-wide">AVSEC Salem — HOD Portal</p>
+          <span className="text-xs font-mono text-[#94A3B8]">Loading Executive Dashboard & Department Roster...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError && !session) {
+    return (
+      <div className="min-h-screen bg-[#080A0F] text-[#F1F5F9] flex flex-col items-center justify-center p-4 font-sans">
+        <div className="w-full max-w-md bg-[#12161F] border border-[#252B36] rounded-2xl p-6 sm:p-8 shadow-2xl text-center space-y-4">
+          <div className="w-14 h-14 rounded-full bg-rose-950/60 border border-rose-800 flex items-center justify-center mx-auto text-rose-400">
+            <AlertCircle className="w-7 h-7" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-white">HOD Dashboard Connection Error</h3>
+            <p className="text-xs text-rose-300 font-mono mt-1">{loadError}</p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 pt-2">
+            <button
+              onClick={() => fetchDepartmentData()}
+              className="flex-1 min-h-[44px] bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 cursor-pointer"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Retry Loading</span>
+            </button>
+            <button
+              onClick={() => navigate('/hod')}
+              className="flex-1 min-h-[44px] bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold text-xs cursor-pointer"
+            >
+              Return to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!session) return null;
 
   const hodMenuItems: MenuItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-    { id: 'faculty', label: 'Faculty Roster', icon: Users2 },
+    { id: 'faculty', label: 'Faculty Roster', icon: Users },
     { id: 'subjects', label: 'Department Subjects', icon: BookOpen }
   ];
 

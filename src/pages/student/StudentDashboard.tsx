@@ -25,6 +25,8 @@ import {
   RefreshCw,
   ExternalLink,
   Crown,
+  Download,
+  XCircle,
 } from 'lucide-react';
 
 import { ForgotPasswordModal } from '../../components/common/ForgotPasswordModal';
@@ -34,13 +36,15 @@ import { GeminiTopRecognitionView } from '../../components/ranking/GeminiTopReco
 import { GeminiCategoryBestPerformerCard } from '../../components/ranking/GeminiCategoryBestPerformerCard';
 import { GeminiFullLeetCodeDashboard } from '../../components/ranking/GeminiFullLeetCodeDashboard';
 import { StudentAiRewardCard } from '../../components/ranking/StudentAiRewardCard';
-import { getNptelUrlForStudent, normalizeAcademicYear } from '../../services/nptelUrlHelper';
+import { getNptelUrlForStudent } from '../../services/nptelUrlHelper';
 
 export const StudentDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [_session, setSession] = useState<UserSession | null>(null);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [student360, setStudent360] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [errorMsg, setErrorMsg] = useState<string>('');
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [connectedData, setConnectedData] = useState<{ connectedAccounts: any[]; externalMetrics: any[] }>({
     connectedAccounts: [],
@@ -231,7 +235,6 @@ export const StudentDashboard: React.FC = () => {
         {activeTab === 'best-elite-student' && (
           <BestEliteStudentsView
             userRole="STUDENT"
-            studentId={student.id}
             assignedYear={student.year}
             assignedSection={student.section}
           />

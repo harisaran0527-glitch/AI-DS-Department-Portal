@@ -1,4 +1,4 @@
-import type { Student, UserSession, TeamHead, Subject } from '../types';
+import type { Student, UserSession, TeamHead, Subject, Role } from '../types';
 
 export function getApiBaseUrl(): string {
   const envBase = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL;
@@ -16,32 +16,90 @@ export const API_BASE = getApiBaseUrl();
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export function getValidSessionToken(): string | null {
-  if (typeof localStorage === 'undefined') return null;
-  const token = localStorage.getItem('aids_session_token') || localStorage.getItem('aids_token');
-  if (!token) return null;
-  const trimmed = token.trim();
-  if (!trimmed || trimmed === 'null' || trimmed === 'undefined' || trimmed === '""' || trimmed === "''") {
-    localStorage.removeItem('aids_session_token');
-    localStorage.removeItem('aids_token');
-    return null;
-  }
-  return trimmed;
+function isValidToken(val: string | null | undefined): boolean {
+  if (!val) return false;
+  const trimmed = val.trim();
+  return Boolean(trimmed && trimmed !== 'null' && trimmed !== 'undefined' && trimmed !== '""' && trimmed !== "''");
 }
 
-export function clearSessionAuth(): void {
-  if (typeof localStorage !== 'undefined') {
-    localStorage.removeItem('aids_session_token');
-    localStorage.removeItem('aids_token');
-    localStorage.removeItem('remembered_email_admin');
-    localStorage.removeItem('remembered_email_hod');
-    localStorage.removeItem('remembered_email_faculty');
-    localStorage.removeItem('remembered_email_student');
+export function getActivePortalRole(): Role | null {
+  if (typeof window === 'undefined') return null;
+  const path = window.location.pathname.toLowerCase();
+  if (path.startsWith('/admin')) return 'ADMIN';
+  if (path.startsWith('/hod')) return 'HOD';
+  if (path.startsWith('/faculty')) return 'FACULTY';
+  if (path.startsWith('/student')) return 'STUDENT';
+  const stored = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('aids_active_role') : null;
+  if (stored) return stored.toUpperCase() as Role;
+  return null;
+}
+
+export function getValidSessionToken(roleHint?: Role): string | null {
+  if (typeof window === 'undefined') return null;
+  const role = roleHint || getActivePortalRole();
+
+  // 1. Check tab-scoped sessionStorage for role-specific token
+  if (role && typeof sessionStorage !== 'undefined') {
+    const tabToken = sessionStorage.getItem(`aids_token_${role.toLowerCase()}`);
+    if (isValidToken(tabToken)) return tabToken!.trim();
   }
+
+  // 2. Check general tab sessionStorage
   if (typeof sessionStorage !== 'undefined') {
-    sessionStorage.removeItem('aids_session_token');
-    sessionStorage.removeItem('redirect_after_login');
+    const sessionToken = sessionStorage.getItem('aids_session_token');
+    if (isValidToken(sessionToken)) return sessionToken!.trim();
   }
+
+  // 3. Check persistent role-scoped localStorage (keeps installed PWAs isolated across restarts)
+  if (role && typeof localStorage !== 'undefined') {
+    const roleToken = localStorage.getItem(`aids_token_${role.toLowerCase()}`);
+    if (isValidToken(roleToken)) return roleToken!.trim();
+  }
+
+  // 4. Fallback to generic localStorage token
+  if (typeof localStorage !== 'undefined') {
+    const generic = localStorage.getItem('aids_session_token') || localStorage.getItem('aids_token');
+    if (isValidToken(generic)) return generic!.trim();
+  }
+
+  return null;
+}
+
+export function setSessionAuth(token: string, role?: string): void {
+  const normRole = (role || getActivePortalRole() || 'STUDENT').toUpperCase();
+  const roleKey = `aids_token_${normRole.toLowerCase()}`;
+
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.setItem('aids_active_role', normRole);
+    sessionStorage.setItem('aids_session_token', token);
+    sessionStorage.setItem(roleKey, token);
+  }
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(roleKey, token);
+    // Maintain legacy keys for backwards compatibility
+    localStorage.setItem('aids_session_token', token);
+    localStorage.setItem('aids_token', token);
+  }
+}
+
+export function clearSessionAuth(role?: string): void {
+  const targetRole = role || getActivePortalRole();
+  if (targetRole) {
+    const roleKey = `aids_token_${targetRole.toLowerCase()}`;
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem(roleKey);
+    }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(roleKey);
+    }
+  } else {
+    ['student', 'faculty', 'hod', 'admin'].forEach((r) => {
+      sessionStorage?.removeItem(`aids_token_${r}`);
+      localStorage?.removeItem(`aids_token_${r}`);
+    });
+  }
+  sessionStorage?.removeItem('aids_session_token');
+  sessionStorage?.removeItem('aids_active_role');
 }
 
 const inFlightGetRequests = new Map<string, Promise<any>>();
@@ -70,8 +128,12 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   const maxAttempts = isLoginRequest ? 1 : 3;
   let lastError: any = null;
 
-  const validToken = !isLoginRequest ? getValidSessionToken() : null;
-  const authHeader: Record<string, string> = validToken ? { Authorization: `Bearer ${validToken}` } : {};
+  const activeRole = getActivePortalRole();
+  const validToken = !isLoginRequest ? getValidSessionToken(activeRole || undefined) : null;
+  const authHeader: Record<string, string> = {
+    ...(validToken ? { Authorization: `Bearer ${validToken}` } : {}),
+    ...(activeRole ? { 'X-Portal-Role': activeRole } : {})
+  };
 
   const dedupKey = method === 'GET' ? `${url}:${validToken || ''}` : '';
   if (dedupKey && inFlightGetRequests.has(dedupKey)) {
@@ -243,8 +305,12 @@ export async function fetchWithResilience(url: string, options: RequestInit = {}
   const maxAttempts = isLoginRequest ? 1 : 3;
   let lastError: any = null;
 
-  const validToken = !isLoginRequest ? getValidSessionToken() : null;
-  const authHeader: Record<string, string> = validToken ? { Authorization: `Bearer ${validToken}` } : {};
+  const activeRole = getActivePortalRole();
+  const validToken = !isLoginRequest ? getValidSessionToken(activeRole || undefined) : null;
+  const authHeader: Record<string, string> = {
+    ...(validToken ? { Authorization: `Bearer ${validToken}` } : {}),
+    ...(activeRole ? { 'X-Portal-Role': activeRole } : {})
+  };
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const controller = new AbortController();
@@ -324,40 +390,50 @@ export async function fetchWithResilience(url: string, options: RequestInit = {}
 export const API = {
   // Auth
   login: async (identifier: string, password: string, role: string) => {
-    // 1. Clear stale authentication state before fresh login attempt
-    clearSessionAuth();
+    const cleanRole = role.trim().toUpperCase() as Role;
+    // 1. Clear stale authentication state for this role only
+    clearSessionAuth(cleanRole);
 
     const res = await request<{ message: string; user: UserSession; token?: string }>('/auth/login', {
       method: 'POST',
+      headers: {
+        'X-Portal-Role': cleanRole
+      },
       body: JSON.stringify({
         identifier: identifier.trim(),
         password,
-        role: role.trim().toUpperCase()
+        role: cleanRole
       })
     });
 
-    // 2. Store authoritative token
-    if (res && res.token && typeof localStorage !== 'undefined') {
-      localStorage.setItem('aids_session_token', res.token);
-      localStorage.setItem('aids_token', res.token);
+    // 2. Store authoritative token in role-isolated storage
+    if (res && res.token) {
+      setSessionAuth(res.token, cleanRole);
     }
     return res;
   },
 
-  logout: async () => {
+  logout: async (role?: string) => {
+    const cleanRole = role || getActivePortalRole();
     try {
       return await request<{ message: string }>('/auth/logout', {
-        method: 'POST'
+        method: 'POST',
+        headers: cleanRole ? { 'X-Portal-Role': cleanRole } : {}
       });
     } catch {
       return { message: 'Logged out' };
     } finally {
-      clearSessionAuth();
+      clearSessionAuth(cleanRole || undefined);
     }
   },
 
-  getMe: async () => {
-    return request<{ user: UserSession }>('/auth/me');
+  getMe: async (roleHint?: Role) => {
+    const role = roleHint || getActivePortalRole();
+    const token = getValidSessionToken(role || undefined);
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (role) headers['X-Portal-Role'] = role;
+    return request<{ user: UserSession }>('/auth/me', { headers });
   },
 
   // Admin
@@ -888,12 +964,31 @@ export const API = {
   },
 
   // Gemini Central Student Recognition & Reward Engine API
-  getStudentAiReward: async () => {
-    return request<{ reward: any }>('/student/ai-reward');
+  getStudentAiReward: async (studentId?: string) => {
+    const endpoint = studentId ? `/student/${studentId}/ai-reward` : '/student/ai-reward';
+    return request<{ reward: any; rewardScore?: any }>(endpoint);
   },
 
-  getHodAwardCandidatesV2: async () => {
-    return request<{ count: number; candidates: any[] }>('/hod/award-candidates-v2');
+  getHodAwardCandidatesV2: async (year?: string, section?: string) => {
+    const params = new URLSearchParams();
+    if (year && year !== 'ALL') params.append('year', year);
+    if (section && section !== 'ALL') params.append('section', section);
+    const qs = params.toString();
+    return request<{ count: number; candidates: any[] }>(`/hod/award-candidates-v2${qs ? `?${qs}` : ''}`);
+  },
+
+  previewStudentExcelImport: async (rows: any[]) => {
+    return request<{ preview: any[]; summary?: any }>('/admin/students/import-preview', {
+      method: 'POST',
+      body: JSON.stringify({ rows })
+    });
+  },
+
+  confirmStudentExcelImport: async (students: any[]) => {
+    return request<{ message: string; importedCount: number }>('/admin/students/import-confirm', {
+      method: 'POST',
+      body: JSON.stringify({ students })
+    });
   },
 
   postHodAwardAction: async (

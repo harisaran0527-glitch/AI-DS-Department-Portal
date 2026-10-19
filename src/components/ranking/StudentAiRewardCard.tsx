@@ -28,8 +28,9 @@ export const StudentAiRewardCard: React.FC<{ studentId?: string }> = ({ studentI
     setError('');
     try {
       const res = await API.getStudentAiReward(studentId);
-      if (res.rewardScore) {
-        setRewardData(res.rewardScore);
+      const score = (res as any).rewardScore || (res as any).reward;
+      if (score) {
+        setRewardData(score);
       } else {
         setError('No reward data available yet.');
       }
