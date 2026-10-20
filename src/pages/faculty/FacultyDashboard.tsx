@@ -329,7 +329,8 @@ export const FacultyDashboard: React.FC = () => {
   const [projUrl, setProjUrl] = useState('');
   const [projDocFile, setProjDocFile] = useState<File | null>(null);
   const [isProjSaving, setIsProjSaving] = useState(false);
-  const [projSaveFeedback, setProjSaveFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [projSaveFeedback, setProjSaveFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [projSaveStep, setProjSaveStep] = useState<'IDLE' | 'UPLOADING' | 'SAVING' | 'SUCCESS'>('IDLE');
 
   // --- DELETION STATE ---
   const [deleteTarget, setDeleteTarget] = useState<{ studentId: string; recordType: string; recordId: string; recordName: string } | null>(null);
@@ -4950,11 +4951,15 @@ export const FacultyDashboard: React.FC = () => {
                       className={`p-3 rounded-xl border text-xs font-mono flex items-center space-x-2 transition-all ${
                         projSaveFeedback.type === 'success'
                           ? 'bg-emerald-950/80 border-emerald-500 text-emerald-200'
+                          : (projSaveFeedback.type as any) === 'info'
+                          ? 'bg-indigo-950/80 border-indigo-500 text-indigo-200'
                           : 'bg-rose-950/80 border-rose-500 text-rose-200'
                       }`}
                     >
                       {projSaveFeedback.type === 'success' ? (
                         <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      ) : (projSaveFeedback.type as any) === 'info' ? (
+                        <Loader2 className="w-4 h-4 text-indigo-400 animate-spin shrink-0" />
                       ) : (
                         <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
                       )}
@@ -5001,6 +5006,14 @@ export const FacultyDashboard: React.FC = () => {
                               if (!f) return;
                               if (f.size > 10 * 1024 * 1024) {
                                 setProjSaveFeedback({ type: 'error', message: 'File exceeds 10 MB limit. Please select a smaller file.' });
+                                e.target.value = '';
+                                return;
+                              }
+                              const ext = f.name.substring(f.name.lastIndexOf('.')).toLowerCase();
+                              const allowed = ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.jpg', '.jpeg', '.png'];
+                              if (!allowed.includes(ext)) {
+                                setProjSaveFeedback({ type: 'error', message: 'Invalid file format. Supported formats: PDF, DOC, DOCX, PPT, PPTX, JPG, PNG.' });
+                                e.target.value = '';
                                 return;
                               }
                               setProjSaveFeedback(null);
@@ -5030,39 +5043,80 @@ export const FacultyDashboard: React.FC = () => {
                         if (!selectedStudent || !projTitle.trim() || !projCategory || isProjSaving) return;
                         setIsProjSaving(true);
                         setProjSaveFeedback(null);
+                        let uploadedAttId: string | null = null;
+                        const newProjId = `proj-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
                         try {
-                          const newProjId = `proj-${Date.now()}`;
+                          // Step 1: Upload attached documentation/photo FIRST if provided
+                          if (projDocFile) {
+                            setProjSaveStep('UPLOADING');
+                            setProjSaveFeedback({
+                              type: 'info',
+                              message: 'Uploading project documentation to secure storage...'
+                            });
+
+                            const uploadRes = await API.uploadProofFile(selectedStudent.id, 'projects', newProjId, projDocFile);
+                            if (uploadRes?.attachment?.id) {
+                              uploadedAttId = uploadRes.attachment.id;
+                            }
+                          }
+
+                          // Step 2: Persist project metadata in Supabase PostgreSQL
+                          setProjSaveStep('SAVING');
+                          setProjSaveFeedback({
+                            type: 'info',
+                            message: 'Persisting project record to database...'
+                          });
+
+                          const existingProjects = student360Edit?.projects || [];
+                          // Avoid duplicate project records when user retries
+                          const filteredExisting = existingProjects.filter(
+                            (p: any) => p.id !== newProjId && p.title?.trim().toLowerCase() !== projTitle.trim().toLowerCase()
+                          );
+
                           const updatedProjects = [
-                            ...(student360Edit?.projects || []),
+                            ...filteredExisting,
                             {
                               id: newProjId,
                               title: projTitle.trim(),
                               category: projCategory,
-                              liveUrl: projLiveUrl.trim(),
-                              githubUrl: projUrl.trim()
+                              liveUrl: projCategory === 'Software' ? projLiveUrl.trim() : '',
+                              githubUrl: projCategory === 'Software' ? projUrl.trim() : ''
                             }
                           ];
 
-                          await API.updateStudent360(selectedStudent.id, {
-                            projects: updatedProjects
-                          });
-
-                          // If file is selected, upload it to Supabase Storage attached to this project record
-                          if (projDocFile) {
-                            await API.uploadFile(selectedStudent.id, 'projects', newProjId, projDocFile);
+                          try {
+                            await API.updateStudent360(selectedStudent.id, {
+                              projects: updatedProjects
+                            });
+                          } catch (saveErr: any) {
+                            // Rollback uploaded file if metadata persistence fails
+                            if (uploadedAttId) {
+                              try {
+                                await API.deleteProofFile(uploadedAttId);
+                              } catch {}
+                            }
+                            throw saveErr;
                           }
 
+                          // Step 3: Success Confirmation & Form Reset
+                          setProjSaveStep('SUCCESS');
                           setProjSaveFeedback({
                             type: 'success',
-                            message: `Project "${projTitle}" saved successfully ${projDocFile ? 'with documentation attached' : ''}!`
+                            message: `Project "${projTitle.trim()}" saved successfully ${projDocFile ? 'with documentation attached' : ''}!`
                           });
                           setProjTitle('');
+                          setProjCategory('' as any);
                           setProjLiveUrl('');
                           setProjUrl('');
                           setProjDocFile(null);
                           await reloadStudent360();
-                          setTimeout(() => setProjSaveFeedback(null), 4000);
+                          setTimeout(() => {
+                            setProjSaveStep('IDLE');
+                            setProjSaveFeedback(null);
+                          }, 4000);
                         } catch (err: any) {
+                          setProjSaveStep('IDLE');
                           setProjSaveFeedback({
                             type: 'error',
                             message: err.message || 'Failed to save project record.'
@@ -5073,10 +5127,20 @@ export const FacultyDashboard: React.FC = () => {
                       }}
                       className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold px-6 py-2.5 rounded-xl cursor-pointer shadow-lg transition-all font-sans text-xs flex items-center space-x-2"
                     >
-                      {isProjSaving ? (
+                      {projSaveStep === 'UPLOADING' ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin text-white" />
-                          <span>Saving Project...</span>
+                          <span>Uploading Documentation...</span>
+                        </>
+                      ) : projSaveStep === 'SAVING' ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-white" />
+                          <span>Saving Project Metadata...</span>
+                        </>
+                      ) : projSaveStep === 'SUCCESS' ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                          <span>Saved Successfully!</span>
                         </>
                       ) : (
                         <>

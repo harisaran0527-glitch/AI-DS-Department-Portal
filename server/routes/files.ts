@@ -1,12 +1,13 @@
 import { Router, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
-import { db } from '../db.js';
+import { db, normalizeYear, normalizeSection } from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
 import {
   MAX_FILE_SIZE_BYTES,
   MSG_FILE_TOO_LARGE,
   DANGEROUS_EXTENSIONS,
+  PROJECT_ALLOWED_EXTENSIONS,
   validateUploadedFile,
   uploadFileToStorage,
   downloadFileFromStorage,
@@ -28,8 +29,9 @@ const upload = multer({
       return cb(new Error('Executable or script files are strictly prohibited.'));
     }
 
-    const recordType = (req.body?.recordType || '').toLowerCase();
-    const moduleType = recordType === 'projects' ? 'project' : 'proof';
+    const recordType = (req.body?.recordType || (req.query?.recordType as string) || '').toLowerCase();
+    const isProject = recordType === 'projects' || recordType === 'project' || PROJECT_ALLOWED_EXTENSIONS.has(ext);
+    const moduleType = isProject ? 'project' : 'proof';
 
     const check = validateUploadedFile(
       { originalname: file.originalname, mimetype: file.mimetype, size: 0 },
@@ -44,19 +46,12 @@ const upload = multer({
   }
 });
 
-// Helper permission check
-function checkFilePermission(req: AuthRequest, student: any): boolean {
+// Helper permission check (supports dynamic faculty assignments and staff workspace isolation)
+async function checkFilePermission(req: AuthRequest, student: any): Promise<boolean> {
   if (!req.user || !student) return false;
 
   if (req.user.role === 'ADMIN' || req.user.role === 'HOD') {
     return true;
-  }
-
-  if (req.user.role === 'FACULTY') {
-    return (
-      student.year === req.user.assignedYear &&
-      student.section === req.user.assignedSection
-    );
   }
 
   if (req.user.role === 'STUDENT') {
@@ -65,6 +60,26 @@ function checkFilePermission(req: AuthRequest, student: any): boolean {
       req.user.studentId === student.id ||
       req.user.registerNo === student.register_no
     );
+  }
+
+  if (req.user.role === 'FACULTY') {
+    if (student.created_by_faculty_id === req.user.id || student.faculty_workspace_id === req.user.id) {
+      return true;
+    }
+
+    const assignment = await db.getFacultyAssignment(req.user.id);
+    const assignedYear = assignment ? assignment.year : req.user.assignedYear;
+    const assignedSection = assignment ? assignment.section : req.user.assignedSection;
+
+    const cleanAssignedYear = normalizeYear(assignedYear);
+    const cleanAssignedSec = normalizeSection(assignedSection);
+    const cleanStudentYear = normalizeYear(student.year);
+    const cleanStudentSec = normalizeSection(student.section);
+
+    const isYearMatch = !cleanAssignedYear || cleanAssignedYear === 'ALL' || cleanStudentYear === cleanAssignedYear;
+    const isSectionMatch = !cleanAssignedSec || cleanAssignedSec === 'ALL' || cleanStudentSec === cleanAssignedSec;
+
+    return isYearMatch && isSectionMatch;
   }
 
   return false;
@@ -104,7 +119,7 @@ router.post('/upload', authenticateToken, (req: AuthRequest, res: Response) => {
     }
 
     // Faculty Section Guard
-    if (req.user!.role === 'FACULTY' && !checkFilePermission(req, student)) {
+    if (req.user!.role === 'FACULTY' && !(await checkFilePermission(req, student))) {
       return res.status(403).json({ error: 'Unauthorized: Faculty can only upload proof for assigned section students.' });
     }
 
@@ -182,7 +197,7 @@ router.get('/record/:studentId/:recordType/:recordId', authenticateToken, async 
     return res.status(404).json({ error: 'Student record not found.' });
   }
 
-  if (!checkFilePermission(req, student)) {
+  if (!(await checkFilePermission(req, student))) {
     return res.status(403).json({ error: 'Unauthorized: Access forbidden.' });
   }
 
@@ -218,7 +233,7 @@ router.get('/:fileId', authenticateToken, async (req: AuthRequest, res: Response
   }
 
   const student = await db.getStudentById(att.student_id);
-  if (!student || !checkFilePermission(req, student)) {
+  if (!student || !(await checkFilePermission(req, student))) {
     return res.status(403).json({ error: 'Unauthorized access to requested file.' });
   }
 
@@ -244,7 +259,7 @@ router.get('/:fileId/download', authenticateToken, async (req: AuthRequest, res:
   }
 
   const student = await db.getStudentById(att.student_id);
-  if (!student || !checkFilePermission(req, student)) {
+  if (!student || !(await checkFilePermission(req, student))) {
     return res.status(403).json({ error: 'Unauthorized access to requested file.' });
   }
 
@@ -281,7 +296,7 @@ router.delete('/:fileId', authenticateToken, async (req: AuthRequest, res: Respo
   }
 
   const student = await db.getStudentById(att.student_id);
-  if (!student || !checkFilePermission(req, student)) {
+  if (!student || !(await checkFilePermission(req, student))) {
     return res.status(403).json({ error: 'Unauthorized access to requested file.' });
   }
 

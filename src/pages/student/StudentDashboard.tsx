@@ -1219,6 +1219,71 @@ export const StudentDashboard: React.FC = () => {
           </div>
         )}
 
+        {/* PROJECTS & HARDWARE SHOWCASE TAB */}
+        {activeTab === 'projects' && (
+          <div className="space-y-6">
+            <GeminiCategoryBestPerformerCard
+              categoryKey="projects"
+              assignedYear={student.year}
+              assignedSection={student.section}
+            />
+
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 text-xs">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 className="text-lg font-bold text-white flex items-center space-x-2">
+                  <Trophy className="w-5 h-5 text-indigo-400" />
+                  <span>My Project Showcase — Software & Hardware Records</span>
+                </h3>
+                <span className="bg-indigo-950 border border-indigo-800 text-indigo-300 text-[10px] font-mono px-3 py-1 rounded-full font-bold">
+                  VERIFIED STUDENT PORTFOLIO
+                </span>
+              </div>
+
+              {Array.isArray(_projects) && _projects.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {_projects.map((p: any, idx: number) => (
+                    <div key={p.id || idx} className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3 shadow-md">
+                      <div className="flex justify-between items-center">
+                        <span className="bg-indigo-950 text-indigo-300 font-bold px-2 py-0.5 rounded border border-indigo-800 font-mono">
+                          {p.category || 'Software'}
+                        </span>
+                        <span className="text-slate-500 text-[10px] font-mono">ID: {p.id}</span>
+                      </div>
+                      <div className="text-white font-bold font-sans text-sm">{p.title}</div>
+                      {p.description && <div className="text-slate-400 text-xs font-mono">{p.description}</div>}
+                      {p.liveUrl && (
+                        <a href={p.liveUrl} target="_blank" rel="noreferrer" className="text-sky-400 hover:underline block truncate text-xs font-mono">
+                          Live Demo: {p.liveUrl}
+                        </a>
+                      )}
+                      {p.githubUrl && (
+                        <a href={p.githubUrl} target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline block truncate text-xs font-mono">
+                          GitHub: {p.githubUrl}
+                        </a>
+                      )}
+
+                      {/* Attached Project Documentation & Photos */}
+                      <div className="pt-2 border-t border-slate-800/80">
+                        <ProofAttachmentControl
+                          studentId={student.id}
+                          recordType="projects"
+                          recordId={p.id}
+                          userRole="STUDENT"
+                          readOnly={true}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 text-center text-slate-500 font-mono">
+                  No project records or documentation submitted yet. Projects added by faculty coordinator will appear here.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* FIRST LOGIN MANDATORY PASSWORD CHANGE MODAL */}
         {showFirstLoginChangeModal && (
           <div className="fixed inset-0 z-50 bg-[#080A0F]/85 backdrop-blur-md flex items-center justify-center p-4">

@@ -58,12 +58,19 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
       case 'faculty': tokenFromCookie = req.cookies?.aids_faculty_token; break;
       case 'student': tokenFromCookie = req.cookies?.aids_student_token; break;
     }
+  } else {
+    // For shared paths (e.g. /files/:id, /files/:id/download, /files/record/...), accept any active portal session cookie
+    tokenFromCookie = req.cookies?.aids_faculty_token ||
+                      req.cookies?.aids_student_token ||
+                      req.cookies?.aids_hod_token ||
+                      req.cookies?.aids_admin_token;
   }
 
   // Priority: 1. Authorization: Bearer token (explicit in request header)
   //           2. Role-specific HttpOnly cookie (aids_admin_token, aids_faculty_token, etc.)
-  // NEVER fall back to another role's cookie or general session cookie!
-  const token = tokenFromHeader || tokenFromCookie;
+  //           3. URL query parameter (for direct browser file views and downloads)
+  const tokenFromQuery = (req.query?.token as string) || undefined;
+  const token = tokenFromHeader || tokenFromCookie || tokenFromQuery;
 
   if (!token) {
     return res.status(401).json({ error: 'Unauthorized: Missing authentication session token.' });

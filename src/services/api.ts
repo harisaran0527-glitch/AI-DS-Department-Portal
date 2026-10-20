@@ -686,7 +686,7 @@ export const API = {
     return request<any>('/student/me');
   },
 
-  // Proof File Management
+  // Proof & Project File Management
   uploadProofFile: async (studentId: string, recordType: string, recordId: string, file: File) => {
     const formData = new FormData();
     formData.append('studentId', studentId);
@@ -698,6 +698,11 @@ export const API = {
       method: 'POST',
       body: formData
     });
+  },
+
+  // Alias for backward and forward compatibility and direct project uploads
+  uploadFile: async (studentId: string, recordType: string, recordId: string, file: File) => {
+    return API.uploadProofFile(studentId, recordType, recordId, file);
   },
 
   getRecordAttachment: async (studentId: string, recordType: string, recordId: string) => {

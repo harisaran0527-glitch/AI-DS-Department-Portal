@@ -669,19 +669,41 @@ export const HodFacultyWorkspaceView: React.FC<HodFacultyWorkspaceViewProps> = (
                     <span className="text-indigo-400 font-bold text-xs">{inspect360?.projects?.length || 0} Projects</span>
                   </div>
                   {inspect360?.projects?.length > 0 ? (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {inspect360.projects.map((p: any) => (
-                        <div key={p.id} className="bg-slate-900 p-3 rounded-xl border border-slate-800">
-                          <div className="font-bold text-white">{p.title}</div>
-                          <div className="text-[10px] text-slate-400 mt-1">{p.description}</div>
-                          <div className="text-[10px] text-indigo-400 mt-1 font-mono">Tech Stack: {p.tech_stack || p.techStack}</div>
+                        <div key={p.id} className="bg-slate-900 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                          <div className="flex justify-between items-center">
+                            <div className="font-bold text-white text-sm">{p.title}</div>
+                            <span className="text-[10px] bg-indigo-950 text-indigo-300 font-bold px-2 py-0.5 rounded border border-indigo-800">
+                              {p.category || 'Software'}
+                            </span>
+                          </div>
+                          {p.description && <div className="text-[10px] text-slate-400 mt-1">{p.description}</div>}
+                          {p.liveUrl && (
+                            <a href={p.liveUrl} target="_blank" rel="noreferrer" className="text-sky-400 hover:underline block truncate text-[11px]">
+                              Live Demo: {p.liveUrl}
+                            </a>
+                          )}
+                          {p.githubUrl && (
+                            <a href={p.githubUrl} target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline block truncate text-[11px]">
+                              GitHub: {p.githubUrl}
+                            </a>
+                          )}
+                          <div className="pt-2 border-t border-slate-800/80">
+                            <ProofAttachmentControl
+                              studentId={inspectStudent.id}
+                              recordType="projects"
+                              recordId={p.id}
+                              userRole="HOD"
+                              readOnly={true}
+                            />
+                          </div>
                         </div>
                       ))}
                     </div>
                   ) : (
                     <div className="text-slate-500 text-xs">No projects uploaded yet.</div>
                   )}
-                  <ProofAttachmentControl studentId={inspectStudent.id} recordType="projects" recordId="projects-record" userRole="HOD" readOnly={true} />
                 </div>
               )}
 
