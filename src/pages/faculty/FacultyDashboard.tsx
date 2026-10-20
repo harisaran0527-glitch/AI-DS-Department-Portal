@@ -138,13 +138,20 @@ export const FacultyDashboard: React.FC = () => {
   // Student View & Edit Modals State
   const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState<{
+    name: string;
+    mobileNumber: string;
+    collegeEmail: string;
+    personalEmail: string;
+    address: string;
+    cgpa: number | null;
+  }>({
     name: '',
     mobileNumber: '',
     collegeEmail: '',
     personalEmail: '',
     address: '',
-    cgpa: 0
+    cgpa: null
   });
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState('');
@@ -1203,7 +1210,7 @@ export const FacultyDashboard: React.FC = () => {
       setFacImportResult(res);
       setFacSelectedCsvFile(null);
       setFacCsvRows([]);
-      setShowImportModal(false);
+      setShowAddStudentModal(false);
       await fetchRoster();
     } catch (err: any) {
       setFacCsvImportError(err.message || 'Failed to import CSV students.');
@@ -2489,7 +2496,7 @@ export const FacultyDashboard: React.FC = () => {
               assignedYear={assignedYear}
               assignedSection={assignedSection}
               students={students}
-              onStudentsChange={loadDepartmentOverview}
+              onStudentsChange={fetchRoster}
             />
           </div>
         )}

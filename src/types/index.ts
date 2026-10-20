@@ -44,9 +44,12 @@ export interface Student {
   section: Section;
   batch: string; // e.g. "2023-2027"
   classCoordinatorName: string;
+  class_coordinator_name?: string;
   cgpa: number | null;
   overallScore: number;
+  overall_score?: number;
   currentRank: number;
+  current_rank?: number;
   avatarUrl?: string;
   portalPasswordHash?: string;
   isRepresentative?: boolean;
@@ -60,6 +63,8 @@ export interface Student {
   mobile_number?: string;
   address?: string;
   isActive?: boolean;
+  is_active?: boolean;
+  isEliteStudent?: boolean;
 }
 
 export interface AcademicSemester {
