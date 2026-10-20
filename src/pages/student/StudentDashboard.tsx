@@ -56,6 +56,15 @@ export const StudentDashboard: React.FC = () => {
   const [lcSyncError, setLcSyncError] = useState('');
   const [nptelUrlError, setNptelUrlError] = useState('');
 
+  // First Login Password Change State
+  const [showFirstLoginChangeModal, setShowFirstLoginChangeModal] = useState(false);
+  const [changeCurrPass, setChangeCurrPass] = useState('');
+  const [changeNewPass, setChangeNewPass] = useState('');
+  const [changeConfirmPass, setChangeConfirmPass] = useState('');
+  const [changePassError, setChangePassError] = useState('');
+  const [changePassSuccess, setChangePassSuccess] = useState('');
+  const [isChangingPass, setIsChangingPass] = useState(false);
+
   const fetchProfile = React.useCallback(async () => {
     try {
       const meRes = await API.getMe('STUDENT');
@@ -64,6 +73,9 @@ export const StudentDashboard: React.FC = () => {
         return;
       }
       setSession(meRes.user);
+      if (meRes.user.requiresPasswordChange) {
+        setShowFirstLoginChangeModal(true);
+      }
 
       const [full360, connRes] = await Promise.all([
         API.getStudentSelfProfile(),
@@ -1203,6 +1215,126 @@ export const StudentDashboard: React.FC = () => {
               )}
 
               <ProofAttachmentControl studentId={student.id} recordType="academics" recordId="cgpa-record" userRole="STUDENT" />
+            </div>
+          </div>
+        )}
+
+        {/* FIRST LOGIN MANDATORY PASSWORD CHANGE MODAL */}
+        {showFirstLoginChangeModal && (
+          <div className="fixed inset-0 z-50 bg-[#080A0F]/85 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-4 bg-slate-900 border border-slate-700 text-slate-200">
+              <div className="flex items-center space-x-3 border-b border-slate-800 pb-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-base">First-Time Login Security</h3>
+                  <p className="text-[11px] text-amber-400 font-mono">Mandatory Password Update Required</p>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-300 font-sans leading-relaxed">
+                Your initial password was set to your Register Number. For your security, please update your account with a private password.
+              </p>
+
+              {changePassError && (
+                <div className="bg-rose-950/80 border border-rose-500 text-rose-200 p-2.5 rounded-xl text-xs font-mono flex items-center space-x-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{changePassError}</span>
+                </div>
+              )}
+
+              {changePassSuccess && (
+                <div className="bg-emerald-950/80 border border-emerald-500 text-emerald-200 p-2.5 rounded-xl text-xs font-mono flex items-center space-x-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{changePassSuccess}</span>
+                </div>
+              )}
+
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setChangePassError('');
+                  if (!changeCurrPass) {
+                    setChangePassError('Please enter your initial password (Register Number).');
+                    return;
+                  }
+                  if (!changeNewPass || changeNewPass.length < 6) {
+                    setChangePassError('New password must be at least 6 characters.');
+                    return;
+                  }
+                  if (changeNewPass !== changeConfirmPass) {
+                    setChangePassError('New password and confirmation do not match.');
+                    return;
+                  }
+                  setIsChangingPass(true);
+                  try {
+                    await API.changePassword(changeCurrPass, changeNewPass);
+                    setChangePassSuccess('Password updated successfully! Welcome to AI & DS Student Portal.');
+                    setTimeout(() => {
+                      setShowFirstLoginChangeModal(false);
+                    }, 1800);
+                  } catch (err: any) {
+                    setChangePassError(err.message || 'Failed to update password.');
+                  } finally {
+                    setIsChangingPass(false);
+                  }
+                }}
+                className="space-y-3 font-mono text-xs"
+              >
+                <div>
+                  <label className="text-slate-400 block mb-1">Current Initial Password (Register No)</label>
+                  <input
+                    type="password"
+                    value={changeCurrPass}
+                    onChange={(e) => setChangeCurrPass(e.target.value)}
+                    placeholder="Enter Register Number"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-400 block mb-1">New Private Password (min 6 characters)</label>
+                  <input
+                    type="password"
+                    value={changeNewPass}
+                    onChange={(e) => setChangeNewPass(e.target.value)}
+                    placeholder="Enter New Password"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-400 block mb-1">Confirm New Password</label>
+                  <input
+                    type="password"
+                    value={changeConfirmPass}
+                    onChange={(e) => setChangeConfirmPass(e.target.value)}
+                    placeholder="Confirm New Password"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                    required
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={isChangingPass}
+                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 text-white font-bold font-sans text-xs uppercase tracking-wider shadow-lg flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {isChangingPass ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Updating Password...</span>
+                      </>
+                    ) : (
+                      <span>Save & Continue to Portal</span>
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}

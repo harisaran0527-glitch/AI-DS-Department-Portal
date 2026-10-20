@@ -2828,23 +2828,118 @@ export class SQLiteDB {
     await executeRun("DELETE FROM connected_accounts WHERE student_id = ? AND (provider = 'GOOGLE' OR provider = 'NPTEL_GOOGLE') AND (purpose = ? OR purpose IS NULL OR purpose = 'NPTEL')", [studentId, purpose]);
   }
 
-  // CR ATTENDANCE STYLE DAILY RECORD METHODS
+  // CR ATTENDANCE STYLE DAILY RECORD METHODS — Optimized High-Speed Multi-Row Atomic Upsert
   public async saveDailyAttendance(date: string, records: { studentId: string; status: string }[], recordedBy: string): Promise<void> {
+    if (!records || records.length === 0) return;
     const now = new Date().toISOString();
 
+    const unmarkedIds: string[] = [];
+    const toUpsert: { id: string; studentId: string; status: string }[] = [];
+    const affectedStudentIds = new Set<string>();
+
     for (const r of records) {
-      if (!r.status || r.status === 'UNMARKED') {
-        await executeRun('DELETE FROM daily_attendance_records WHERE student_id = ? AND date = ?', [r.studentId, date]);
+      if (!r.studentId) continue;
+      affectedStudentIds.add(r.studentId);
+      const cleanStatus = (r.status || 'UNMARKED').trim().toUpperCase();
+      if (cleanStatus === 'UNMARKED') {
+        unmarkedIds.push(r.studentId);
       } else {
-        const existing = await queryOne('SELECT id FROM daily_attendance_records WHERE student_id = ? AND date = ?', [r.studentId, date]);
-        if (existing) {
-          await executeRun('UPDATE daily_attendance_records SET status = ?, recorded_by = ?, recorded_at = ? WHERE id = ?', [r.status, recordedBy, now, existing.id]);
-        } else {
-          const id = `attd-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-          await executeRun('INSERT INTO daily_attendance_records (id, student_id, date, status, recorded_by, recorded_at) VALUES (?, ?, ?, ?, ?, ?)', [id, r.studentId, date, r.status, recordedBy, now]);
-        }
+        toUpsert.push({
+          id: `attd-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          studentId: r.studentId,
+          status: cleanStatus
+        });
       }
-      await this.recalculateStudentAttendancePercentage(r.studentId);
+    }
+
+    if (isPostgresActive()) {
+      // 1. Delete UNMARKED records in a single query
+      if (unmarkedIds.length > 0) {
+        await executeRun(
+          'DELETE FROM daily_attendance_records WHERE date = ? AND student_id = ANY(?::text[])',
+          [date, unmarkedIds]
+        );
+      }
+
+      // 2. Batch UPSERT all marked attendance records in 1 atomic query
+      if (toUpsert.length > 0) {
+        const placeholders: string[] = [];
+        const params: any[] = [];
+        for (const item of toUpsert) {
+          placeholders.push(`(?, ?, ?, ?, ?, ?)`);
+          params.push(item.id, item.studentId, date, item.status, recordedBy, now);
+        }
+
+        const upsertSql = `
+          INSERT INTO daily_attendance_records (id, student_id, date, status, recorded_by, recorded_at)
+          VALUES ${placeholders.join(', ')}
+          ON CONFLICT (student_id, date) DO UPDATE
+          SET status = EXCLUDED.status,
+              recorded_by = EXCLUDED.recorded_by,
+              recorded_at = EXCLUDED.recorded_at
+        `;
+        await executeRun(upsertSql, params);
+      }
+
+      // 3. Batch recalculate attendance percentage & counts for all affected students in 1 CTE query
+      const affectedArr = Array.from(affectedStudentIds);
+      if (affectedArr.length > 0) {
+        const recalcSql = `
+          WITH stats AS (
+            SELECT 
+              d.student_id,
+              COUNT(*)::int as total_working_days,
+              COUNT(*) FILTER (WHERE d.status = 'PRESENT')::int as present_days,
+              COUNT(*) FILTER (WHERE d.status = 'ABSENT')::int as absent_days,
+              COUNT(*) FILTER (WHERE d.status = 'OD')::int as od_days,
+              COUNT(*) FILTER (WHERE d.status = 'ML' OR d.status = 'LEAVE')::int as ml_days
+            FROM daily_attendance_records d
+            JOIN students s ON d.student_id = s.id
+            WHERE d.student_id = ANY(?::text[])
+              AND d.date >= (CASE WHEN s.entry_type = 'Lateral Entry' THEN '2026-08-11'::date ELSE '2026-07-13'::date END)
+            GROUP BY d.student_id
+          )
+          INSERT INTO attendance_records (id, student_id, total_working_days, present_days, absent_days, od_days, ml_days, percentage, last_updated)
+          SELECT 
+            'att-rec-' || s.student_id,
+            s.student_id,
+            s.total_working_days,
+            s.present_days,
+            s.absent_days,
+            s.od_days,
+            s.ml_days,
+            CASE WHEN s.total_working_days > 0 
+                 THEN ROUND(((s.present_days + s.od_days + s.ml_days)::numeric / s.total_working_days::numeric) * 100, 2)::float8
+                 ELSE 0.0 END,
+            NOW()
+          FROM stats s
+          ON CONFLICT (student_id) DO UPDATE SET
+            total_working_days = EXCLUDED.total_working_days,
+            present_days = EXCLUDED.present_days,
+            absent_days = EXCLUDED.absent_days,
+            od_days = EXCLUDED.od_days,
+            ml_days = EXCLUDED.ml_days,
+            percentage = EXCLUDED.percentage,
+            last_updated = EXCLUDED.last_updated
+        `;
+        await executeRun(recalcSql, [affectedArr]);
+      }
+    } else {
+      // Local SQLite fallback
+      for (const r of records) {
+        if (!r.status || r.status === 'UNMARKED') {
+          await executeRun('DELETE FROM daily_attendance_records WHERE student_id = ? AND date = ?', [r.studentId, date]);
+        } else {
+          const existing = await queryOne('SELECT id FROM daily_attendance_records WHERE student_id = ? AND date = ?', [r.studentId, date]);
+          if (existing) {
+            await executeRun('UPDATE daily_attendance_records SET status = ?, recorded_by = ?, recorded_at = ? WHERE id = ?', [r.status, recordedBy, now, existing.id]);
+          } else {
+            const id = `attd-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+            await executeRun('INSERT INTO daily_attendance_records (id, student_id, date, status, recorded_by, recorded_at) VALUES (?, ?, ?, ?, ?, ?)', [id, r.studentId, date, r.status, recordedBy, now]);
+          }
+        }
+        await this.recalculateStudentAttendancePercentage(r.studentId);
+      }
     }
   }
 

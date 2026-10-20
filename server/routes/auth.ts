@@ -94,6 +94,8 @@ router.post('/login', async (req, res) => {
 
   const normalizedRole = match.role.trim().toUpperCase() as 'STUDENT' | 'FACULTY' | 'HOD' | 'ADMIN';
 
+  const isInitialPassword = normalizedRole === 'STUDENT' && Boolean(match.identifier && password.trim() === match.identifier.trim());
+
   // Token payload contains ONLY necessary identity claim — ZERO password hash exposed!
   const tokenPayload = {
     id: match.id,
@@ -103,7 +105,8 @@ router.post('/login', async (req, res) => {
     assignedYear: match.year,
     assignedSection: match.section,
     registerNo: normalizedRole === 'STUDENT' ? match.identifier : undefined,
-    studentId: normalizedRole === 'STUDENT' ? match.id : undefined
+    studentId: normalizedRole === 'STUDENT' ? match.id : undefined,
+    requiresPasswordChange: isInitialPassword
   };
 
   const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '8h' });

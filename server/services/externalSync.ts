@@ -1,5 +1,6 @@
 import { db } from '../db.js';
 import { calculateCategoryScores, computeOverallScore } from '../scoringEngine.js';
+import { executeRun, isPostgresActive, queryOne } from '../postgresAdapter.js';
 
 export interface LeetCodeSyncResult {
   username: string;
@@ -65,10 +66,10 @@ export async function syncLeetCodeProfile(studentId: string, inputHandleOrEmail:
   let verified = false;
   let fetchError = '';
 
-  // 1. Primary: Official LeetCode GraphQL Query
+  // 1. Primary: Official LeetCode GraphQL Query with 3500ms timeout
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 7000);
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
 
     const gqlRes = await fetch('https://leetcode.com/graphql', {
       method: 'POST',
@@ -133,11 +134,11 @@ export async function syncLeetCodeProfile(studentId: string, inputHandleOrEmail:
     fetchError = err.message;
   }
 
-  // 2. Secondary Fallback: Alfa LeetCode Public API
+  // 2. Secondary Fallback: Alfa LeetCode Public API with 2500ms timeout
   if (!verified) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 7000);
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
 
       const alfaRes = await fetch(`https://alfa-leetcode-api.onrender.com/userProfile/${encodeURIComponent(cleanUsername)}`, {
         signal: controller.signal
@@ -163,8 +164,25 @@ export async function syncLeetCodeProfile(studentId: string, inputHandleOrEmail:
     }
   }
 
+  // 3. Fallback to existing database stats if external APIs are unreachable
   if (!verified) {
-    throw new Error(fetchError || `Failed to verify LeetCode username "${cleanUsername}". Please make sure the profile handle exists on LeetCode.`);
+    const existing = await queryOne<any>('SELECT * FROM leetcode_stats WHERE student_id = ?', [studentId]);
+    if (existing && (existing.total_solved > 0 || existing.easy_solved > 0)) {
+      return {
+        username: existing.username || cleanUsername,
+        easySolved: existing.easy_solved || 0,
+        mediumSolved: existing.medium_solved || 0,
+        hardSolved: existing.hard_solved || 0,
+        totalSolved: existing.total_solved || 0,
+        totalAttempted: existing.total_attempted || 0,
+        acceptanceRate: existing.acceptance_rate || 0,
+        contestRating: existing.contest_rating || 1200,
+        ranking: 0,
+        verificationStatus: 'CACHED',
+        syncedAt: existing.last_updated || new Date().toISOString()
+      };
+    }
+    throw new Error(fetchError || `LeetCode verification failed for "${cleanUsername}". LeetCode server did not respond in time. Please verify the username.`);
   }
 
   const now = new Date().toISOString();
@@ -213,11 +231,27 @@ export async function syncLeetCodeProfile(studentId: string, inputHandleOrEmail:
     );
     const newOverallScore = computeOverallScore(categoryScores, scoringConfig) || 0;
 
-    const sectionStudents = await db.getStudents(student.year, student.section);
-    for (let idx = 0; idx < sectionStudents.length; idx++) {
-      const s = sectionStudents[idx];
-      const sScore = s.id === studentId ? newOverallScore : (s.overall_score || 0);
-      await db.updateStudentScoreAndRank(s.id, sScore, idx + 1);
+    await executeRun('UPDATE students SET overall_score = ? WHERE id = ?', [newOverallScore, studentId]);
+
+    if (isPostgresActive()) {
+      await executeRun(`
+        WITH ranked AS (
+          SELECT id, ROW_NUMBER() OVER (ORDER BY overall_score DESC, cgpa DESC NULLS LAST) as new_rank
+          FROM students
+          WHERE year = ? AND section = ?
+        )
+        UPDATE students s
+        SET current_rank = r.new_rank
+        FROM ranked r
+        WHERE s.id = r.id
+      `, [student.year, student.section]);
+    } else {
+      const sectionStudents = await db.getStudents(student.year, student.section);
+      for (let idx = 0; idx < sectionStudents.length; idx++) {
+        const s = sectionStudents[idx];
+        const sScore = s.id === studentId ? newOverallScore : (s.overall_score || 0);
+        await db.updateStudentScoreAndRank(s.id, sScore, idx + 1);
+      }
     }
   }
 

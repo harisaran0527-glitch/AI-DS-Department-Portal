@@ -1,4 +1,5 @@
 import { db } from '../db.js';
+import { queryAll, queryOne } from '../postgresAdapter.js';
 import {
   calculateCategoryScores,
   computeOverallScore,
@@ -423,6 +424,8 @@ async function buildCategoryResult(
  */
 async function generateGeminiExplanation(categoryKey: string, rank: 1 | 2, item: any, opponent: any, isApiActive = false): Promise<string> {
   const student = item.student;
+  const regNo = student.register_no || student.registerNo || '';
+  const stuName = student.name || 'Student';
   const breakdown = item.breakdown || {};
   const leetcode = item.full360?.leetcode;
   const allTeams = await db.getTeams();
@@ -439,19 +442,23 @@ async function generateGeminiExplanation(categoryKey: string, rank: 1 | 2, item:
 
   // 1. Live Gemini REST API call with automatic key failover if API is active
   if (isApiActive) {
-    const prompt = `Analyze this student performance data and write a concise, professional 2-sentence rationale for placing ${rank === 1 ? '1st Place' : '2nd Place'} in the category "${categoryKey}".
-Student Name: ${student.name} (${student.registerNo})
+    const oppReg = opponent ? (opponent.student.register_no || opponent.student.registerNo || '') : '';
+    const oppName = opponent ? (opponent.student.name || 'Runner-Up') : '';
+    const prompt = `Analyze this verified student performance data and write a concise, professional 2-sentence rationale for placing ${rank === 1 ? '1st Place' : '2nd Place'} in the category "${categoryKey}".
+Student Name: ${stuName} (Register No: ${regNo})
 Year/Section: ${student.year} Sec ${student.section}
-CGPA: ${student.cgpa}
+CGPA: ${student.cgpa !== null && student.cgpa !== undefined ? student.cgpa : 'N/A'}
 Overall Composite Score: ${item.overallScore}/100
 LeetCode Solved: ${leetcode ? `${leetcode.totalSolved} (Easy:${leetcode.easySolved}, Med:${leetcode.mediumSolved}, Hard:${leetcode.hardSolved})` : 'N/A'}
 SkillEdge Score: ${breakdown.skillEdge}%
 NPTEL Score: ${breakdown.nptel}%
 Attendance: ${breakdown.attendance}%
 Lead Teams Count: ${teams.length}
-${opponent ? `Opponent (${rank === 1 ? '2nd Place' : '1st Place'}): ${opponent.student.name} (${opponent.student.registerNo})` : ''}
+${opponent ? `Context (${rank === 1 ? 'Runner-Up' : 'Winner'}): ${oppName} (${oppReg})` : ''}
 
 Rules:
+- Focus solely on explaining ${stuName}'s achievements.
+- Do NOT mix up or attribute other students' achievements to ${stuName}.
 - Strictly output ONLY the 2-sentence rationale.
 - Highlight specific verified score numbers.
 - Do NOT invent or alter any metrics.`;
@@ -477,15 +484,15 @@ Rules:
 
   if (categoryKey === 'BEST_STUDENT') {
     if (rank === 1) {
-      finalExplanation = `Awarded 1st Place because ${student.name} (${student.registerNo || student.register_no}) achieved top overall composite score of ${item.overallScore.toFixed(1)}/100, outperforming the field with CGPA of ${formatCgpa(student.cgpa)}, SkillEdge completion of ${breakdown.skillEdge}%, and ${breakdown.attendance}% attendance. ${tag}`;
+      finalExplanation = `Awarded 1st Place because ${stuName} (${regNo}) achieved top overall composite score of ${item.overallScore.toFixed(1)}/100, outperforming the field with CGPA of ${formatCgpa(student.cgpa)}, SkillEdge completion of ${breakdown.skillEdge}%, and ${breakdown.attendance}% attendance. ${tag}`;
     } else {
-      finalExplanation = `Awarded 2nd Place because ${student.name} (${student.registerNo || student.register_no}) demonstrated outstanding multi-module performance with overall composite score of ${item.overallScore.toFixed(1)}/100, ${formatCgpa(student.cgpa)} CGPA, and verified course certifications. ${tag}`;
+      finalExplanation = `Awarded 2nd Place because ${stuName} (${regNo}) demonstrated outstanding multi-module performance with overall composite score of ${item.overallScore.toFixed(1)}/100, ${formatCgpa(student.cgpa)} CGPA, and verified course certifications. ${tag}`;
     }
   } else if (categoryKey === 'BEST_TEAM_HEAD') {
     if (rank === 1) {
-      finalExplanation = `Awarded 1st Place because ${student.name} (${student.registerNo || student.register_no}) leads ${teams.length || 1} project teams with team score of ${item.teamHeadScore.toFixed(1)}/100, demonstrating exceptional technical leadership and academic balance (${formatCgpa(student.cgpa)} CGPA). ${tag}`;
+      finalExplanation = `Awarded 1st Place because ${stuName} (${regNo}) leads ${teams.length || 1} project teams with team score of ${item.teamHeadScore.toFixed(1)}/100, demonstrating exceptional technical leadership and academic balance (${formatCgpa(student.cgpa)} CGPA). ${tag}`;
     } else {
-      finalExplanation = `Awarded 2nd Place because ${student.name} (${student.registerNo || student.register_no}) holds a strong team head score of ${item.teamHeadScore.toFixed(1)}/100 with verified team project contributions and ${formatCgpa(student.cgpa)} CGPA. ${tag}`;
+      finalExplanation = `Awarded 2nd Place because ${stuName} (${regNo}) holds a strong team head score of ${item.teamHeadScore.toFixed(1)}/100 with verified team project contributions and ${formatCgpa(student.cgpa)} CGPA. ${tag}`;
     }
   } else if (categoryKey === 'BEST_ELITE_STUDENT') {
     if (rank === 1) {
@@ -754,22 +761,35 @@ export async function getLeetCodeFullAnalytics(
   const pool = includeTest ? allStudents : allStudents.filter((s) => !isTestOrDemoRecord(s));
   const activePool = pool.length > 0 ? pool : allStudents;
 
+  // High-performance single-query batch metrics retrieval (replaces 1080 queries with 1)
+  const activeIds = new Set(activePool.map((s) => s.id));
+  const lcRows = await queryAll<any>(
+    'SELECT student_id, username, easy_solved, medium_solved, hard_solved, total_solved, contest_rating FROM leetcode_stats WHERE total_solved > 0'
+  );
+
   let easyTotal = 0;
   let medTotal = 0;
   let hardTotal = 0;
   let ratingSum = 0;
   let activeCoders = 0;
+  const lcMap = new Map<string, any>();
 
-  for (const stu of activePool) {
-    const full360 = await db.getStudent360(stu.id);
-    const lc = full360?.leetcode;
-    if (lc && lc.totalSolved > 0) {
-      easyTotal += lc.easySolved || 0;
-      medTotal += lc.mediumSolved || 0;
-      hardTotal += lc.hardSolved || 0;
-      ratingSum += lc.contestRating || 1200;
+  for (const row of lcRows) {
+    if (activeIds.has(row.student_id)) {
+      easyTotal += row.easy_solved || 0;
+      medTotal += row.medium_solved || 0;
+      hardTotal += row.hard_solved || 0;
+      ratingSum += row.contest_rating || 1200;
       activeCoders += 1;
     }
+    lcMap.set(row.student_id, {
+      username: row.username,
+      easySolved: row.easy_solved || 0,
+      mediumSolved: row.medium_solved || 0,
+      hardSolved: row.hard_solved || 0,
+      totalSolved: row.total_solved || 0,
+      contestRating: row.contest_rating || 1200
+    });
   }
 
   const grandTotal = easyTotal + medTotal + hardTotal;
@@ -777,26 +797,26 @@ export async function getLeetCodeFullAnalytics(
   const medPct = grandTotal > 0 ? Math.round((medTotal / grandTotal) * 100) : 0;
   const hardPct = grandTotal > 0 ? Math.round((hardTotal / grandTotal) * 100) : 0;
 
-  const firstStu = bestLcCat.firstPlace.studentId ? await db.getStudent360(bestLcCat.firstPlace.studentId) : null;
-  const secondStu = bestLcCat.secondPlace.studentId ? await db.getStudent360(bestLcCat.secondPlace.studentId) : null;
+  const firstLcStats = bestLcCat.firstPlace.studentId ? lcMap.get(bestLcCat.firstPlace.studentId) || null : null;
+  const secondLcStats = bestLcCat.secondPlace.studentId ? lcMap.get(bestLcCat.secondPlace.studentId) || null : null;
 
   const firstPlaceWithStats = {
     ...bestLcCat.firstPlace,
-    leetCodeStats: firstStu?.leetcode || null
+    leetCodeStats: firstLcStats
   };
 
   const secondPlaceWithStats = {
     ...bestLcCat.secondPlace,
-    leetCodeStats: secondStu?.leetcode || null
+    leetCodeStats: secondLcStats
   };
 
   const top1Name = bestLcCat.firstPlace.studentName || 'No Candidate';
-  const top1Solved = firstStu?.leetcode?.totalSolved || 0;
-  const top1Hard = firstStu?.leetcode?.hardSolved || 0;
-  const top1Rating = firstStu?.leetcode?.contestRating || 1200;
+  const top1Solved = firstLcStats?.totalSolved || 0;
+  const top1Hard = firstLcStats?.hardSolved || 0;
+  const top1Rating = firstLcStats?.contestRating || 1200;
 
   const top2Name = bestLcCat.secondPlace.studentName || 'N/A';
-  const top2Solved = secondStu?.leetcode?.totalSolved || 0;
+  const top2Solved = secondLcStats?.totalSolved || 0;
 
   const isGeminiActive = topRec.geminiApiStatus.isConfigured;
   const tag = isGeminiActive ? '[Gemini 2.5 Flash Active]' : '[Rule Engine Fallback]';

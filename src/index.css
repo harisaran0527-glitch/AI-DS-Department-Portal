@@ -261,11 +261,54 @@ html.light [class*="bg-[#12161F]"],
 html.light [class*="bg-[#171C26]"],
 html.light [class*="bg-[#0B192E]"],
 html.light [class*="bg-[#071A3D]"],
+html.light [class*="bg-[#1B205F]"],
+html.light [class*="bg-[#252B86]"],
 html.light [class*="bg-slate-950"],
 html.light [class*="bg-slate-900"] {
   background-color: #FFFFFF !important;
+  background-image: none !important;
   border-color: #E2E8F0 !important;
   color: #334155 !important;
+}
+
+/* Light Mode Secondary Wells, Action Containers, Sub-Cards & Pills */
+html.light [class*="bg-slate-800"] {
+  background-color: #F8FAFC !important;
+  background-image: none !important;
+  border-color: #E2E8F0 !important;
+  color: #0F172A !important;
+}
+
+html.light [class*="bg-slate-900/"],
+html.light [class*="bg-slate-950/"] {
+  background-color: #FFFFFF !important;
+  background-image: none !important;
+  border-color: #E2E8F0 !important;
+  color: #334155 !important;
+}
+
+/* Light Mode Soft Tints for Year/Section Labels, Discipline, & Key Highlights */
+html.light .badge-year-sec,
+html.light [class*="bg-slate-900"] [class*="text-slate-400"],
+html.light [class*="bg-slate-950"] [class*="text-slate-400"] {
+  color: #475569 !important;
+}
+
+/* AI Rationale & Gemini Explanation Boxes */
+html.light [class*="from-amber-950"],
+html.light [class*="from-[#252B86]"],
+html.light [class*="via-[#1B205F]"],
+html.light [class*="to-[#1B205F]"],
+html.light [class*="via-slate-950"],
+html.light [class*="to-slate-950"] {
+  background-image: none !important;
+  background-color: #FFFFFF !important;
+}
+
+html.light [class*="border-amber-500/40"],
+html.light [class*="border-indigo-500/40"],
+html.light [class*="border-cyan-500/30"] {
+  border-color: #CBD5E1 !important;
 }
 
 html.light .portal-card {
@@ -281,26 +324,50 @@ html.light h1, html.light h2, html.light h3, html.light h4, html.light h5, html.
 }
 
 html.light .text-white,
-html.light .text-\[\#F1F5F9\] {
+html.light .text-\[\#F1F5F9\],
+html.light .text-\[\#D9DEFF\] {
   color: #0F172A !important;
 }
 
 html.light .text-slate-200,
 html.light .text-slate-300,
-html.light .text-\[\#94A3B8\] {
+html.light .text-\[\#94A3B8\],
+html.light .text-\[\#AEB7F5\] {
   color: #334155 !important;
 }
 
 html.light .text-slate-400,
 html.light .text-slate-500 {
-  color: #64748B !important;
+  color: #475569 !important;
+}
+
+/* High Contrast Accent Colors in Light Mode */
+html.light [class*="text-cyan-400"],
+html.light [class*="text-cyan-300"] {
+  color: #0284C7 !important;
+}
+
+html.light [class*="text-indigo-400"],
+html.light [class*="text-indigo-300"] {
+  color: #4338CA !important;
+}
+
+html.light [class*="text-emerald-400"],
+html.light [class*="text-emerald-300"] {
+  color: #047857 !important;
+}
+
+html.light [class*="text-amber-400"],
+html.light [class*="text-amber-300"] {
+  color: #B45309 !important;
 }
 
 html.light [class*="border-slate-800"],
 html.light [class*="border-slate-700"],
 html.light [class*="border-\[\#252B36\]"],
-html.light [class*="border-\[\#1E4D8F\]"] {
-  border-color: #CBD5E1 !important;
+html.light [class*="border-\[\#1E4D8F\]"],
+html.light [class*="border-white/14"] {
+  border-color: #E2E8F0 !important;
 }
 
 html.light input,
@@ -345,6 +412,26 @@ html.light td {
 
 html.light tr:hover td {
   background-color: #F1F5F9 !important;
+}
+
+/* Light Mode Action Buttons & Pill Overrides */
+html.light button[class*="bg-slate-800"] {
+  background-color: #F1F5F9 !important;
+  color: #0F172A !important;
+  border-color: #CBD5E1 !important;
+}
+html.light button[class*="bg-slate-800"]:hover {
+  background-color: #E2E8F0 !important;
+  color: #0F172A !important;
+}
+html.light button[class*="bg-slate-900"] {
+  background-color: #F1F5F9 !important;
+  color: #0F172A !important;
+  border-color: #E2E8F0 !important;
+}
+html.light button[class*="bg-slate-900"]:hover {
+  background-color: #E2E8F0 !important;
+  color: #0F172A !important;
 }
 
 /* Light Mode Sidebar Navigation Active Item: Deep Dark Blue (#0B2559) with White Text */

@@ -125,6 +125,20 @@ app.get(['/api/health', '/health', '/api', '/'], (req, res) => {
   res.json({ status: 'ok', department: 'AI & Data Science', timestamp: new Date().toISOString() });
 });
 
+// Global API JSON Error Handler — guarantees all failures return JSON, preventing "Unexpected token 'A'"
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('[API Error Caught]', err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  const status = typeof err.status === 'number' && err.status >= 400 && err.status <= 599 ? err.status : 500;
+  return res.status(status).json({
+    success: false,
+    error: err.message || 'An internal server error occurred.',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Production & Preview Static Serving if client dist exists
 const DIST_PATH = path.resolve(process.cwd(), 'dist');
 if (!process.env.VERCEL && fs.existsSync(DIST_PATH)) {

@@ -550,6 +550,13 @@ export const API = {
     });
   },
 
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    return request<{ message: string }>('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword })
+    });
+  },
+
   // Admin - HOD Management
   getHODList: async () => {
     return request<{ hodList: any[] }>('/admin/hod');

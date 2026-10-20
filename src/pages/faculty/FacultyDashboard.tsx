@@ -13,6 +13,7 @@ import { GeminiTopRecognitionView } from '../../components/ranking/GeminiTopReco
 import { GeminiCategoryBestPerformerCard } from '../../components/ranking/GeminiCategoryBestPerformerCard';
 import { GeminiFullLeetCodeDashboard } from '../../components/ranking/GeminiFullLeetCodeDashboard';
 import { DisciplineIssueModule } from '../../components/discipline/DisciplineIssueModule';
+import { ProofAttachmentControl } from '../../components/common/ProofAttachmentControl';
 import { getNptelUrlForStudent } from '../../services/nptelUrlHelper';
 import {
   Users,
@@ -266,6 +267,11 @@ export const FacultyDashboard: React.FC = () => {
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
   const [attHistory, setAttHistory] = useState<any[]>([]);
   const [isAttSaving, setIsAttSaving] = useState(false);
+  const [attSaveFeedback, setAttSaveFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Academics Save status
+  const [acadSaveStatus, setAcadSaveStatus] = useState<'IDLE' | 'SAVING' | 'SUCCESS' | 'ERROR'>('IDLE');
+  const [acadSaveMsg, setAcadSaveMsg] = useState<string>('');
 
   // Bulk Import state
   const [bulkInputText, setBulkInputText] = useState('');
@@ -319,6 +325,9 @@ export const FacultyDashboard: React.FC = () => {
   const [projCategory, setProjCategory] = useState<'Software' | 'Hardware' | ''>('');
   const [projLiveUrl, setProjLiveUrl] = useState('');
   const [projUrl, setProjUrl] = useState('');
+  const [projDocFile, setProjDocFile] = useState<File | null>(null);
+  const [isProjSaving, setIsProjSaving] = useState(false);
+  const [projSaveFeedback, setProjSaveFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // --- DELETION STATE ---
   const [deleteTarget, setDeleteTarget] = useState<{ studentId: string; recordType: string; recordId: string; recordName: string } | null>(null);
@@ -1387,10 +1396,12 @@ export const FacultyDashboard: React.FC = () => {
 
   const handleSaveAttendance = async () => {
     if (!attDate || attDate < '2026-07-13') {
-      alert('Attendance date must be 13 July 2026 or later.');
+      setAttSaveFeedback({ type: 'error', message: 'Attendance date must be 13 July 2026 or later.' });
       return;
     }
     setIsAttSaving(true);
+    setAttSaveFeedback(null);
+
     const targetStudents = students.filter((s) => {
       const isLat = (s.entryType === 'Lateral Entry' || (s as any).entry_type === 'Lateral Entry');
       return attGroup === 'LATERAL' ? isLat : !isLat;
@@ -1409,13 +1420,32 @@ export const FacultyDashboard: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ date: attDate, records: recordsPayload })
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to save attendance');
-      alert(`Attendance saved successfully for ${attGroup === 'LATERAL' ? 'Lateral Entry' : 'Regular'} students on ${attDate}!`);
+
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { error: text || `Server error (${res.status})` };
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to save attendance');
+      }
+
+      setAttSaveFeedback({
+        type: 'success',
+        message: `Attendance Saved Successfully for ${attGroup === 'LATERAL' ? 'Lateral Entry' : 'Regular'} students on ${attDate} (${recordsPayload.length} records persisted).`
+      });
+
       await fetchRoster();
       await fetchAttendanceHistory();
     } catch (err: any) {
-      alert(err.message || 'Failed to save attendance.');
+      console.error('[Attendance Save Error]', err);
+      setAttSaveFeedback({
+        type: 'error',
+        message: err.message || 'Failed to save attendance. Please check network connection.'
+      });
     } finally {
       setIsAttSaving(false);
     }
@@ -2625,11 +2655,32 @@ export const FacultyDashboard: React.FC = () => {
                       ))}
                     </div>
 
+                  {/* Academics Save Feedback Banner */}
+                  {acadSaveMsg && (
+                    <div
+                      className={`p-3 rounded-xl border text-xs font-mono flex items-center space-x-2 transition-all ${
+                        acadSaveStatus === 'SUCCESS'
+                          ? 'bg-emerald-950/80 border-emerald-500 text-emerald-200'
+                          : 'bg-rose-950/80 border-rose-500 text-rose-200'
+                      }`}
+                    >
+                      {acadSaveStatus === 'SUCCESS' ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                      )}
+                      <span>{acadSaveMsg}</span>
+                    </div>
+                  )}
+
                   <div className="flex justify-end pt-2">
                     <button
                       type="button"
+                      disabled={acadSaveStatus === 'SAVING'}
                       onClick={async () => {
-                        if (!selectedStudent) return;
+                        if (!selectedStudent || acadSaveStatus === 'SAVING') return;
+                        setAcadSaveStatus('SAVING');
+                        setAcadSaveMsg('');
                         try {
                           const existingRecs = student360Edit?.academics || [];
                           const updatedRecs = [
@@ -2640,16 +2691,51 @@ export const FacultyDashboard: React.FC = () => {
                               subjects: subjectRows.slice(0, subjectCount)
                             }
                           ];
-                          await API.updateStudent360(selectedStudent.id, { academics: updatedRecs });
-                          alert(`Academic record saved for ${selectedStudent.name}!`);
+                          const res = await API.updateStudent360(selectedStudent.id, { academics: updatedRecs });
+                          if (res.error) throw new Error(res.error);
+                          setAcadSaveStatus('SUCCESS');
+                          setAcadSaveMsg(`Saved Successfully — Academic record updated in Supabase database for ${selectedStudent.name}.`);
                           await reloadStudent360();
+                          setTimeout(() => {
+                            setAcadSaveStatus('IDLE');
+                            setAcadSaveMsg('');
+                          }, 3500);
                         } catch (err: any) {
-                          alert(err.message || 'Failed to save academic record.');
+                          setAcadSaveStatus('ERROR');
+                          setAcadSaveMsg(`Save Failed — Please Retry: ${err.message || 'Database update error'}`);
                         }
                       }}
-                      className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-5 py-2.5 rounded-xl cursor-pointer shadow-lg transition-all"
+                      className={`font-bold px-6 py-2.5 rounded-xl cursor-pointer shadow-lg transition-all flex items-center space-x-2 text-xs font-mono disabled:opacity-50 ${
+                        acadSaveStatus === 'SAVING'
+                          ? 'bg-indigo-700 text-indigo-200 cursor-not-allowed'
+                          : acadSaveStatus === 'SUCCESS'
+                          ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                          : acadSaveStatus === 'ERROR'
+                          ? 'bg-rose-600 hover:bg-rose-500 text-white'
+                          : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                      }`}
                     >
-                      Save Academic Record
+                      {acadSaveStatus === 'SAVING' ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-white" />
+                          <span>Saving...</span>
+                        </>
+                      ) : acadSaveStatus === 'SUCCESS' ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-white" />
+                          <span>Saved Successfully</span>
+                        </>
+                      ) : acadSaveStatus === 'ERROR' ? (
+                        <>
+                          <AlertCircle className="w-4 h-4 text-white" />
+                          <span>Save Failed — Please Retry</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4 text-white" />
+                          <span>Save Academic Record</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </form>
@@ -3674,11 +3760,29 @@ export const FacultyDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                {/* 5. FOOTER SAVE ACTION & PERSISTENCE INDICATOR */}
+                {/* 5. ATTENDANCE SAVE FEEDBACK BANNER */}
+                {attSaveFeedback && (
+                  <div
+                    className={`p-3.5 rounded-xl border text-xs font-mono flex items-center space-x-2.5 transition-all ${
+                      attSaveFeedback.type === 'success'
+                        ? 'bg-emerald-950/80 border-emerald-500 text-emerald-200'
+                        : 'bg-rose-950/80 border-rose-500 text-rose-200'
+                    }`}
+                  >
+                    {attSaveFeedback.type === 'success' ? (
+                      <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                    )}
+                    <span className="font-semibold">{attSaveFeedback.message}</span>
+                  </div>
+                )}
+
+                {/* 6. FOOTER SAVE ACTION & PERSISTENCE INDICATOR */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 border-t border-slate-800">
                   <div className="flex items-center space-x-2 text-xs text-slate-400 font-mono">
                     <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                    <span>Daily attendance records persist directly to SQLite database upon saving.</span>
+                    <span>Daily attendance records persist directly to Supabase PostgreSQL database upon saving.</span>
                   </div>
 
                   <button
@@ -3690,7 +3794,7 @@ export const FacultyDashboard: React.FC = () => {
                     {isAttSaving ? (
                       <>
                         <Sparkles className="w-4 h-4 animate-spin text-slate-950" />
-                        <span>Saving Records...</span>
+                        <span>Saving Attendance...</span>
                       </>
                     ) : (
                       <>
@@ -4798,7 +4902,7 @@ export const FacultyDashboard: React.FC = () => {
                     <h4 className="font-bold text-indigo-400 uppercase font-sans text-sm">Project Records ({(student360Edit?.projects || []).length})</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {(student360Edit?.projects || []).map((p: any, idx: number) => (
-                        <div key={p.id || idx} className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-2">
+                        <div key={p.id || idx} className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3 shadow-md">
                           <div className="flex justify-between items-center">
                             <span className="bg-indigo-950 text-indigo-300 font-bold px-2 py-0.5 rounded border border-indigo-800">
                               {p.category || 'Software'}
@@ -4806,13 +4910,25 @@ export const FacultyDashboard: React.FC = () => {
                             <button
                               onClick={() => setDeleteTarget({ studentId: selectedStudent.id, recordType: 'projects', recordId: p.id, recordName: p.title })}
                               className="text-red-400 hover:text-red-300 p-1 cursor-pointer"
+                              title="Delete project record"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                           <div className="text-white font-bold font-sans text-sm">{p.title}</div>
-                          {p.liveUrl && <a href={p.liveUrl} target="_blank" rel="noreferrer" className="text-sky-400 hover:underline block truncate">Live Demo: {p.liveUrl}</a>}
-                          {p.githubUrl && <a href={p.githubUrl} target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline block truncate">GitHub: {p.githubUrl}</a>}
+                          {p.liveUrl && <a href={p.liveUrl} target="_blank" rel="noreferrer" className="text-sky-400 hover:underline block truncate text-xs font-mono">Live Demo: {p.liveUrl}</a>}
+                          {p.githubUrl && <a href={p.githubUrl} target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline block truncate text-xs font-mono">GitHub: {p.githubUrl}</a>}
+
+                          {/* Attached Project Documentation & Photos */}
+                          <div className="pt-2 border-t border-slate-800/80">
+                            <ProofAttachmentControl
+                              studentId={selectedStudent.id}
+                              recordType="projects"
+                              recordId={p.id}
+                              userRole="FACULTY"
+                              onAttachmentChanged={reloadStudent360}
+                            />
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -4823,9 +4939,26 @@ export const FacultyDashboard: React.FC = () => {
                 <form className="bg-slate-950 border border-slate-800 p-5 rounded-xl space-y-4 shadow-inner">
                   <h4 className="font-bold text-indigo-400 uppercase text-sm font-sans">+ Add Project Record</h4>
 
+                  {projSaveFeedback && (
+                    <div
+                      className={`p-3 rounded-xl border text-xs font-mono flex items-center space-x-2 transition-all ${
+                        projSaveFeedback.type === 'success'
+                          ? 'bg-emerald-950/80 border-emerald-500 text-emerald-200'
+                          : 'bg-rose-950/80 border-rose-500 text-rose-200'
+                      }`}
+                    >
+                      {projSaveFeedback.type === 'success' ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                      )}
+                      <span>{projSaveFeedback.message}</span>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <input type="text" placeholder="Project Title" value={projTitle} onChange={(e) => setProjTitle(e.target.value)} className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl text-white font-sans" />
-                    <select value={projCategory} onChange={(e) => setProjCategory(e.target.value as any)} className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl text-white font-bold">
+                    <input type="text" placeholder="Project Title" value={projTitle} onChange={(e) => setProjTitle(e.target.value)} className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl text-white font-sans text-xs" />
+                    <select value={projCategory} onChange={(e) => setProjCategory(e.target.value as any)} className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl text-white font-bold text-xs">
                       <option value="">-- Select Project Category --</option>
                       <option value="Software">Software Project</option>
                       <option value="Hardware">Hardware Project</option>
@@ -4834,50 +4967,117 @@ export const FacultyDashboard: React.FC = () => {
 
                   {projCategory === 'Software' && (
                     <div className="space-y-3">
-                      <input type="url" placeholder="Deployment / Live Demo URL" value={projLiveUrl} onChange={(e) => setProjLiveUrl(e.target.value)} className="w-full bg-slate-900 border border-slate-800 p-2.5 rounded-xl text-white font-mono" />
-                      <input type="url" placeholder="GitHub Repository URL" value={projUrl} onChange={(e) => setProjUrl(e.target.value)} className="w-full bg-slate-900 border border-slate-800 p-2.5 rounded-xl text-white font-mono" />
+                      <input type="url" placeholder="Deployment / Live Demo URL" value={projLiveUrl} onChange={(e) => setProjLiveUrl(e.target.value)} className="w-full bg-slate-900 border border-slate-800 p-2.5 rounded-xl text-white font-mono text-xs" />
+                      <input type="url" placeholder="GitHub Repository URL" value={projUrl} onChange={(e) => setProjUrl(e.target.value)} className="w-full bg-slate-900 border border-slate-800 p-2.5 rounded-xl text-white font-mono text-xs" />
                     </div>
                   )}
 
-                  {projCategory === 'Hardware' && (
-                    <div className="border border-dashed border-slate-800 p-6 rounded-xl text-center space-y-2 bg-slate-900/50">
-                      <ImageIcon className="w-6 h-6 text-indigo-400 mx-auto" />
-                      <div className="text-white font-bold">Upload Product Photo</div>
-                      <div className="text-slate-400 text-[10px]">JPG, JPEG, PNG under 5MB</div>
+                  {/* Project Documentation / Hardware Photos Upload Option */}
+                  {projCategory && (
+                    <div className="space-y-2 border border-slate-800 rounded-xl p-4 bg-slate-900/60">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-200 flex items-center space-x-1.5">
+                          <FileText className="w-4 h-4 text-indigo-400" />
+                          <span>{projCategory === 'Hardware' ? 'Hardware Documentation / Product Photos' : 'Project Documentation & Reports'}</span>
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono">Max 10 MB (PDF, DOC, DOCX, PPT, PPTX, JPG, PNG)</span>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row items-center gap-3">
+                        <label className="flex-1 w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl bg-slate-950 border border-slate-700 hover:border-indigo-500 cursor-pointer text-xs font-mono text-slate-300 transition-colors">
+                          <Upload className="w-4 h-4 text-indigo-400" />
+                          <span className="truncate">{projDocFile ? projDocFile.name : 'Choose Project File / Photo'}</span>
+                          <input
+                            type="file"
+                            accept=".pdf, .doc, .docx, .ppt, .pptx, .jpg, .jpeg, .png"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (!f) return;
+                              if (f.size > 10 * 1024 * 1024) {
+                                setProjSaveFeedback({ type: 'error', message: 'File exceeds 10 MB limit. Please select a smaller file.' });
+                                return;
+                              }
+                              setProjSaveFeedback(null);
+                              setProjDocFile(f);
+                            }}
+                            className="hidden"
+                          />
+                        </label>
+                        {projDocFile && (
+                          <button
+                            type="button"
+                            onClick={() => setProjDocFile(null)}
+                            className="text-xs text-rose-400 hover:text-rose-300 px-3 py-2 border border-rose-900/50 rounded-xl"
+                          >
+                            Remove File
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
 
                   <div className="flex justify-end pt-2">
                     <button
                       type="button"
-                      disabled={!projCategory || !projTitle.trim()}
+                      disabled={!projCategory || !projTitle.trim() || isProjSaving}
                       onClick={async () => {
-                        if (!selectedStudent || !projTitle.trim() || !projCategory) return;
+                        if (!selectedStudent || !projTitle.trim() || !projCategory || isProjSaving) return;
+                        setIsProjSaving(true);
+                        setProjSaveFeedback(null);
                         try {
+                          const newProjId = `proj-${Date.now()}`;
+                          const updatedProjects = [
+                            ...(student360Edit?.projects || []),
+                            {
+                              id: newProjId,
+                              title: projTitle.trim(),
+                              category: projCategory,
+                              liveUrl: projLiveUrl.trim(),
+                              githubUrl: projUrl.trim()
+                            }
+                          ];
+
                           await API.updateStudent360(selectedStudent.id, {
-                            projects: [
-                              ...(student360Edit?.projects || []),
-                              {
-                                id: `proj-${Date.now()}`,
-                                title: projTitle,
-                                category: projCategory,
-                                liveUrl: projLiveUrl,
-                                githubUrl: projUrl
-                              }
-                            ]
+                            projects: updatedProjects
                           });
-                          alert(`Project record saved for ${selectedStudent.name}!`);
+
+                          // If file is selected, upload it to Supabase Storage attached to this project record
+                          if (projDocFile) {
+                            await API.uploadFile(selectedStudent.id, 'projects', newProjId, projDocFile);
+                          }
+
+                          setProjSaveFeedback({
+                            type: 'success',
+                            message: `Project "${projTitle}" saved successfully ${projDocFile ? 'with documentation attached' : ''}!`
+                          });
                           setProjTitle('');
                           setProjLiveUrl('');
                           setProjUrl('');
+                          setProjDocFile(null);
                           await reloadStudent360();
+                          setTimeout(() => setProjSaveFeedback(null), 4000);
                         } catch (err: any) {
-                          alert(err.message || 'Failed to save project record.');
+                          setProjSaveFeedback({
+                            type: 'error',
+                            message: err.message || 'Failed to save project record.'
+                          });
+                        } finally {
+                          setIsProjSaving(false);
                         }
                       }}
-                      className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold px-6 py-2.5 rounded-xl cursor-pointer shadow-lg transition-all font-sans"
+                      className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold px-6 py-2.5 rounded-xl cursor-pointer shadow-lg transition-all font-sans text-xs flex items-center space-x-2"
                     >
-                      Save Project Record
+                      {isProjSaving ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-white" />
+                          <span>Saving Project...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4 text-white" />
+                          <span>Save Project Record</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </form>

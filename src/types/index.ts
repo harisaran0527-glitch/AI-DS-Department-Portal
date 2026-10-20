@@ -14,6 +14,7 @@ export interface UserSession {
   facultyRole?: 'Class Coordinator' | 'Faculty';
   assignedYear?: AcademicYear;
   assignedSection?: Section;
+  requiresPasswordChange?: boolean;
 }
 
 export interface FacultyAssignment {
