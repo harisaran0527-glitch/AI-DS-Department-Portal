@@ -343,6 +343,7 @@ export interface Subject {
   id: string;
   subjectCode: string;
   subjectName: string;
+  subjectAbbreviation?: string;
   department: string;
   academicYear: string;
   year: string;
@@ -355,6 +356,7 @@ export interface Subject {
   createdAt?: string;
   subject_code?: string;
   subject_name?: string;
+  subject_abbreviation?: string;
   academic_year?: string;
   subject_type?: 'Theory' | 'Practical' | 'Elective';
   faculty_handler?: string;

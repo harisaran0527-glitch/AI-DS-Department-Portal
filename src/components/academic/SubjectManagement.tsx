@@ -1,23 +1,20 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import { API } from '../../services/api';
 import type { Subject } from '../../types';
 import {
   BookOpen,
-  Plus,
   Search,
-  Pencil,
-  Trash2,
-  X,
   Filter,
   Check,
   AlertCircle,
   Loader2,
-  Sparkles,
-  GraduationCap,
   FileSpreadsheet,
   Upload,
-  CheckCircle2
+  CheckCircle2,
+  Download,
+  X
 } from 'lucide-react';
 
 interface SubjectManagementProps {
@@ -44,7 +41,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
   const [semesterFilter, setSemesterFilter] = useState<string>('ALL');
   const [sectionFilter, setSectionFilter] = useState<string>(assignedSection || 'ALL');
 
-  // Excel Bulk Upload Modal State
+  // Excel Bulk Upload Modal State (for Faculty / Admin)
   const [showExcelModal, setShowExcelModal] = useState<boolean>(false);
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [isValidatingExcel, setIsValidatingExcel] = useState<boolean>(false);
@@ -54,29 +51,8 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
   const [excelInvalidRows, setExcelInvalidRows] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Modal State
-  const [showModal, setShowModal] = useState<boolean>(false);
-  const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
-
-  // Form Fields
-  const [formCode, setFormCode] = useState<string>('');
-  const [formName, setFormName] = useState<string>('');
-  const [formDepartment, setFormDepartment] = useState<string>('AI & Data Science');
-  const [formAcademicYear, setFormAcademicYear] = useState<string>('2025-2026');
-  const [formYear, setFormYear] = useState<string>(assignedYear && assignedYear !== 'ALL' ? assignedYear : '2nd Year');
-  const [formSemester, setFormSemester] = useState<number>(4);
-  const [formSection, setFormSection] = useState<string>(assignedSection && assignedSection !== 'ALL' ? assignedSection : 'A');
-  const [formType, setFormType] = useState<'Theory' | 'Practical' | 'Elective'>('Theory');
-  const [formCredits, setFormCredits] = useState<number>(3);
-  const [formFacultyHandler, setFormFacultyHandler] = useState<string>('');
-
-  const [formError, setFormError] = useState<string>('');
-  const [isSaving, setIsSaving] = useState<boolean>(false);
-
-  // Delete State
-  const [deleteTarget, setDeleteTarget] = useState<Subject | null>(null);
-  const [isDeleting, setIsDeleting] = useState<boolean>(false);
-  const [deleteError, setDeleteError] = useState<string>('');
+  // HOD and STUDENT are strictly view-only
+  const isReadOnly = userRole === 'HOD' || userRole === 'STUDENT';
 
   const fetchSubjects = async () => {
     setIsLoading(true);
@@ -99,12 +75,13 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
     fetchSubjects();
   }, []);
 
-  const handleExcelFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle Bulk Excel / CSV Upload for Subject Master
+  const handleExcelFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (file.size > 10 * 1024 * 1024) {
-      alert('File size exceeds 10 MB. Please upload a smaller file.');
+      alert('File size exceeds 10 MB limit. Please upload a smaller file.');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -117,40 +94,67 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
       return;
     }
 
+    if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls') && !fileName.endsWith('.csv')) {
+      alert('Invalid file format. Please upload an Excel (.xlsx, .xls) or CSV (.csv) file.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     setExcelFile(file);
     setExcelPreviewSummary(null);
     setExcelValidRows([]);
     setExcelInvalidRows([]);
     setIsValidatingExcel(true);
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: async (results) => {
-        const rows = results.data as any[];
-        try {
-          const res = await API.previewSubjectImport(rows);
-          setExcelPreviewSummary(res.summary);
-          setExcelValidRows(res.validRows || []);
-          setExcelInvalidRows(res.invalidRows || []);
-        } catch (err: any) {
-          alert(err.message || 'Failed to preview Subject Master Excel upload.');
-        } finally {
-          setIsValidatingExcel(false);
+    try {
+      let rawRows: any[] = [];
+
+      if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        if (!firstSheetName) {
+          throw new Error('The uploaded Excel file does not contain any sheets.');
         }
-      },
-      error: (err) => {
-        alert(`Failed to parse CSV file: ${err.message}`);
-        setIsValidatingExcel(false);
+        const worksheet = workbook.Sheets[firstSheetName];
+        rawRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+      } else {
+        // CSV parsing
+        const text = await file.text();
+        const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+        rawRows = parsed.data as any[];
       }
-    });
+
+      if (rawRows.length === 0) {
+        throw new Error('The uploaded file is empty or contains no readable data rows.');
+      }
+
+      const res = await API.previewSubjectImport(
+        rawRows,
+        assignedYear && assignedYear !== 'ALL' ? assignedYear : undefined,
+        assignedSection && assignedSection !== 'ALL' ? assignedSection : undefined
+      );
+
+      setExcelPreviewSummary(res.summary);
+      setExcelValidRows(res.validRows || []);
+      setExcelInvalidRows(res.invalidRows || []);
+    } catch (err: any) {
+      console.error('Error parsing subject file:', err);
+      alert(err.message || 'Failed to parse Subject Master file.');
+    } finally {
+      setIsValidatingExcel(false);
+    }
   };
 
   const handleConfirmSubjectImport = async () => {
     if (excelValidRows.length === 0) return;
     setIsImportingExcel(true);
     try {
-      const res = await API.confirmSubjectImport(excelValidRows);
+      const res = await API.confirmSubjectImport(
+        excelValidRows,
+        assignedYear && assignedYear !== 'ALL' ? assignedYear : undefined,
+        assignedSection && assignedSection !== 'ALL' ? assignedSection : undefined
+      );
       setSuccessMsg(res.message || `Successfully imported ${res.importedCount || excelValidRows.length} Department Subjects.`);
       setShowExcelModal(false);
       setExcelFile(null);
@@ -158,6 +162,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
       setExcelValidRows([]);
       setExcelInvalidRows([]);
       await fetchSubjects();
+      setTimeout(() => setSuccessMsg(''), 5000);
     } catch (err: any) {
       alert(err.message || 'Failed to confirm Subject Master import.');
     } finally {
@@ -165,111 +170,56 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
     }
   };
 
-  const isReadOnly = userRole === 'STUDENT';
-
-  const handleOpenAddModal = () => {
-    setEditingSubject(null);
-    setFormCode('');
-    setFormName('');
-    setFormDepartment('AI & Data Science');
-    setFormAcademicYear('2025-2026');
-    setFormYear(assignedYear && assignedYear !== 'ALL' ? assignedYear : '2nd Year');
-    setFormSemester(4);
-    setFormSection(assignedSection && assignedSection !== 'ALL' ? assignedSection : 'A');
-    setFormType('Theory');
-    setFormCredits(3);
-    setFormFacultyHandler('');
-    setFormError('');
-    setShowModal(true);
-  };
-
-  const handleOpenEditModal = (sub: Subject) => {
-    setEditingSubject(sub);
-    setFormCode(sub.subjectCode || sub.subject_code || '');
-    setFormName(sub.subjectName || sub.subject_name || '');
-    setFormDepartment(sub.department || 'AI & Data Science');
-    setFormAcademicYear(sub.academicYear || sub.academic_year || '2025-2026');
-    setFormYear(sub.year || '2nd Year');
-    setFormSemester(sub.semester || 4);
-    setFormSection(sub.section || 'A');
-    setFormType(sub.subjectType || sub.subject_type || 'Theory');
-    setFormCredits(sub.credits || 3);
-    setFormFacultyHandler(sub.facultyHandler || sub.faculty_handler || '');
-    setFormError('');
-    setShowModal(true);
-  };
-
-  const handleSaveSubject = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError('');
-
-    if (!formCode.trim()) {
-      setFormError('Subject Code is required.');
-      return;
-    }
-    if (!formName.trim()) {
-      setFormError('Subject Name is required.');
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      const payload: Partial<Subject> = {
-        subjectCode: formCode.trim().toUpperCase(),
-        subjectName: formName.trim(),
-        department: formDepartment.trim() || 'AI & Data Science',
-        academicYear: formAcademicYear.trim() || '2025-2026',
-        year: formYear,
-        semester: Number(formSemester),
-        section: formSection,
-        subjectType: formType,
-        credits: Number(formCredits) || 3,
-        facultyHandler: formFacultyHandler.trim() || 'TBD'
-      };
-
-      if (editingSubject) {
-        const res = await API.updateSubject(editingSubject.id, payload);
-        setSuccessMsg(res.message || 'Subject updated successfully.');
-      } else {
-        const res = await API.addSubject(payload);
-        setSuccessMsg(res.message || 'Subject added successfully.');
+  // Download official Excel template (.xlsx)
+  const downloadSubjectTemplate = () => {
+    const templateRows = [
+      {
+        'Subject Code': 'MA25C08',
+        'Subject Abbreviation': 'DM',
+        'Subject Title': 'Discrete Mathematics'
+      },
+      {
+        'Subject Code': 'CS25C10',
+        'Subject Abbreviation': 'OOSE',
+        'Subject Title': 'Object Oriented Software Engineering'
+      },
+      {
+        'Subject Code': 'CS25C08',
+        'Subject Abbreviation': 'DS',
+        'Subject Title': 'Data Structures'
+      },
+      {
+        'Subject Code': 'CS25C09',
+        'Subject Abbreviation': 'JP',
+        'Subject Title': 'Java Programming'
+      },
+      {
+        'Subject Code': 'CS25C11',
+        'Subject Abbreviation': 'OS',
+        'Subject Title': 'Operating Systems'
+      },
+      {
+        'Subject Code': 'EN25C03',
+        'Subject Abbreviation': 'EC LAB',
+        'Subject Title': 'English Communication Skills Laboratory - I'
       }
+    ];
 
-      setShowModal(false);
-      await fetchSubjects();
-      setTimeout(() => setSuccessMsg(''), 4000);
-    } catch (err: any) {
-      setFormError(err.message || 'Failed to save subject record.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleDeleteSubject = async () => {
-    if (!deleteTarget) return;
-    setIsDeleting(true);
-    setDeleteError('');
-    try {
-      await API.deleteSubject(deleteTarget.id);
-      setSuccessMsg(`Subject "${deleteTarget.subjectCode || deleteTarget.subject_code}" deleted.`);
-      setDeleteTarget(null);
-      await fetchSubjects();
-      setTimeout(() => setSuccessMsg(''), 4000);
-    } catch (err: any) {
-      setDeleteError(err.message || 'Failed to delete subject.');
-    } finally {
-      setIsDeleting(false);
-    }
+    const worksheet = XLSX.utils.json_to_sheet(templateRows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'SubjectMaster');
+    XLSX.writeFile(workbook, 'subject_master_template.xlsx');
   };
 
   const filteredSubjects = useMemo(() => {
     return subjects.filter((s) => {
       const code = (s.subjectCode || s.subject_code || '').toLowerCase();
+      const abbr = (s.subjectAbbreviation || s.subject_abbreviation || '').toLowerCase();
       const name = (s.subjectName || s.subject_name || '').toLowerCase();
       const handler = (s.facultyHandler || s.faculty_handler || '').toLowerCase();
       const q = searchQuery.toLowerCase().trim();
 
-      const matchesSearch = !q || code.includes(q) || name.includes(q) || handler.includes(q);
+      const matchesSearch = !q || code.includes(q) || abbr.includes(q) || name.includes(q) || handler.includes(q);
       const matchesYear = yearFilter === 'ALL' || s.year === yearFilter || s.year.replace(' Year', '') === yearFilter.replace(' Year', '');
       const matchesSem = semesterFilter === 'ALL' || String(s.semester) === semesterFilter;
       const matchesSec = sectionFilter === 'ALL' || s.section === sectionFilter || s.section === 'ALL';
@@ -286,22 +236,35 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
           <div>
             <h3 className="text-lg font-bold text-white flex items-center space-x-2 font-sans">
               <BookOpen className="w-5 h-5 text-cyan-300" />
-              <span>Academic Subjects & Course Curriculum</span>
+              <span>Department Subject Master & Curriculum</span>
             </h3>
             <p className="text-xs text-[#D9DEFF] font-mono mt-0.5">
-              Manage department subject offerings, credits, faculty handlers, and academic syllabus mappings.
+              {userRole === 'HOD'
+                ? 'Authoritative view of all Faculty-uploaded Department Subjects from Supabase PostgreSQL (View-Only).'
+                : 'Official Department Subject Master. Subjects are managed exclusively via Excel bulk upload.'}
             </p>
           </div>
 
-          {!isReadOnly && (
+          <div className="flex items-center space-x-2.5">
             <button
-              onClick={handleOpenAddModal}
-              className="btn-action bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center space-x-2 transition-transform duration-200 shadow-md cursor-pointer shrink-0"
+              onClick={downloadSubjectTemplate}
+              className="bg-[#1B205F] hover:bg-[#252B86] text-cyan-200 border border-white/14 px-3 py-2 rounded-xl text-xs font-mono flex items-center space-x-1.5 transition-colors cursor-pointer"
+              title="Download Excel Template"
             >
-              <Plus className="w-4 h-4" />
-              <span>+ Add Subject</span>
+              <Download className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Template (.xlsx)</span>
             </button>
-          )}
+
+            {!isReadOnly && (
+              <button
+                onClick={() => setShowExcelModal(true)}
+                className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5 transition-all shadow-md cursor-pointer shrink-0 font-mono"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Upload Subject Master (Excel)</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* ALERTS */}
@@ -332,7 +295,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
             <Search className="w-3.5 h-3.5 text-[#AEB7F5] absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Search Code, Subject, Faculty..."
+              placeholder="Search Code, Abbr, Subject, Faculty..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-[#252B86] border border-white/14 pl-8 pr-3 py-1.5 rounded-xl text-xs text-white font-mono placeholder:text-[#AEB7F5] focus:outline-none focus:border-cyan-300"
@@ -362,14 +325,9 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
               className="w-full bg-[#252B86] border border-white/14 px-3 py-1.5 rounded-xl text-xs text-cyan-200 font-mono cursor-pointer hover:border-cyan-300"
             >
               <option value="ALL">All Semesters</option>
-              <option value="1">Semester 1</option>
-              <option value="2">Semester 2</option>
-              <option value="3">Semester 3</option>
-              <option value="4">Semester 4</option>
-              <option value="5">Semester 5</option>
-              <option value="6">Semester 6</option>
-              <option value="7">Semester 7</option>
-              <option value="8">Semester 8</option>
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                <option key={s} value={String(s)}>Semester {s}</option>
+              ))}
             </select>
           </div>
 
@@ -401,8 +359,8 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
           ) : (
             filteredSubjects.map((sub) => {
               const code = sub.subjectCode || sub.subject_code;
+              const abbr = sub.subjectAbbreviation || sub.subject_abbreviation || '-';
               const name = sub.subjectName || sub.subject_name;
-              const acadYear = sub.academicYear || sub.academic_year || '2025-2026';
               const type = sub.subjectType || sub.subject_type || 'Theory';
               const handler = sub.facultyHandler || sub.faculty_handler || 'TBD';
 
@@ -410,8 +368,15 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
                 <div key={sub.id} className="bg-[#252B86] border border-white/14 p-4 rounded-xl space-y-2.5 shadow-md">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <span className="font-bold text-cyan-300 font-mono text-xs">{code}</span>
-                      <h4 className="text-white font-bold font-sans text-sm leading-snug mt-0.5">{name}</h4>
+                      <div className="flex items-center space-x-2">
+                        <span className="font-bold text-cyan-300 font-mono text-xs">{code}</span>
+                        {abbr && abbr !== '-' && (
+                          <span className="bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold">
+                            {abbr}
+                          </span>
+                        )}
+                      </div>
+                      <h4 className="text-white font-bold font-sans text-sm leading-snug mt-1">{name}</h4>
                     </div>
                     <span
                       className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono shrink-0 ${
@@ -440,25 +405,6 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
                       <span className="font-sans text-xs text-white">{handler}</span>
                     </div>
                   </div>
-
-                  {!isReadOnly && (
-                    <div className="flex items-center space-x-2 pt-2 border-t border-white/10">
-                      <button
-                        onClick={() => handleOpenEditModal(sub)}
-                        className="flex-1 bg-[#1B205F] hover:bg-[#3F4BDA] text-cyan-200 border border-white/14 py-2 rounded-lg text-xs font-bold inline-flex items-center justify-center space-x-1 cursor-pointer"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                        <span>Edit</span>
-                      </button>
-                      <button
-                        onClick={() => setDeleteTarget(sub)}
-                        className="bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 px-3 py-2 rounded-lg text-xs font-bold inline-flex items-center justify-center space-x-1 cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Delete</span>
-                      </button>
-                    </div>
-                  )}
                 </div>
               );
             })
@@ -471,42 +417,48 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
             <thead>
               <tr className="bg-[#252B86] text-[#D9DEFF] border-b border-white/14 uppercase tracking-wider text-[11px]">
                 <th className="py-3 px-3.5">Code</th>
-                <th className="py-3 px-3.5">Subject Name</th>
+                <th className="py-3 px-3.5">Abbreviation</th>
+                <th className="py-3 px-3.5">Subject Title</th>
                 <th className="py-3 px-3.5">Year / Sem / Sec</th>
                 <th className="py-3 px-3.5">Type</th>
                 <th className="py-3 px-3.5 text-center">Credits</th>
                 <th className="py-3 px-3.5">Faculty Handler</th>
-                <th className="py-3 px-3.5 text-[#D9DEFF]">Academic Year</th>
-                {!isReadOnly && <th className="py-3 px-3.5 text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-white/14">
               {isLoading ? (
                 <tr>
-                  <td colSpan={isReadOnly ? 7 : 8} className="py-8 text-center text-[#AEB7F5]">
-                    Loading registered subjects...
+                  <td colSpan={7} className="py-8 text-center text-[#AEB7F5]">
+                    Loading registered subjects from database...
                   </td>
                 </tr>
               ) : filteredSubjects.length === 0 ? (
                 <tr>
-                  <td colSpan={isReadOnly ? 7 : 8} className="py-8 text-center text-[#AEB7F5]">
+                  <td colSpan={7} className="py-8 text-center text-[#AEB7F5]">
                     No subjects found matching current filters.
                   </td>
                 </tr>
               ) : (
                 filteredSubjects.map((sub) => {
                   const code = sub.subjectCode || sub.subject_code;
+                  const abbr = sub.subjectAbbreviation || sub.subject_abbreviation || '-';
                   const name = sub.subjectName || sub.subject_name;
-                  const acadYear = sub.academicYear || sub.academic_year || '2025-2026';
                   const type = sub.subjectType || sub.subject_type || 'Theory';
-                  const handler = sub.facultyHandler || sub.faculty_handler || 'TBD';
+                  const handler = sub.facultyHandler || sub.faculty_handler || 'Class Coordinator';
 
                   return (
                     <tr key={sub.id} className="hover:bg-[#3F4BDA] transition-colors">
-                      <td className="py-3 px-3.5 font-bold text-cyan-300">{code}</td>
+                      <td className="py-3 px-3.5 font-bold text-cyan-300 font-mono">{code}</td>
+                      <td className="py-3 px-3.5 font-bold text-amber-300 font-mono">
+                        {abbr !== '-' ? (
+                          <span className="bg-amber-950/60 border border-amber-500/40 px-2 py-0.5 rounded text-[11px]">
+                            {abbr}
+                          </span>
+                        ) : '-'}
+                      </td>
                       <td className="py-3 px-3.5 text-white font-bold font-sans text-sm">{name}</td>
                       <td className="py-3 px-3.5 text-[#D9DEFF] font-bold">
-                        {sub.year} • Sem {sub.semester} • Sec {sub.section}
+                        {sub.year} • S{sub.semester} • {sub.section}
                       </td>
                       <td className="py-3 px-3.5">
                         <span
@@ -522,26 +474,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
                         </span>
                       </td>
                       <td className="py-3 px-3.5 text-center text-emerald-400 font-bold">{sub.credits}</td>
-                      <td className="py-3 px-3.5 text-[#D9DEFF] font-sans text-xs">{handler}</td>
-                      <td className="py-3 px-3.5 text-[#AEB7F5]">{acadYear}</td>
-                      {!isReadOnly && (
-                        <td className="py-3 px-3.5 text-right space-x-2 font-sans">
-                          <button
-                            onClick={() => handleOpenEditModal(sub)}
-                            className="bg-[#252B86] hover:bg-[#3F4BDA] text-cyan-200 border border-white/14 px-2.5 py-1 rounded-lg text-[11px] inline-flex items-center space-x-1 cursor-pointer"
-                          >
-                            <Pencil className="w-3 h-3" />
-                            <span>Edit</span>
-                          </button>
-                          <button
-                            onClick={() => setDeleteTarget(sub)}
-                            className="bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 px-2.5 py-1 rounded-lg text-[11px] inline-flex items-center space-x-1 cursor-pointer"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            <span>Delete</span>
-                          </button>
-                        </td>
-                      )}
+                      <td className="py-3 px-3.5 text-cyan-100 font-sans text-xs">{handler}</td>
                     </tr>
                   );
                 })
@@ -551,252 +484,184 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
         </div>
       </div>
 
-      {/* ADD / EDIT SUBJECT MODAL */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B205F]/85 backdrop-blur-sm animate-fade-in font-sans">
-          <div className="bg-[#252B86] border border-white/14 rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl space-y-0 text-white">
+      {/* EXCEL BULK UPLOAD MODAL FOR FACULTY */}
+      {showExcelModal && !isReadOnly && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in font-sans">
+          <div className="bg-slate-900 border border-cyan-500/40 rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-y-auto shadow-2xl space-y-0 text-white">
             {/* MODAL HEADER */}
-            <div className="bg-slate-950 p-4 border-b border-slate-800 flex items-center justify-between">
-              <div className="flex items-center space-x-2 text-indigo-400 font-bold text-base">
-                <BookOpen className="w-5 h-5" />
-                <span>{editingSubject ? 'Edit Subject Details' : 'Add New Subject'}</span>
+            <div className="bg-slate-950 p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center space-x-2 text-cyan-400 font-bold text-base">
+                <FileSpreadsheet className="w-5 h-5" />
+                <span>Upload Subject Master (Excel / CSV)</span>
               </div>
               <button
-                onClick={() => setShowModal(false)}
+                onClick={() => {
+                  setShowExcelModal(false);
+                  setExcelFile(null);
+                  setExcelPreviewSummary(null);
+                  setExcelValidRows([]);
+                  setExcelInvalidRows([]);
+                }}
                 className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* FORM BODY */}
-            <form onSubmit={handleSaveSubject} className="p-6 space-y-4 text-xs font-mono">
-              {formError && (
-                <div className="bg-red-950/80 border border-red-800 text-red-300 p-3 rounded-xl text-xs flex items-center space-x-2">
-                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-                  <span>{formError}</span>
+            {/* MODAL BODY */}
+            <div className="p-6 space-y-5 text-xs font-mono">
+              <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-xl space-y-2 text-slate-300">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-cyan-300">Required Excel Columns:</span>
+                  <button
+                    type="button"
+                    onClick={downloadSubjectTemplate}
+                    className="text-cyan-400 hover:text-cyan-300 flex items-center space-x-1 underline cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download Official Template (.xlsx)</span>
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  1. <strong>Subject Code</strong> (e.g. MA25C08)<br />
+                  2. <strong>Subject Abbreviation</strong> (e.g. DM)<br />
+                  3. <strong>Subject Title</strong> (e.g. Discrete Mathematics)
+                </p>
+                <p className="text-[11px] text-cyan-400">
+                  Supported formats: <strong>.xlsx</strong>, <strong>.xls</strong>, <strong>.csv</strong> | Maximum file size: <strong>10 MB</strong>
+                </p>
+              </div>
+
+              {/* FILE UPLOAD INPUT */}
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                <label className="flex-1 w-full flex items-center justify-center space-x-2 py-3.5 px-4 rounded-xl bg-slate-950 border border-cyan-500/40 hover:border-cyan-400 cursor-pointer text-xs font-mono text-slate-300 transition-colors">
+                  <Upload className="w-4 h-4 text-cyan-400" />
+                  <span>{excelFile ? excelFile.name : 'Select or Drop Subject Master (.xlsx, .xls, .csv)'}</span>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".xlsx, .xls, .csv"
+                    onChange={handleExcelFileChange}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {isValidatingExcel && (
+                <div className="p-4 bg-cyan-950/40 border border-cyan-500/30 rounded-xl flex items-center space-x-2 text-cyan-300">
+                  <Loader2 className="w-4 h-4 animate-spin text-cyan-400 shrink-0" />
+                  <span>Parsing and validating Subject Master records against database...</span>
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Subject Code */}
-                <div>
-                  <label className="text-slate-300 font-bold block mb-1">
-                    Subject Code <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. AD3401"
-                    value={formCode}
-                    onChange={(e) => setFormCode(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white font-mono focus:border-indigo-500 uppercase"
-                  />
-                </div>
+              {/* PREVIEW SUMMARY */}
+              {excelPreviewSummary && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+                      <span className="text-[10px] text-slate-400 block uppercase">Total Rows</span>
+                      <span className="text-base font-bold text-white font-mono">{excelPreviewSummary.totalRowsProcessed}</span>
+                    </div>
+                    <div className="bg-emerald-950/50 p-3 rounded-xl border border-emerald-500/40 text-center">
+                      <span className="text-[10px] text-emerald-300 block uppercase">Valid Subjects</span>
+                      <span className="text-base font-bold text-emerald-400 font-mono">{excelPreviewSummary.validCount}</span>
+                    </div>
+                    <div className="bg-rose-950/50 p-3 rounded-xl border border-rose-500/40 text-center">
+                      <span className="text-[10px] text-rose-300 block uppercase">Invalid Rows</span>
+                      <span className="text-base font-bold text-rose-400 font-mono">{excelPreviewSummary.invalidCount}</span>
+                    </div>
+                  </div>
 
-                {/* Subject Name */}
-                <div>
-                  <label className="text-slate-300 font-bold block mb-1">
-                    Subject Name <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Data Structures and Algorithms"
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white font-sans focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Department */}
-                <div>
-                  <label className="text-slate-300 font-bold block mb-1">Department</label>
-                  <input
-                    type="text"
-                    readOnly
-                    value={formDepartment}
-                    className="w-full bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl text-slate-400 font-sans cursor-not-allowed"
-                  />
-                </div>
-
-                {/* Academic Year */}
-                <div>
-                  <label className="text-slate-300 font-bold block mb-1">Academic Year</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 2025-2026"
-                    value={formAcademicYear}
-                    onChange={(e) => setFormAcademicYear(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white font-mono focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* Year */}
-                <div>
-                  <label className="text-slate-300 font-bold block mb-1">Year</label>
-                  <select
-                    value={formYear}
-                    onChange={(e) => setFormYear(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white font-mono"
-                  >
-                    <option value="1st Year">1st Year</option>
-                    <option value="2nd Year">2nd Year</option>
-                    <option value="3rd Year">3rd Year</option>
-                    <option value="4th Year">4th Year</option>
-                  </select>
-                </div>
-
-                {/* Semester */}
-                <div>
-                  <label className="text-slate-300 font-bold block mb-1">Semester</label>
-                  <select
-                    value={formSemester}
-                    onChange={(e) => setFormSemester(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white font-mono"
-                  >
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
-                      <option key={s} value={s}>
-                        Semester {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Section */}
-                <div>
-                  <label className="text-slate-300 font-bold block mb-1">Section</label>
-                  <select
-                    value={formSection}
-                    onChange={(e) => setFormSection(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white font-mono"
-                  >
-                    <option value="A">Section A</option>
-                    <option value="B">Section B</option>
-                    <option value="C">Section C</option>
-                    <option value="ALL">ALL Sections</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* Subject Type */}
-                <div>
-                  <label className="text-slate-300 font-bold block mb-1">Subject Type</label>
-                  <select
-                    value={formType}
-                    onChange={(e) => setFormType(e.target.value as any)}
-                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white font-mono"
-                  >
-                    <option value="Theory">Theory</option>
-                    <option value="Practical">Practical</option>
-                    <option value="Elective">Elective</option>
-                  </select>
-                </div>
-
-                {/* Credits */}
-                <div>
-                  <label className="text-slate-300 font-bold block mb-1">Credits</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={formCredits}
-                    onChange={(e) => setFormCredits(Number(e.target.value) || 1)}
-                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white font-mono"
-                  />
-                </div>
-
-                {/* Faculty Handler */}
-                <div>
-                  <label className="text-slate-300 font-bold block mb-1">Faculty / Subject Handler</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Dr. A. Raman / Prof. Priya"
-                    value={formFacultyHandler}
-                    onChange={(e) => setFormFacultyHandler(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white font-sans"
-                  />
-                </div>
-              </div>
-
-              {/* FOOTER ACTIONS */}
-              <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs font-sans cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="btn-action bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-bold px-5 py-2 rounded-xl text-xs font-sans transition-transform duration-200 transform-gpu hover:scale-[1.03] active:scale-[0.97] disabled:scale-100 disabled:opacity-75 disabled:cursor-not-allowed motion-reduce:transform-none cursor-pointer shadow-lg flex items-center space-x-2"
-                >
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Saving Subject...</span>
-                    </>
-                  ) : (
-                    <span>{editingSubject ? 'Update Subject' : 'Save Subject'}</span>
+                  {/* INVALID ROWS WARNING */}
+                  {excelInvalidRows.length > 0 && (
+                    <div className="bg-rose-950/80 border border-rose-500/50 p-3 rounded-xl space-y-1">
+                      <div className="flex items-center space-x-1.5 text-rose-300 font-bold">
+                        <AlertCircle className="w-4 h-4" />
+                        <span>Validation Warnings ({excelInvalidRows.length}):</span>
+                      </div>
+                      <div className="max-h-28 overflow-y-auto space-y-1 text-[11px] text-rose-200 pl-5">
+                        {excelInvalidRows.map((inv, idx) => (
+                          <div key={idx}>• Row #{inv.rowNumber}: {inv.reason}</div>
+                        ))}
+                      </div>
+                    </div>
                   )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
-      {/* CONFIRM DELETE MODAL */}
-      {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in font-sans">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center space-x-3 text-red-400">
-              <AlertCircle className="w-6 h-6" />
-              <h4 className="text-base font-bold text-white">Delete Subject Confirmation</h4>
+                  {/* VALID ROWS TABLE */}
+                  {excelValidRows.length > 0 && (
+                    <div className="space-y-2">
+                      <span className="text-xs font-bold text-slate-300">Ready to Import ({excelValidRows.length} Subjects):</span>
+                      <div className="max-h-52 overflow-y-auto border border-slate-800 rounded-xl bg-slate-950">
+                        <table className="w-full text-left border-collapse text-[11px] font-mono">
+                          <thead>
+                            <tr className="bg-slate-900 text-slate-400 border-b border-slate-800">
+                              <th className="p-2">#</th>
+                              <th className="p-2">Code</th>
+                              <th className="p-2">Abbr</th>
+                              <th className="p-2">Subject Title</th>
+                              <th className="p-2">Year / Sec</th>
+                              <th className="p-2">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/80 text-slate-300">
+                            {excelValidRows.map((r, i) => (
+                              <tr key={i} className="hover:bg-slate-900/50">
+                                <td className="p-2 text-slate-500">{r.rowNumber}</td>
+                                <td className="p-2 font-bold text-cyan-300">{r.subjectCode}</td>
+                                <td className="p-2 font-bold text-amber-300">{r.subjectAbbreviation || '-'}</td>
+                                <td className="p-2 text-white font-sans">{r.subjectTitle}</td>
+                                <td className="p-2">{r.year} • {r.section}</td>
+                                <td className="p-2">
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                    r.status === 'NEW_SUBJECT'
+                                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                      : 'bg-blue-950 text-blue-300 border border-blue-800'
+                                  }`}>
+                                    {r.status === 'NEW_SUBJECT' ? 'New' : 'Update'}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            {deleteError && (
-              <div className="bg-red-950/80 border border-red-800/80 text-red-300 p-2.5 rounded-xl flex items-center space-x-2 font-mono text-[11px] animate-in fade-in">
-                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-                <span>{deleteError}</span>
-              </div>
-            )}
-
-            <p className="text-xs text-slate-300 leading-relaxed font-mono">
-              Are you sure you want to delete subject <strong className="text-sky-400">{deleteTarget.subjectCode || deleteTarget.subject_code}</strong> — {deleteTarget.subjectName || deleteTarget.subject_name}? This action cannot be undone.
-            </p>
-            <div className="flex justify-end space-x-3 pt-2">
+            {/* MODAL FOOTER */}
+            <div className="bg-slate-950 p-4 sm:p-5 border-t border-slate-800 flex items-center justify-end space-x-3">
               <button
                 type="button"
                 onClick={() => {
-                  setDeleteTarget(null);
-                  setDeleteError('');
+                  setShowExcelModal(false);
+                  setExcelFile(null);
+                  setExcelPreviewSummary(null);
+                  setExcelValidRows([]);
+                  setExcelInvalidRows([]);
                 }}
-                disabled={isDeleting}
-                className="btn-action bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-xl font-bold cursor-pointer transition-transform duration-200 transform-gpu hover:scale-[1.03] active:scale-[0.97] disabled:scale-100 disabled:opacity-75 disabled:cursor-not-allowed motion-reduce:transform-none"
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs font-mono cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={handleDeleteSubject}
-                disabled={isDeleting}
-                className="btn-action bg-red-600 hover:bg-red-500 text-white text-xs px-4 py-2 rounded-xl font-bold cursor-pointer transition-transform duration-200 transform-gpu hover:scale-[1.03] active:scale-[0.97] disabled:scale-100 disabled:opacity-75 disabled:cursor-not-allowed motion-reduce:transform-none flex items-center space-x-2"
+                disabled={isImportingExcel || excelValidRows.length === 0}
+                onClick={handleConfirmSubjectImport}
+                className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold px-5 py-2 rounded-xl text-xs font-mono disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center space-x-2 shadow-lg"
               >
-                {isDeleting ? (
+                {isImportingExcel ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Deleting...</span>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Saving to Database...</span>
                   </>
                 ) : (
-                  <span>Confirm Delete</span>
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Confirm & Save ({excelValidRows.length} Subjects)</span>
+                  </>
                 )}
               </button>
             </div>

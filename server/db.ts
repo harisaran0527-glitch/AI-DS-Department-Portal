@@ -282,6 +282,7 @@ export async function initDatabaseSchema(): Promise<void> {
       id TEXT PRIMARY KEY,
       subject_code TEXT NOT NULL,
       subject_name TEXT NOT NULL,
+      subject_abbreviation TEXT,
       department TEXT NOT NULL DEFAULT 'AI & Data Science',
       academic_year TEXT NOT NULL,
       year TEXT NOT NULL,
@@ -533,6 +534,7 @@ export async function initDatabaseSchema(): Promise<void> {
         `ALTER TABLE students ADD COLUMN IF NOT EXISTS is_elite_student INTEGER DEFAULT 0;`,
         `ALTER TABLE academic_records ADD COLUMN IF NOT EXISTS exam_type TEXT DEFAULT 'Semester';`,
         `ALTER TABLE academic_records ADD COLUMN IF NOT EXISTS created_at TEXT;`,
+        `ALTER TABLE subjects ADD COLUMN IF NOT EXISTS subject_abbreviation TEXT;`,
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS time TEXT;`,
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS fine_amount REAL DEFAULT 0;`,
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS action_taken TEXT;`,
@@ -594,6 +596,7 @@ export async function initDatabaseSchema(): Promise<void> {
       `ALTER TABLE students ADD COLUMN is_elite_student INTEGER DEFAULT 0;`,
       `ALTER TABLE academic_records ADD COLUMN exam_type TEXT DEFAULT 'Semester';`,
       `ALTER TABLE academic_records ADD COLUMN created_at TEXT;`,
+      `ALTER TABLE subjects ADD COLUMN subject_abbreviation TEXT;`,
       `ALTER TABLE discipline_records ADD COLUMN time TEXT;`,
       `ALTER TABLE discipline_records ADD COLUMN fine_amount REAL DEFAULT 0;`,
       `ALTER TABLE discipline_records ADD COLUMN action_taken TEXT;`,
@@ -652,6 +655,8 @@ export interface SubjectRecord {
   subject_code?: string;
   subjectName: string;
   subject_name?: string;
+  subjectAbbreviation?: string;
+  subject_abbreviation?: string;
   department: string;
   academicYear: string;
   academic_year?: string;
@@ -3897,6 +3902,8 @@ export class SQLiteDB {
         subject_code: r.subject_code,
         subjectName: r.subject_name,
         subject_name: r.subject_name,
+        subjectAbbreviation: r.subject_abbreviation || '',
+        subject_abbreviation: r.subject_abbreviation || '',
         department: r.department || 'AI & Data Science',
         academicYear: r.academic_year,
         academic_year: r.academic_year,
@@ -3947,6 +3954,8 @@ export class SQLiteDB {
       subject_code: r.subject_code,
       subjectName: r.subject_name,
       subject_name: r.subject_name,
+      subjectAbbreviation: r.subject_abbreviation || '',
+      subject_abbreviation: r.subject_abbreviation || '',
       department: r.department || 'AI & Data Science',
       academicYear: r.academic_year,
       academic_year: r.academic_year,
@@ -3968,6 +3977,7 @@ export class SQLiteDB {
   public async addSubject(sub: Partial<SubjectRecord>): Promise<SubjectRecord> {
     const code = sub.subjectCode || (sub as any).subject_code || '';
     const name = sub.subjectName || (sub as any).subject_name || '';
+    const abbr = sub.subjectAbbreviation || (sub as any).subject_abbreviation || '';
     const dept = sub.department || 'AI & Data Science';
     const acadYear = sub.academicYear || (sub as any).academic_year || '2025-2026';
     const yr = sub.year || (sub as any).year || '2nd Year';
@@ -3980,6 +3990,7 @@ export class SQLiteDB {
 
     const cleanCode = String(code).trim().toUpperCase();
     const cleanName = String(name).trim();
+    const cleanAbbr = String(abbr).trim();
     const cleanDept = String(dept).trim();
     const cleanAcadYear = String(acadYear).trim();
     const cleanYear = String(yr).trim();
@@ -4001,9 +4012,9 @@ export class SQLiteDB {
     const now = new Date().toISOString();
 
     await executeRun(`
-      INSERT INTO subjects (id, subject_code, subject_name, department, academic_year, year, semester, section, subject_type, credits, faculty_handler, created_by_user_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [id, cleanCode, cleanName, cleanDept, cleanAcadYear, cleanYear, sem, cleanSec, cleanType, creditsNum, cleanHandler, userId, now]);
+      INSERT INTO subjects (id, subject_code, subject_name, subject_abbreviation, department, academic_year, year, semester, section, subject_type, credits, faculty_handler, created_by_user_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [id, cleanCode, cleanName, cleanAbbr, cleanDept, cleanAcadYear, cleanYear, sem, cleanSec, cleanType, creditsNum, cleanHandler, userId, now]);
 
     SQLiteDB.invalidateSubjectsCache();
     return (await this.getSubjectById(id))!;
@@ -4017,6 +4028,7 @@ export class SQLiteDB {
 
     const codeInput = sub.subjectCode || (sub as any).subject_code;
     const nameInput = sub.subjectName || (sub as any).subject_name;
+    const abbrInput = sub.subjectAbbreviation || (sub as any).subject_abbreviation;
     const deptInput = sub.department;
     const acadYearInput = sub.academicYear || (sub as any).academic_year;
     const yrInput = sub.year;
@@ -4026,6 +4038,7 @@ export class SQLiteDB {
 
     const cleanCode = codeInput ? String(codeInput).trim().toUpperCase() : existing.subjectCode;
     const cleanName = nameInput ? String(nameInput).trim() : existing.subjectName;
+    const cleanAbbr = abbrInput !== undefined ? String(abbrInput).trim() : (existing.subjectAbbreviation || (existing as any).subject_abbreviation || '');
     const cleanDept = deptInput ? String(deptInput).trim() : existing.department;
     const cleanAcadYear = acadYearInput ? String(acadYearInput).trim() : existing.academicYear;
     const cleanYear = yrInput ? String(yrInput).trim() : existing.year;
@@ -4049,9 +4062,9 @@ export class SQLiteDB {
 
     await executeRun(`
       UPDATE subjects
-      SET subject_code = ?, subject_name = ?, department = ?, academic_year = ?, year = ?, semester = ?, section = ?, subject_type = ?, credits = ?, faculty_handler = ?
+      SET subject_code = ?, subject_name = ?, subject_abbreviation = ?, department = ?, academic_year = ?, year = ?, semester = ?, section = ?, subject_type = ?, credits = ?, faculty_handler = ?
       WHERE id = ?
-    `, [cleanCode, cleanName, cleanDept, cleanAcadYear, cleanYear, sem, cleanSec, cleanType, creditsNum, cleanHandler, id]);
+    `, [cleanCode, cleanName, cleanAbbr, cleanDept, cleanAcadYear, cleanYear, sem, cleanSec, cleanType, creditsNum, cleanHandler, id]);
 
     SQLiteDB.invalidateSubjectsCache();
     return (await this.getSubjectById(id))!;
@@ -4141,14 +4154,20 @@ export class SQLiteDB {
     return {
       id: row.id,
       subject_code: row.subject_code || row.subjectCode,
+      subjectCode: row.subject_code || row.subjectCode,
       subject_name: row.subject_name || row.subjectName || row.name,
+      subjectName: row.subject_name || row.subjectName || row.name,
+      subject_abbreviation: row.subject_abbreviation || row.subjectAbbreviation || '',
+      subjectAbbreviation: row.subject_abbreviation || row.subjectAbbreviation || '',
       department: row.department,
       year: row.year,
       semester: row.semester,
       section: row.section,
       subject_type: row.subject_type || row.subjectType,
+      subjectType: row.subject_type || row.subjectType,
       credits: row.credits,
       faculty_handler: row.faculty_handler || row.facultyHandler,
+      facultyHandler: row.faculty_handler || row.facultyHandler,
       created_by_user_id: row.created_by_user_id || row.createdByUserId,
       created_at: row.created_at || row.createdAt
     };
@@ -4159,24 +4178,32 @@ export class SQLiteDB {
     subjectCode: string,
     subjectTitle: string,
     marks: number,
-    semesterNo: number = 3
+    semesterNo: number = 3,
+    examType: string = 'Unit Test 1'
   ): Promise<void> {
     const cleanCode = String(subjectCode).trim().toUpperCase();
     const cleanTitle = String(subjectTitle).trim();
+    const cleanExamType = String(examType || 'Unit Test 1').trim();
 
     const existing = await queryAll<any>('SELECT * FROM academic_records WHERE student_id = ?', [studentId]);
-    let semRecord = existing.find((r) => Number(r.semester_no) === Number(semesterNo)) || existing[0];
+    let semRecord = existing.find((r) =>
+      Number(r.semester_no) === Number(semesterNo) &&
+      (r.exam_type || 'Internal').trim().toLowerCase() === cleanExamType.toLowerCase()
+    );
 
-    let subjectsList: Array<{ subjectCode: string; subjectTitle: string; marks: number; grade?: string; credits?: number }> = [];
+    let subjectsList: Array<{ subjectCode: string; subjectTitle: string; code?: string; title?: string; marks: number; maxMarks?: number; grade?: string; credits?: number }> = [];
     if (semRecord && semRecord.subjects_json) {
       subjectsList = safeParseJson(semRecord.subjects_json, []);
     }
 
-    const idx = subjectsList.findIndex((s) => String(s.subjectCode).trim().toUpperCase() === cleanCode);
+    const idx = subjectsList.findIndex((s) => String(s.subjectCode || s.code).trim().toUpperCase() === cleanCode);
     const markEntry = {
       subjectCode: cleanCode,
+      code: cleanCode,
       subjectTitle: cleanTitle,
+      title: cleanTitle,
       marks: Number(marks),
+      maxMarks: 100,
       grade: marks >= 90 ? 'O' : (marks >= 80 ? 'A+' : (marks >= 70 ? 'A' : (marks >= 60 ? 'B+' : (marks >= 50 ? 'B' : 'U')))),
       credits: 3
     };
@@ -4200,11 +4227,11 @@ export class SQLiteDB {
         WHERE id = ?
       `, [JSON.stringify(subjectsList), computedSgpa, computedSgpa, semRecord.id]);
     } else {
-      const recId = `acad-${studentId}-sem${semesterNo}-${Date.now()}`;
+      const recId = `acad-${studentId}-sem${semesterNo}-${cleanExamType.replace(/\s+/g, '')}-${Date.now()}`;
       await executeRun(`
         INSERT INTO academic_records (id, student_id, semester_no, sgpa, cgpa, total_credits, subjects_json, exam_type, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'Semester', ?)
-      `, [recId, studentId, semesterNo, computedSgpa, computedSgpa, subjectsList.length * 3, JSON.stringify(subjectsList), now]);
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [recId, studentId, semesterNo, computedSgpa, computedSgpa, subjectsList.length * 3, JSON.stringify(subjectsList), cleanExamType, now]);
     }
 
     await executeRun(`
@@ -4235,6 +4262,79 @@ export class SQLiteDB {
         await executeRun('UPDATE students SET overall_score = ? WHERE id = ?', [overallScore, studentId]);
       }
     }
+  }
+
+  public async getAcademicRecords(filters: {
+    facultyId?: string;
+    role?: string;
+    year?: string;
+    section?: string;
+    studentId?: string;
+    examType?: string;
+    subjectCode?: string;
+  } = {}): Promise<any[]> {
+    let targetYear = filters.year;
+    let targetSection = filters.section;
+    if (filters.role === 'FACULTY' && filters.facultyId && (!targetYear || !targetSection)) {
+      const assignment = await this.getFacultyAssignment(filters.facultyId);
+      if (assignment) {
+        if (!targetYear) targetYear = assignment.year;
+        if (!targetSection) targetSection = assignment.section;
+      }
+    }
+
+    let sql = `
+      SELECT ar.id, ar.student_id, ar.semester_no, ar.sgpa, ar.cgpa, ar.total_credits, ar.subjects_json, ar.exam_type, ar.created_at,
+             s.name as student_name, s.register_no, s.year as student_year, s.section as student_section
+      FROM academic_records ar
+      JOIN students s ON ar.student_id = s.id
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+
+    if (filters.studentId) {
+      sql += ' AND ar.student_id = ?';
+      params.push(filters.studentId);
+    }
+    if (targetYear && targetYear !== 'ALL') {
+      sql += ' AND (s.year = ? OR s.year = ?)';
+      params.push(targetYear, normalizeYear(targetYear));
+    }
+    if (targetSection && targetSection !== 'ALL') {
+      sql += ' AND (s.section = ? OR s.section = ?)';
+      params.push(targetSection, normalizeSection(targetSection));
+    }
+    if (filters.examType && filters.examType !== 'ALL') {
+      sql += ' AND LOWER(ar.exam_type) = LOWER(?)';
+      params.push(filters.examType);
+    }
+
+    sql += ' ORDER BY s.year ASC, s.section ASC, s.register_no ASC, ar.created_at DESC';
+
+    const rows = await queryAll<any>(sql, params);
+    let records = rows.map((r) => ({
+      id: r.id,
+      studentId: r.student_id,
+      studentName: r.student_name,
+      registerNo: r.register_no,
+      year: r.student_year,
+      section: r.student_section,
+      semesterNo: r.semester_no,
+      sgpa: r.sgpa,
+      cgpa: r.cgpa,
+      examType: r.exam_type || 'Internal',
+      createdAt: r.created_at,
+      subjects: safeParseJson(r.subjects_json, [])
+    }));
+
+    if (filters.subjectCode && filters.subjectCode !== 'ALL') {
+      const codeUpper = filters.subjectCode.trim().toUpperCase();
+      records = records.filter((rec) =>
+        rec.subjects && rec.subjects.some((sub: any) => String(sub.subjectCode || sub.code).trim().toUpperCase() === codeUpper)
+      );
+    }
+
+    return records;
   }
 
   public async createBulkImportAudit(

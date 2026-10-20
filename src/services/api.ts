@@ -989,41 +989,52 @@ export const API = {
     });
   },
 
-  previewSubjectImport: async (rows: any[]) => {
+  previewSubjectImport: async (rows: any[], year?: string, section?: string) => {
     return request<{
       summary: { totalRowsProcessed: number; validCount: number; invalidCount: number };
       validRows: any[];
       invalidRows: any[];
     }>('/subjects/import-preview', {
       method: 'POST',
-      body: JSON.stringify({ rows })
+      body: JSON.stringify({ rows, year, section })
     });
   },
 
-  confirmSubjectImport: async (subjects: any[]) => {
+  confirmSubjectImport: async (subjects: any[], year?: string, section?: string) => {
     return request<{ message: string; importedCount: number; subjects: any[] }>('/subjects/import-confirm', {
       method: 'POST',
-      body: JSON.stringify({ subjects })
+      body: JSON.stringify({ subjects, year, section })
     });
   },
 
   // Bulk Academic Marks Upload & Validation
-  previewAcademicMarksImport: async (rows: any[]) => {
+  previewAcademicMarksImport: async (rows: any[], examType?: string, year?: string, section?: string) => {
     return request<{
       summary: { totalRowsProcessed: number; validCount: number; invalidCount: number };
-      validRows: Array<{ rowNumber: number; studentId: string; studentName: string; registerNo: string; year: string; section: string; subjectCode: string; subjectTitle: string; semester: number; marks: number }>;
+      validRows: Array<{ rowNumber: number; studentId: string; studentName: string; registerNo: string; year: string; section: string; examType?: string; subjectCode: string; subjectTitle: string; subjectAbbreviation?: string; semester: number; marks: number }>;
       invalidRows: Array<{ rowNumber: number; rawData: any; reason: string }>;
     }>('/faculty/academics/import-preview', {
       method: 'POST',
-      body: JSON.stringify({ rows })
+      body: JSON.stringify({ rows, examType, year, section })
     });
   },
 
-  confirmAcademicMarksImport: async (marks: any[]) => {
+  confirmAcademicMarksImport: async (marks: any[], examType?: string, year?: string, section?: string) => {
     return request<{ message: string; importedCount: number; updatedStudentsCount: number }>('/faculty/academics/import-confirm', {
       method: 'POST',
-      body: JSON.stringify({ marks })
+      body: JSON.stringify({ marks, examType, year, section })
     });
+  },
+
+  getAcademicRecords: async (filters: { year?: string; section?: string; examType?: string; studentId?: string; subjectCode?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (filters.year && filters.year !== 'ALL') params.append('year', filters.year);
+    if (filters.section && filters.section !== 'ALL') params.append('section', filters.section);
+    if (filters.examType && filters.examType !== 'ALL') params.append('examType', filters.examType);
+    if (filters.studentId) params.append('studentId', filters.studentId);
+    if (filters.subjectCode && filters.subjectCode !== 'ALL') params.append('subjectCode', filters.subjectCode);
+    const qs = params.toString();
+    return request<{ records: any[] }>(`/faculty/academics/records${qs ? `?${qs}` : ''}`);
   },
 
   // Gemini Central Student Recognition & Reward Engine API

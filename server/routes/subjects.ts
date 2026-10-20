@@ -8,12 +8,16 @@ const router = Router();
 router.use(authenticateToken);
 
 // POST /api/subjects/import-preview - Preview and validate bulk Subject Master Excel upload
-router.post('/import-preview', requireRole('FACULTY', 'HOD', 'ADMIN'), async (req: AuthRequest, res: Response) => {
+router.post('/import-preview', requireRole('FACULTY', 'ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
-    const { rows } = req.body;
+    const { rows, year: targetYear, section: targetSection } = req.body;
     if (!Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({ error: 'Invalid or empty rows provided for Subject Master import.' });
     }
+
+    const assignment = await db.getFacultyAssignment(req.user!.id);
+    const facultyAssignedYear = assignment ? assignment.year : (req.user as any)?.assignedYear;
+    const facultyAssignedSection = assignment ? assignment.section : (req.user as any)?.assignedSection;
 
     const validRows: any[] = [];
     const invalidRows: any[] = [];
@@ -24,16 +28,27 @@ router.post('/import-preview', requireRole('FACULTY', 'HOD', 'ADMIN'), async (re
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
-      const rawCode = row.subjectCode || row['Subject Code'] || row['subject_code'] || row.code || '';
-      const rawTitle = row.subjectTitle || row['Subject Title'] || row['subject_name'] || row.title || '';
-      const year = (row.year || '2nd Year').toString().trim();
-      const semester = Number(row.semester) || 3;
-      const section = (row.section || 'ALL').toString().trim();
-      const subjectType = (row.subjectType || row.type || 'Theory').toString().trim();
-      const credits = Number(row.credits) || 3;
+      if (!row || typeof row !== 'object') continue;
+
+      // Clean keys in row (trim whitespace, lowercasing helper)
+      const normalizedRow: Record<string, any> = {};
+      for (const [k, v] of Object.entries(row)) {
+        normalizedRow[k.trim().toLowerCase()] = v;
+      }
+
+      const rawCode = normalizedRow['subject code'] || normalizedRow['subjectcode'] || normalizedRow['subject_code'] || normalizedRow['code'] || normalizedRow['sub code'] || row.subjectCode || '';
+      const rawTitle = normalizedRow['subject title'] || normalizedRow['subjecttitle'] || normalizedRow['subject_name'] || normalizedRow['subject name'] || normalizedRow['title'] || normalizedRow['name'] || normalizedRow['course title'] || row.subjectTitle || '';
+      const rawAbbr = normalizedRow['subject abbreviation'] || normalizedRow['subjectabbreviation'] || normalizedRow['subject_abbreviation'] || normalizedRow['abbreviation'] || normalizedRow['short name'] || normalizedRow['sub abbr'] || normalizedRow['abbr'] || row.subjectAbbreviation || '';
+      
+      const yr = targetYear || normalizedRow['year'] || row.year || facultyAssignedYear || '2nd Year';
+      const semester = Number(normalizedRow['semester'] || row.semester) || 3;
+      const sec = targetSection || normalizedRow['section'] || row.section || facultyAssignedSection || 'ALL';
+      const subjectType = (normalizedRow['type'] || normalizedRow['subject type'] || normalizedRow['subject_type'] || row.subjectType || 'Theory').toString().trim();
+      const credits = Number(normalizedRow['credits'] || row.credits) || 3;
 
       const cleanCode = String(rawCode).trim().toUpperCase();
       const cleanTitle = String(rawTitle).trim();
+      const cleanAbbr = String(rawAbbr).trim();
 
       if (!cleanCode) {
         invalidRows.push({ rowNumber: i + 1, rawData: row, reason: 'Subject Code is required.' });
@@ -57,11 +72,13 @@ router.post('/import-preview', requireRole('FACULTY', 'HOD', 'ADMIN'), async (re
         rowNumber: i + 1,
         subjectCode: cleanCode,
         subjectTitle: cleanTitle,
-        year,
+        subjectAbbreviation: cleanAbbr,
+        year: yr,
         semester,
-        section,
+        section: sec,
         subjectType,
         credits,
+        facultyHandler: req.user?.name || 'Class Coordinator',
         isExistingInDb,
         status: isExistingInDb ? 'UPDATE_EXISTING' : 'NEW_SUBJECT'
       });
@@ -83,22 +100,24 @@ router.post('/import-preview', requireRole('FACULTY', 'HOD', 'ADMIN'), async (re
 });
 
 // POST /api/subjects/import-confirm - Confirm bulk Subject Master import
-router.post('/import-confirm', requireRole('FACULTY', 'HOD', 'ADMIN'), async (req: AuthRequest, res: Response) => {
+router.post('/import-confirm', requireRole('FACULTY', 'ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
-    const { subjects } = req.body;
+    const { subjects, year: defaultYear, section: defaultSection } = req.body;
     if (!Array.isArray(subjects) || subjects.length === 0) {
       return res.status(400).json({ error: 'No valid subjects provided for confirmation.' });
     }
 
     const importedSubjects: any[] = [];
     const userId = req.user?.id || 'SYSTEM';
+    const facultyName = req.user?.name || 'Class Coordinator';
 
     for (const s of subjects) {
       const code = String(s.subjectCode || s.code).trim().toUpperCase();
-      const title = String(s.subjectTitle || s.title).trim();
-      const year = (s.year || '2nd Year').toString().trim();
+      const title = String(s.subjectTitle || s.title || s.subjectName).trim();
+      const abbr = String(s.subjectAbbreviation || s.abbreviation || s.abbr || '').trim();
+      const yr = (s.year || defaultYear || '2nd Year').toString().trim();
       const semester = Number(s.semester) || 3;
-      const section = (s.section || 'ALL').toString().trim();
+      const sec = (s.section || defaultSection || 'ALL').toString().trim();
       const subjectType = (s.subjectType || 'Theory').toString().trim();
       const credits = Number(s.credits) || 3;
 
@@ -106,25 +125,28 @@ router.post('/import-confirm', requireRole('FACULTY', 'HOD', 'ADMIN'), async (re
       if (existing) {
         const updated = await db.updateSubject(existing.id, {
           subject_name: title,
-          year,
+          subject_abbreviation: abbr,
+          year: yr,
           semester,
-          section,
+          section: sec,
           subject_type: subjectType as any,
-          credits
+          credits,
+          faculty_handler: facultyName
         });
         importedSubjects.push(updated);
       } else {
         const added = await db.addSubject({
           subject_code: code,
           subject_name: title,
+          subject_abbreviation: abbr,
           department: 'AI & Data Science',
           academic_year: '2025-2026',
-          year,
+          year: yr,
           semester,
-          section,
+          section: sec,
           subject_type: subjectType as any,
           credits,
-          faculty_handler: req.user?.name || 'Class Coordinator',
+          faculty_handler: facultyName,
           created_by_user_id: userId
         });
         importedSubjects.push(added);
