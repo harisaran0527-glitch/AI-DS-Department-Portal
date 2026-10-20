@@ -299,6 +299,8 @@ export const FacultyDashboard: React.FC = () => {
   const [isEditingLeetcodeUser, setIsEditingLeetcodeUser] = useState(false);
   const [besLinkedinUrl, setBesLinkedinUrl] = useState('');
   const [besGithubUrl, setBesGithubUrl] = useState('');
+  const [isSkillEdgeSaving, setIsSkillEdgeSaving] = useState(false);
+  const [isLinksSaving, setIsLinksSaving] = useState(false);
 
   // --- PARTICIPATION FORM & UPLOAD MODAL STATE ---
   const [showPartModal, setShowPartModal] = useState(false);
@@ -2987,8 +2989,10 @@ export const FacultyDashboard: React.FC = () => {
                 <div className="flex justify-end pt-2">
                   <button
                     type="button"
+                    disabled={isSkillEdgeSaving}
                     onClick={async () => {
-                      if (!selectedStudent) return;
+                      if (!selectedStudent || isSkillEdgeSaving) return;
+                      setIsSkillEdgeSaving(true);
                       try {
                         const payload = {
                           c_basics: skillLevels.c[0], c_control: skillLevels.c[1], c_functions: skillLevels.c[2], c_arrays: skillLevels.c[3], c_pointers: skillLevels.c[4], c_structures: skillLevels.c[5],
@@ -3001,11 +3005,13 @@ export const FacultyDashboard: React.FC = () => {
                         await reloadStudent360();
                       } catch (err: any) {
                         alert(err.message || 'Failed to save SkillEdge levels.');
+                      } finally {
+                        setIsSkillEdgeSaving(false);
                       }
                     }}
-                    className="bg-sky-600 hover:bg-sky-500 text-white font-bold px-6 py-2.5 rounded-xl cursor-pointer shadow-lg transition-all"
+                    className={`font-bold px-6 py-2.5 rounded-xl shadow-lg transition-all ${isSkillEdgeSaving ? 'bg-sky-800 text-sky-200 cursor-not-allowed opacity-75' : 'bg-sky-600 hover:bg-sky-500 text-white cursor-pointer'}`}
                   >
-                    Save SkillEdge Levels
+                    {isSkillEdgeSaving ? 'Saving...' : 'Save SkillEdge Levels'}
                   </button>
                 </div>
               </div>
@@ -5411,8 +5417,10 @@ export const FacultyDashboard: React.FC = () => {
                   <div className="flex justify-end pt-2">
                     <button
                       type="button"
+                      disabled={isLinksSaving}
                       onClick={async () => {
-                        if (!selectedStudent) return;
+                        if (!selectedStudent || isLinksSaving) return;
+                        setIsLinksSaving(true);
                         try {
                           await API.updateStudent360(selectedStudent.id, {
                             linkedinUrl: besLinkedinUrl,
@@ -5422,11 +5430,13 @@ export const FacultyDashboard: React.FC = () => {
                           await reloadStudent360();
                         } catch (err: any) {
                           alert(err.message || 'Failed to update links.');
+                        } finally {
+                          setIsLinksSaving(false);
                         }
                       }}
-                      className="bg-sky-600 hover:bg-sky-500 text-white font-bold px-5 py-2.5 rounded-xl cursor-pointer shadow-lg"
+                      className={`font-bold px-5 py-2.5 rounded-xl shadow-lg transition-all ${isLinksSaving ? 'bg-sky-800 text-sky-200 cursor-not-allowed opacity-75' : 'bg-sky-600 hover:bg-sky-500 text-white cursor-pointer'}`}
                     >
-                      Save Professional Links
+                      {isLinksSaving ? 'Saving...' : 'Save Professional Links'}
                     </button>
                   </div>
                 </form>

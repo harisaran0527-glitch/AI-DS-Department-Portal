@@ -861,8 +861,8 @@ export async function getLeetCodeFullAnalytics(
         : `${top1Name} holds the sole position #1 with ${top1Solved} verified solved problems. ${tag}`
     },
     comparison: {
-      firstPlaceStats: firstStu?.leetcode || null,
-      secondPlaceStats: secondStu?.leetcode || null,
+      firstPlaceStats: firstLcStats,
+      secondPlaceStats: secondLcStats,
       comparisonSummary: bestLcCat.secondPlace.isAvailable
         ? `Comparative analysis highlights ${top1Name}'s edge in Hard problem completion and contest rating relative to ${top2Name}.`
         : `Only one eligible LeetCode candidate found in current selection.`

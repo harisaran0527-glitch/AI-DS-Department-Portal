@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { db } from '../db.js';
+import { executeRun, queryAll, queryOne, isPostgresActive } from '../postgresAdapter.js';
 import { authenticateToken, requireRole, verifyFacultySectionAccess, AuthRequest } from '../middleware/auth.js';
 import { calculateCategoryScores, computeOverallScore } from '../scoringEngine.js';
 import { generateSecureRandomPassword } from '../services/security.js';
