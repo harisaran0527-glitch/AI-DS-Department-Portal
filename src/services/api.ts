@@ -715,6 +715,58 @@ export const API = {
     });
   },
 
+  getFileBlob: async (fileId: string): Promise<{ blob: Blob; contentType: string; fileName: string }> => {
+    const activeRole = getActivePortalRole();
+    const token = getValidSessionToken(activeRole || undefined);
+    const headers: Record<string, string> = {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(activeRole ? { 'X-Portal-Role': activeRole } : {})
+    };
+
+    const res = await fetch(`${API_BASE}/files/${fileId}`, {
+      method: 'GET',
+      headers,
+      credentials: 'include'
+    });
+
+    if (!res.ok) {
+      let errMsg = `Failed to fetch file (${res.status})`;
+      try {
+        const errJson = await res.json();
+        if (errJson?.error) errMsg = errJson.error;
+      } catch {
+        // ignore
+      }
+      throw new Error(errMsg);
+    }
+
+    const contentType = res.headers.get('Content-Type') || 'application/octet-stream';
+    let fileName = 'attachment';
+    const disposition = res.headers.get('Content-Disposition');
+    if (disposition && disposition.includes('filename=')) {
+      const match = disposition.match(/filename="?([^";]+)"?/);
+      if (match && match[1]) {
+        fileName = decodeURIComponent(match[1]);
+      }
+    }
+    const blob = await res.blob();
+    return { blob, contentType, fileName };
+  },
+
+  downloadFileBlob: async (fileId: string, suggestedFileName?: string): Promise<void> => {
+    const { blob, fileName } = await API.getFileBlob(fileId);
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = suggestedFileName || fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => {
+      window.URL.revokeObjectURL(url);
+    }, 1000);
+  },
+
   // Faculty Certificate Upload & File Management
   uploadCertificateForFaculty: async (studentId: string, formData: FormData) => {
     return request<{ message: string; certId: string; certificates: any[]; overallScore?: number }>(`/faculty/students/${studentId}/certificates/upload`, {

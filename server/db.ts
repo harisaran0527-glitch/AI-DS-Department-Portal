@@ -3608,8 +3608,8 @@ export class SQLiteDB {
   // ATTACHMENT / PROOF FILE ENGINE
   public async createAttachment(att: AttachmentRecord): Promise<void> {
     await executeRun(`
-      INSERT INTO attachments (id, student_id, record_type, record_id, original_file_name, stored_file_name, mime_type, file_size, uploaded_by_user_id, uploaded_by_role, uploaded_at, is_deleted)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+      INSERT INTO attachments (id, student_id, record_type, record_id, original_file_name, stored_file_name, mime_type, file_size, uploaded_by_user_id, uploaded_by_role, uploaded_at, is_deleted, file_data)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
     `, [
       att.id,
       att.student_id,
@@ -3621,7 +3621,8 @@ export class SQLiteDB {
       att.file_size,
       att.uploaded_by_user_id,
       att.uploaded_by_role,
-      att.uploaded_at
+      att.uploaded_at,
+      att.file_data || null
     ]);
   }
 
@@ -3631,7 +3632,8 @@ export class SQLiteDB {
 
   public async getAttachmentForRecord(studentId: string, recordType: string, recordId: string): Promise<AttachmentRecord | undefined> {
     return (await queryOne<AttachmentRecord>(`
-      SELECT * FROM attachments
+      SELECT id, student_id, record_type, record_id, original_file_name, stored_file_name, mime_type, file_size, uploaded_by_user_id, uploaded_by_role, uploaded_at, is_deleted
+      FROM attachments
       WHERE student_id = ? AND record_type = ? AND record_id = ? AND is_deleted = 0
       ORDER BY uploaded_at DESC LIMIT 1
     `, [studentId, recordType, recordId])) || undefined;
@@ -3639,7 +3641,8 @@ export class SQLiteDB {
 
   public async getAttachmentsForStudent(studentId: string): Promise<AttachmentRecord[]> {
     return await queryAll<AttachmentRecord>(`
-      SELECT * FROM attachments
+      SELECT id, student_id, record_type, record_id, original_file_name, stored_file_name, mime_type, file_size, uploaded_by_user_id, uploaded_by_role, uploaded_at, is_deleted
+      FROM attachments
       WHERE student_id = ? AND is_deleted = 0
       ORDER BY uploaded_at DESC
     `, [studentId]);

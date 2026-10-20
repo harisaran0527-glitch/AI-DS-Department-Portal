@@ -141,7 +141,7 @@ router.post('/upload', authenticateToken, (req: AuthRequest, res: Response) => {
     // Upload binary directly to Supabase Storage
     await uploadFileToStorage(storagePath, req.file.buffer, req.file.mimetype);
 
-    // Save structured metadata in PostgreSQL (DO NOT store base64 binary in PostgreSQL)
+    // Save structured metadata & file data in PostgreSQL for 100% serverless resilience
     const newAtt = {
       id: attachmentId,
       student_id: studentId,
@@ -154,7 +154,8 @@ router.post('/upload', authenticateToken, (req: AuthRequest, res: Response) => {
       uploaded_by_user_id: req.user!.id,
       uploaded_by_role: req.user!.role,
       uploaded_at: new Date().toISOString(),
-      is_deleted: 0
+      is_deleted: 0,
+      file_data: req.file.buffer
     };
 
     await db.createAttachment(newAtt);
@@ -237,16 +238,32 @@ router.get('/:fileId', authenticateToken, async (req: AuthRequest, res: Response
     return res.status(403).json({ error: 'Unauthorized access to requested file.' });
   }
 
-  const fileData = await downloadFileFromStorage(att.stored_file_name);
-  if (!fileData) {
+  let buffer: Buffer | null = null;
+  let contentType = att.mime_type;
+
+  // 1. Primary: Database persistence (BYTEA)
+  if (att.file_data) {
+    buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
+  }
+
+  // 2. Secondary: Supabase Storage or local storage fallback
+  if (!buffer) {
+    const fileData = await downloadFileFromStorage(att.stored_file_name);
+    if (fileData) {
+      buffer = fileData.buffer;
+      if (fileData.contentType) contentType = fileData.contentType;
+    }
+  }
+
+  if (!buffer) {
     return res.status(404).json({ error: 'File content missing from server storage.' });
   }
 
-  res.setHeader('Content-Type', att.mime_type || fileData.contentType);
-  res.setHeader('Content-Length', fileData.buffer.length.toString());
+  res.setHeader('Content-Type', contentType || 'application/octet-stream');
+  res.setHeader('Content-Length', buffer.length.toString());
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(att.original_file_name)}"`);
   res.setHeader('Cache-Control', 'private, max-age=3600');
-  return res.send(fileData.buffer);
+  return res.send(buffer);
 });
 
 // GET Download File attachment
@@ -263,8 +280,24 @@ router.get('/:fileId/download', authenticateToken, async (req: AuthRequest, res:
     return res.status(403).json({ error: 'Unauthorized access to requested file.' });
   }
 
-  const fileData = await downloadFileFromStorage(att.stored_file_name);
-  if (!fileData) {
+  let buffer: Buffer | null = null;
+  let contentType = att.mime_type;
+
+  // 1. Primary: Database persistence (BYTEA)
+  if (att.file_data) {
+    buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
+  }
+
+  // 2. Secondary: Supabase Storage or local storage fallback
+  if (!buffer) {
+    const fileData = await downloadFileFromStorage(att.stored_file_name);
+    if (fileData) {
+      buffer = fileData.buffer;
+      if (fileData.contentType) contentType = fileData.contentType;
+    }
+  }
+
+  if (!buffer) {
     return res.status(404).json({ error: 'File content missing from server storage.' });
   }
 
@@ -276,10 +309,10 @@ router.get('/:fileId/download', authenticateToken, async (req: AuthRequest, res:
     `FILE:${att.original_file_name} (Attachment:${att.id})`
   );
 
-  res.setHeader('Content-Type', att.mime_type || fileData.contentType);
-  res.setHeader('Content-Length', fileData.buffer.length.toString());
+  res.setHeader('Content-Type', contentType || 'application/octet-stream');
+  res.setHeader('Content-Length', buffer.length.toString());
   res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(att.original_file_name)}"`);
-  return res.send(fileData.buffer);
+  return res.send(buffer);
 });
 
 // DELETE Attachment

@@ -253,9 +253,16 @@ html.light main {
   color: #334155 !important;
 }
 
+/* Light Mode Canvas & Root Containers */
+html.light .portal-dashboard-root,
+html.light [class*="bg-[#080A0F]"] {
+  background-color: #F8FAFC !important;
+  color: #334155 !important;
+}
+
+/* Light Mode Card Surfaces, Modals & Structured Panels */
 html.light .portal-card,
 html.light .portal-modal,
-html.light [class*="bg-[#080A0F]"],
 html.light [class*="bg-[#0D1017]"],
 html.light [class*="bg-[#12161F]"],
 html.light [class*="bg-[#171C26]"],
@@ -267,8 +274,8 @@ html.light [class*="bg-slate-950"],
 html.light [class*="bg-slate-900"] {
   background-color: #FFFFFF !important;
   background-image: none !important;
-  border-color: #E2E8F0 !important;
-  color: #334155 !important;
+  border-color: #CBD5E1 !important;
+  color: #0F172A !important;
 }
 
 /* Light Mode Secondary Wells, Action Containers, Sub-Cards & Pills */
@@ -327,6 +334,31 @@ html.light .text-white,
 html.light .text-\[\#F1F5F9\],
 html.light .text-\[\#D9DEFF\] {
   color: #0F172A !important;
+}
+
+/* Maintain Crisp White Text on Solid / Saturated Buttons & Badges in Light Mode */
+html.light button[class*="bg-indigo-"],
+html.light button[class*="bg-emerald-"],
+html.light button[class*="bg-rose-"],
+html.light button[class*="bg-red-"],
+html.light button[class*="bg-cyan-6"],
+html.light button[class*="bg-blue-"],
+html.light button[class*="bg-purple-"],
+html.light button.btn-primary,
+html.light a[class*="bg-indigo-"],
+html.light a[class*="bg-emerald-"],
+html.light a[class*="bg-rose-"],
+html.light a[class*="bg-cyan-6"],
+html.light a[class*="bg-blue-"],
+html.light button[class*="bg-indigo-"] *,
+html.light button[class*="bg-emerald-"] *,
+html.light button[class*="bg-rose-"] *,
+html.light button[class*="bg-red-"] *,
+html.light button[class*="bg-cyan-6"] *,
+html.light button[class*="bg-blue-"] *,
+html.light button[class*="bg-purple-"] *,
+html.light button.btn-primary * {
+  color: #FFFFFF !important;
 }
 
 html.light .text-slate-200,
@@ -434,31 +466,50 @@ html.light button[class*="bg-slate-900"]:hover {
   color: #0F172A !important;
 }
 
-/* Light Mode Sidebar Navigation Active Item: Deep Dark Blue (#0B2559) with White Text */
-html.light aside nav button.sidebar-nav-active,
-html.light aside nav button[class*="bg-[#171C26]"] {
-  background-color: #0B2559 !important;
-  color: #FFFFFF !important;
+/* Light Mode Sidebar Navigation Active Item */
+html.light aside nav button.sidebar-nav-active {
+  background: linear-gradient(90deg, #EEF2FF 0%, #F5F3FF 100%) !important;
+  color: #1E1B4B !important;
+  border-left: 4px solid #6366F1 !important;
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.16) !important;
+  font-weight: 800 !important;
+}
+
+html.light aside nav button.sidebar-nav-active * {
+  color: #1E1B4B !important;
+}
+
+html.light aside nav button.sidebar-nav-active svg {
+  color: #6366F1 !important;
+}
+
+/* Light Mode Submenu Child Active Item */
+html.light aside nav button.sidebar-child-active {
+  background: #F1F5F9 !important;
+  color: #0F172A !important;
   border-left: 4px solid #0284C7 !important;
-  box-shadow: 0 4px 14px rgba(11, 37, 89, 0.22) !important;
+  font-weight: 700 !important;
 }
 
-html.light aside nav button.sidebar-nav-active *,
-html.light aside nav button[class*="bg-[#171C26]"] * {
-  color: #FFFFFF !important;
+html.light aside nav button.sidebar-child-active * {
+  color: #0F172A !important;
 }
 
-html.light aside nav button:not(.sidebar-nav-active) {
-  color: #334155 !important;
+html.light aside nav button.sidebar-child-active svg {
+  color: #0284C7 !important;
 }
 
-html.light aside nav button:not(.sidebar-nav-active):hover {
+html.light aside nav button:not(.sidebar-nav-active):not(.sidebar-child-active) {
+  color: #475569 !important;
+}
+
+html.light aside nav button:not(.sidebar-nav-active):not(.sidebar-child-active):hover {
   background-color: #F1F5F9 !important;
   color: #0F172A !important;
 }
 
-html.light aside nav button:not(.sidebar-nav-active) svg {
-  color: #475569 !important;
+html.light aside nav button:not(.sidebar-nav-active):not(.sidebar-child-active) svg {
+  color: #64748B !important;
 }
 
 /* Light Mode Role Badges & Status Pills */

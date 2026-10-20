@@ -223,21 +223,22 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                       setMobileMenuOpen(false);
                     }
                   }}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 min-h-[44px] rounded-xl text-xs font-semibold transition-all ${
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 min-h-[44px] rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                     isActive
-                      ? 'sidebar-nav-active bg-[#171C26] text-[#F1F5F9] font-bold border-l-2 border-[#A78BFA] shadow-sm'
+                      ? 'sidebar-nav-active bg-gradient-to-r from-indigo-900/60 via-purple-900/40 to-indigo-950/60 text-white font-extrabold border-l-4 border-indigo-400 shadow-md ring-1 ring-indigo-500/20'
                       : 'text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#12161F] active:bg-[#171C26]'
                   }`}
                 >
                   <div className="flex items-center space-x-2.5 truncate">
-                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#A78BFA]' : 'text-[#64748B]'}`} />
+                    <Icon className={`w-4 h-4 shrink-0 transition-colors ${isActive ? 'text-indigo-400' : 'text-[#64748B]'}`} />
                     <span className="truncate font-bold">{item.label}</span>
                   </div>
                   <div className="flex items-center space-x-1.5">
                     {item.badge && (
                       <span
                         className={`text-[9px] font-mono px-1.5 py-0.5 rounded-full ${
-                          isActive ? 'bg-[#202633] text-[#A78BFA] border border-[#A78BFA]/30 font-bold' : 'bg-[#12161F] text-[#94A3B8]'
+                          isActive ? 'bg-indigo-900/80 text-indigo-200 border border-indigo-400/30 font-bold' : 'bg-[#12161F] text-[#94A3B8]'
                         }`}
                       >
                         {item.badge}
@@ -245,7 +246,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                     )}
                     {isCollapsible && (
                       <span className="text-[#64748B] p-0.5">
-                        {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-[#A78BFA]" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                        {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-indigo-400" /> : <ChevronRight className="w-3.5 h-3.5" />}
                       </span>
                     )}
                   </div>
@@ -264,14 +265,15 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
                             onSelectTab(child.id);
                             setMobileMenuOpen(false);
                           }}
-                          className={`w-full flex items-center justify-between px-2.5 py-2 min-h-[44px] rounded-lg text-[11px] font-semibold transition-all ${
+                          aria-current={isChildActive ? 'page' : undefined}
+                          className={`w-full flex items-center justify-between px-2.5 py-2 min-h-[44px] rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
                             isChildActive
-                              ? 'sidebar-nav-active bg-[#171C26] text-[#F1F5F9] font-bold border-l-2 border-[#A78BFA]'
+                              ? 'sidebar-child-active bg-cyan-950/60 text-cyan-200 font-extrabold border-l-4 border-cyan-400 shadow-sm'
                               : 'text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#12161F] active:bg-[#171C26]'
                           }`}
                         >
                           <div className="flex items-center space-x-2 truncate">
-                            <ChildIcon className={`w-3.5 h-3.5 shrink-0 ${isChildActive ? 'text-[#A78BFA]' : 'text-[#64748B]'}`} />
+                            <ChildIcon className={`w-3.5 h-3.5 shrink-0 transition-colors ${isChildActive ? 'text-cyan-400' : 'text-[#64748B]'}`} />
                             <span className="truncate">{child.label}</span>
                           </div>
                         </button>
