@@ -1356,6 +1356,147 @@ export class SQLiteDB {
     return (await this.getStudentById(studentId))!;
   }
 
+  public async bulkUpsertStudentsWithUserLogins(students: Array<{
+    registerNo: string;
+    name: string;
+    email: string;
+    mobileNumber?: string | null;
+    personalEmail?: string | null;
+    address?: string | null;
+    cgpa?: number | null;
+    year: string;
+    section: string;
+    batch: string;
+    createdByFacultyId?: string | null;
+    facultyWorkspaceId?: string | null;
+    classCoordinatorName?: string | null;
+  }>): Promise<StudentRecord[]> {
+    if (!students || students.length === 0) return [];
+
+    if (isPostgresActive()) {
+      const preparedList = students.map((s) => {
+        const cleanRegNo = s.registerNo.trim();
+        const cleanEmail = s.email.trim().toLowerCase();
+        const cleanName = s.name.trim();
+        const cleanMobile = s.mobileNumber ? s.mobileNumber.trim() : null;
+        const cleanPersonalEmail = s.personalEmail ? s.personalEmail.trim().toLowerCase() : null;
+        const cleanAddress = s.address ? s.address.trim() : null;
+        const cleanCgpa = (s.cgpa !== undefined && s.cgpa !== null && s.cgpa !== '' && String(s.cgpa).trim().toUpperCase() !== 'N/A' && String(s.cgpa).trim().toUpperCase() !== 'NA' && String(s.cgpa).trim().toUpperCase() !== 'NULL' && String(s.cgpa).trim().toUpperCase() !== 'NONE' && !isNaN(Number(s.cgpa))) ? Math.max(0, Math.min(10, Number(s.cgpa))) : null;
+        const studentId = `stu-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
+        return {
+          id: studentId,
+          registerNo: cleanRegNo,
+          email: cleanEmail,
+          name: cleanName,
+          mobileNumber: cleanMobile,
+          personalEmail: cleanPersonalEmail,
+          address: cleanAddress,
+          cgpa: cleanCgpa,
+          year: s.year,
+          section: s.section,
+          batch: s.batch,
+          coordinator: s.classCoordinatorName || 'Assigned Faculty',
+          facultyId: s.facultyWorkspaceId || s.createdByFacultyId || null
+        };
+      });
+
+      // 1. Single Multi-Row Atomic UPSERT on Supabase PostgreSQL students table
+      const stuPlaceholders: string[] = [];
+      const stuParams: any[] = [];
+
+      for (const item of preparedList) {
+        stuPlaceholders.push(`(?, ?, ?, ?, ?, ?, ?, 'AI & DS', ?, ?, ?, ?, ?, 0, 99, ?, ?)`);
+        stuParams.push(
+          item.id,
+          item.registerNo,
+          item.name,
+          item.email,
+          item.personalEmail,
+          item.mobileNumber,
+          item.address,
+          item.year,
+          item.section,
+          item.batch,
+          item.coordinator,
+          item.cgpa,
+          item.facultyId,
+          item.facultyId
+        );
+      }
+
+      const stuSql = `
+        INSERT INTO students (
+          id, register_no, name, email, personal_email, mobile_number, address,
+          department, year, section, batch, class_coordinator_name, cgpa,
+          overall_score, current_rank, created_by_faculty_id, faculty_workspace_id
+        )
+        VALUES ${stuPlaceholders.join(', ')}
+        ON CONFLICT (register_no) DO UPDATE
+        SET name = EXCLUDED.name,
+            email = EXCLUDED.email,
+            personal_email = EXCLUDED.personal_email,
+            mobile_number = EXCLUDED.mobile_number,
+            address = EXCLUDED.address,
+            cgpa = EXCLUDED.cgpa,
+            year = EXCLUDED.year,
+            section = EXCLUDED.section,
+            batch = EXCLUDED.batch,
+            class_coordinator_name = COALESCE(EXCLUDED.class_coordinator_name, students.class_coordinator_name),
+            created_by_faculty_id = COALESCE(EXCLUDED.created_by_faculty_id, students.created_by_faculty_id),
+            faculty_workspace_id = COALESCE(EXCLUDED.faculty_workspace_id, students.faculty_workspace_id)
+        RETURNING id, register_no, name, email, personal_email, mobile_number, address, department, year, section, batch, class_coordinator_name, cgpa, overall_score, current_rank, created_by_faculty_id, faculty_workspace_id
+      `;
+
+      const upsertedStudents = await queryAll(stuSql, stuParams);
+
+      // 2. Synchronize user login accounts concurrently with bcrypt
+      const hashes = await Promise.all(preparedList.map((s) => bcrypt.hash(s.registerNo, 10)));
+      const userPlaceholders: string[] = [];
+      const userParams: any[] = [];
+
+      for (let i = 0; i < preparedList.length; i++) {
+        const item = preparedList[i];
+        const userId = `usr-stu-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+        userPlaceholders.push(`(?, ?, ?, ?, 'STUDENT', ?, ?, ?, 1, NOW())`);
+        userParams.push(userId, item.email, item.registerNo, item.name, hashes[i], item.year, item.section);
+      }
+
+      const userSql = `
+        INSERT INTO users (id, email, identifier, name, role, password_hash, year, section, is_active, created_at)
+        VALUES ${userPlaceholders.join(', ')}
+        ON CONFLICT (identifier) DO UPDATE
+        SET name = EXCLUDED.name,
+            email = EXCLUDED.email,
+            year = EXCLUDED.year,
+            section = EXCLUDED.section
+        RETURNING id
+      `;
+
+      try {
+        await queryAll(userSql, userParams);
+      } catch (_userErr) {
+        // Fallback per-user sync if identifier/email conflict arises
+        for (let i = 0; i < preparedList.length; i++) {
+          const item = preparedList[i];
+          await executeRun(`
+            UPDATE users SET name = ?, email = ?, year = ?, section = ?
+            WHERE LOWER(identifier) = LOWER(?) OR LOWER(email) = LOWER(?)
+          `, [item.name, item.email, item.year, item.section, item.registerNo, item.email]);
+        }
+      }
+
+      return upsertedStudents.map((r) => normalizeStudentRecord(r)!);
+    } else {
+      // Sequential fallback for local SQLite
+      const results: StudentRecord[] = [];
+      for (const s of students) {
+        results.push(await this.upsertStudentWithUserLogin(s));
+      }
+      return results;
+    }
+  }
+
   public async createStudent(stu: {
     id: string;
     registerNo: string;

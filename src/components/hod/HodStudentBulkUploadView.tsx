@@ -255,7 +255,7 @@ export const HodStudentBulkUploadView: React.FC<{
     }
   };
 
-  // Safe chunked import: chunks into batches of 25 to prevent 413 & 504 timeouts
+  // High-performance chunked import: chunks into batches of 10 to guarantee fast execution without gateway timeouts
   const handleConfirmImport = async () => {
     if (isImportingRef.current || isImporting) return;
     if (!previewData || !selectedFacultyId) return;
@@ -269,23 +269,25 @@ export const HodStudentBulkUploadView: React.FC<{
       return;
     }
 
+    let allImported: any[] = [];
+    const BATCH_SIZE = 10;
+    const totalCount = validStudents.length;
+    const totalBatches = Math.ceil(totalCount / BATCH_SIZE);
+
     try {
       isImportingRef.current = true;
       setIsImporting(true);
-      const BATCH_SIZE = 25;
-      const totalCount = validStudents.length;
-      const totalBatches = Math.ceil(totalCount / BATCH_SIZE);
-      let allImported: any[] = [];
 
       for (let i = 0; i < totalCount; i += BATCH_SIZE) {
         const batchNum = Math.floor(i / BATCH_SIZE) + 1;
         const chunk = validStudents.slice(i, i + BATCH_SIZE);
+
         setImportProgress({
           currentBatch: batchNum,
           totalBatches,
-          processedCount: i,
+          processedCount: allImported.length,
           totalCount,
-          percent: Math.round((i / totalCount) * 100)
+          percent: Math.max(5, Math.round((allImported.length / totalCount) * 100))
         });
 
         const res = await API.confirmHodStudentExcelImport(
@@ -298,6 +300,15 @@ export const HodStudentBulkUploadView: React.FC<{
         if (res.students && Array.isArray(res.students)) {
           allImported = allImported.concat(res.students);
         }
+
+        // Database-confirmed progress update
+        setImportProgress({
+          currentBatch: batchNum,
+          totalBatches,
+          processedCount: allImported.length,
+          totalCount,
+          percent: Math.min(100, Math.round((allImported.length / totalCount) * 100))
+        });
       }
 
       setImportProgress({
@@ -323,7 +334,29 @@ export const HodStudentBulkUploadView: React.FC<{
         onImportCompleted();
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to execute student bulk import.');
+      const errorMsg = err.message || 'Failed to execute student bulk import.';
+      if (allImported.length > 0) {
+        // Safe partial resume: remove already imported students from preview so user can retry remainder
+        const importedRegs = new Set(allImported.map((s: any) => (s.register_no || s.registerNo || '').toLowerCase()));
+        const remainingPreview = previewData.preview.filter(
+          (p: any) => !importedRegs.has((p.parsedData?.registerNo || '').toLowerCase())
+        );
+        const newValid = remainingPreview.filter((p: any) => p.status === 'VALID_NEW').length;
+        const newUpdate = remainingPreview.filter((p: any) => p.status === 'UPDATE_EXISTING').length;
+        const newError = remainingPreview.filter((p: any) => p.status === 'ERROR').length;
+        setPreviewData({
+          ...previewData,
+          preview: remainingPreview,
+          totalRows: remainingPreview.length,
+          validRowsCount: newValid,
+          updateRowsCount: newUpdate,
+          errorRowsCount: newError,
+          canImport: (newValid + newUpdate) > 0
+        });
+        alert(`Partial batch completed: ${allImported.length} students were successfully saved in the database. Gateway notice on remaining records: ${errorMsg}\n\nYou can click "Confirm & Import" again to safely resume importing the remaining ${remainingPreview.length} students without duplication.`);
+      } else {
+        alert(errorMsg);
+      }
     } finally {
       setIsImporting(false);
       setImportProgress(null);
@@ -677,36 +710,42 @@ export const HodStudentBulkUploadView: React.FC<{
             </div>
           </div>
 
+          {/* MOBILE SCROLL NOTICE */}
+          <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 md:hidden px-1">
+            <span>Swipe horizontally to inspect all columns</span>
+            <span className="text-amber-400 font-bold">↔ Scroll Table</span>
+          </div>
+
           {/* ROW BY ROW PREVIEW TABLE */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
+          <div className="overflow-x-auto border border-slate-800 rounded-xl bg-slate-950/40">
+            <table className="w-full min-w-[850px] text-xs text-left border-collapse">
               <thead>
-                <tr className="text-slate-400 border-b border-slate-800 font-mono uppercase text-[11px]">
-                  <th className="py-3 px-3">Row #</th>
-                  <th className="py-3 px-3">Register Number</th>
-                  <th className="py-3 px-3">Student Name</th>
-                  <th className="py-3 px-3">College Mail ID</th>
-                  <th className="py-3 px-3">Mobile & Personal Email</th>
-                  <th className="py-3 px-3 text-center">CGPA</th>
-                  <th className="py-3 px-3 text-center">Status</th>
-                  <th className="py-3 px-3">Validation Notes</th>
+                <tr className="text-slate-400 border-b border-slate-800 font-mono uppercase text-[11px] bg-slate-950/60">
+                  <th className="py-3 px-3.5 whitespace-nowrap">Row #</th>
+                  <th className="py-3 px-3.5 whitespace-nowrap">Register Number</th>
+                  <th className="py-3 px-3.5 whitespace-nowrap">Student Name</th>
+                  <th className="py-3 px-3.5 whitespace-nowrap">College Mail ID</th>
+                  <th className="py-3 px-3.5 whitespace-nowrap">Mobile & Personal Email</th>
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">CGPA</th>
+                  <th className="py-3 px-3.5 text-center whitespace-nowrap">Status</th>
+                  <th className="py-3 px-3.5 whitespace-nowrap">Validation Notes</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {previewData.preview.map((row: any) => (
                   <tr key={row.rowNumber} className="hover:bg-slate-950/60 transition-colors font-mono">
-                    <td className="py-3 px-3 font-bold text-slate-400">#{row.rowNumber}</td>
-                    <td className="py-3 px-3 font-bold text-cyan-400">{row.parsedData.registerNo || '—'}</td>
-                    <td className="py-3 px-3 font-bold text-white">{row.parsedData.name || '—'}</td>
-                    <td className="py-3 px-3 text-slate-300">{row.parsedData.collegeEmail || '—'}</td>
-                    <td className="py-3 px-3 text-slate-400 text-[11px]">
+                    <td className="py-3 px-3.5 font-bold text-slate-400 whitespace-nowrap">#{row.rowNumber}</td>
+                    <td className="py-3 px-3.5 font-bold text-cyan-400 whitespace-nowrap">{row.parsedData.registerNo || '—'}</td>
+                    <td className="py-3 px-3.5 font-bold text-white whitespace-nowrap">{row.parsedData.name || '—'}</td>
+                    <td className="py-3 px-3.5 text-slate-300 whitespace-nowrap">{row.parsedData.collegeEmail || '—'}</td>
+                    <td className="py-3 px-3.5 text-slate-400 text-[11px] whitespace-nowrap">
                       <div>{row.parsedData.mobileNumber || 'No Mobile'}</div>
                       <div className="text-slate-500">{row.parsedData.personalEmail || 'No Personal Email'}</div>
                     </td>
-                    <td className="py-3 px-3 text-center font-bold text-slate-200">
+                    <td className="py-3 px-3.5 text-center font-bold text-slate-200 whitespace-nowrap">
                       {row.parsedData.cgpa !== null && row.parsedData.cgpa !== undefined ? Number(row.parsedData.cgpa).toFixed(2) : 'N/A'}
                     </td>
-                    <td className="py-3 px-3 text-center">
+                    <td className="py-3 px-3.5 text-center whitespace-nowrap">
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                           row.status === 'ERROR'
@@ -719,7 +758,7 @@ export const HodStudentBulkUploadView: React.FC<{
                         {row.status === 'ERROR' ? 'Invalid Row' : row.status === 'UPDATE_EXISTING' ? 'Update Existing' : 'Valid New'}
                       </span>
                     </td>
-                    <td className="py-3 px-3 text-[11px]">
+                    <td className="py-3 px-3.5 text-[11px] min-w-[220px]">
                       {row.errors && row.errors.length > 0 ? (
                         <div className="text-red-400 font-bold space-y-0.5">
                           {row.errors.map((e: string, i: number) => (

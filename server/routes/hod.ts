@@ -343,7 +343,7 @@ router.post('/students/import-confirm', async (req: AuthRequest, res: Response) 
     const sectionToUse = String(section || assignment?.section || targetFaculty.section || 'A').trim();
     const batchToUse = batch || (yearToUse.includes('1st') ? '2024-2028' : yearToUse.includes('2nd') ? '2023-2027' : yearToUse.includes('3rd') ? '2022-2026' : '2021-2025');
 
-    const importedList: any[] = [];
+    const studentsToUpsert = [];
 
     for (const s of nonBlankStudents) {
       const reg = getRowValue(s, 'registerNo', 'register_no', 'Register Number', 'Register No', 'regNo', 'Roll No', 'Roll Number', 'Register');
@@ -368,7 +368,7 @@ router.post('/students/import-confirm', async (req: AuthRequest, res: Response) 
       const personalMail = getRowValue(s, 'personalEmail', 'personal_email', 'Personal Mail ID', 'Personal Email ID').toLowerCase();
       const addressVal = getRowValue(s, 'address', 'Address', 'City');
 
-      const updatedStudent = await db.upsertStudentWithUserLogin({
+      studentsToUpsert.push({
         registerNo: reg,
         name,
         email: mail,
@@ -383,9 +383,9 @@ router.post('/students/import-confirm', async (req: AuthRequest, res: Response) 
         facultyWorkspaceId: targetFaculty.id,
         classCoordinatorName: targetFaculty.name
       });
-
-      importedList.push(updatedStudent);
     }
+
+    const importedList = await db.bulkUpsertStudentsWithUserLogins(studentsToUpsert);
 
     if (req.user) {
       await db.logAudit(req.user.id, req.user.email, req.user.role, 'HOD_BULK_IMPORT_STUDENTS', `Imported ${importedList.length} student records assigned to Faculty ${targetFaculty.name} (${yearToUse} Sec ${sectionToUse}).`);
