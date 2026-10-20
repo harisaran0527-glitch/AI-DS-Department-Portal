@@ -13,6 +13,7 @@ import { GeminiTopRecognitionView } from '../../components/ranking/GeminiTopReco
 import { GeminiCategoryBestPerformerCard } from '../../components/ranking/GeminiCategoryBestPerformerCard';
 import { GeminiFullLeetCodeDashboard } from '../../components/ranking/GeminiFullLeetCodeDashboard';
 import { DisciplineIssueModule } from '../../components/discipline/DisciplineIssueModule';
+import { FacultyStudentBulkUploadModal } from '../../components/faculty/FacultyStudentBulkUploadModal';
 import { getNptelUrlForStudent } from '../../services/nptelUrlHelper';
 import {
   Users,
@@ -1939,10 +1940,10 @@ export const FacultyDashboard: React.FC = () => {
                       </button>
                       <button
                         onClick={() => setShowImportModal(true)}
-                        className="bg-sky-600 hover:bg-sky-500 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 transition-all shadow-md cursor-pointer shrink-0"
+                        className="min-h-[44px] bg-sky-600 hover:bg-sky-500 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 transition-all shadow-md cursor-pointer shrink-0"
                       >
                         <FileSpreadsheet className="w-4 h-4" />
-                        <span>Import CSV</span>
+                        <span>Upload Student Excel / CSV</span>
                       </button>
                     </div>
                   )}
@@ -5552,66 +5553,18 @@ export const FacultyDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* IMPORT STUDENTS CSV MODAL */}
-      {showImportModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-xl rounded-2xl p-6 shadow-2xl space-y-4 text-xs">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3 font-sans">
-              <h3 className="font-bold text-white text-sm flex items-center space-x-2">
-                <FileSpreadsheet className="w-4 h-4 text-sky-400" />
-                <span>Import Students CSV — Section {assignedSection}</span>
-              </h3>
-              <button onClick={() => setShowImportModal(false)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
-            </div>
-
-            {facCsvImportError && (
-              <div className="bg-red-950/80 border border-red-800/80 text-red-300 p-2.5 rounded-xl flex items-center space-x-2 font-mono text-[11px] animate-in fade-in">
-                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-                <span>{facCsvImportError}</span>
-              </div>
-            )}
-
-            <div className="space-y-3 font-mono">
-              <input type="file" accept=".csv" ref={facCsvFileInputRef} onChange={handleFacSelectCsvFile} className="hidden" />
-              <button onClick={() => facCsvFileInputRef.current?.click()} className="w-full bg-slate-950 border border-dashed border-slate-800 p-6 rounded-xl hover:border-sky-500 text-center space-y-2 cursor-pointer font-sans">
-                <Upload className="w-6 h-6 text-sky-400 mx-auto" />
-                <div className="text-white font-bold">Choose CSV Roster File</div>
-                <div className="text-slate-400 font-mono text-[11px]">Register Number, Name, Email</div>
-              </button>
-
-              {facSelectedCsvFile && (
-                <div className="space-y-3 pt-2">
-                  <div className="grid grid-cols-4 gap-2 text-center font-mono">
-                    <div className="bg-slate-950 p-2 rounded-lg border border-slate-800"><div className="text-[9px] text-slate-400">TOTAL</div><div className="font-bold text-white">{facCsvStats.total}</div></div>
-                    <div className="bg-emerald-950/80 p-2 rounded-lg border border-emerald-800"><div className="text-[9px] text-emerald-400">VALID</div><div className="font-bold text-emerald-300">{facCsvStats.valid}</div></div>
-                    <div className="bg-amber-950/80 p-2 rounded-lg border border-amber-800"><div className="text-[9px] text-amber-400">DUPLICATE</div><div className="font-bold text-amber-300">{facCsvStats.duplicates}</div></div>
-                    <div className="bg-red-950/80 p-2 rounded-lg border border-red-800"><div className="text-[9px] text-red-400">INVALID</div><div className="font-bold text-red-300">{facCsvStats.invalid}</div></div>
-                  </div>
-
-                  <div className="flex justify-end space-x-2 pt-2 font-sans">
-                    <button type="button" onClick={() => setShowImportModal(false)} disabled={isImportingFacCsv} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl cursor-pointer disabled:opacity-50 font-bold">Cancel</button>
-                    <button
-                      type="button"
-                      onClick={handleConfirmFacCsvImport}
-                      disabled={facCsvStats.valid === 0 || isImportingFacCsv}
-                      className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-slate-950 font-bold px-4 py-2 rounded-xl cursor-pointer flex items-center space-x-2"
-                    >
-                      {isImportingFacCsv ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>Importing CSV...</span>
-                        </>
-                      ) : (
-                        <span>Confirm Import ({facCsvStats.valid} Valid)</span>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* IMPORT STUDENTS EXCEL / CSV MODAL */}
+      <FacultyStudentBulkUploadModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        assignedYear={assignedYear}
+        assignedSection={assignedSection}
+        facultyName={session?.name}
+        onImportCompleted={async () => {
+          setShowImportModal(false);
+          await fetchRoster();
+        }}
+      />
 
       {/* STUDENT PASSWORD RESET MODAL */}
       {resetStudentTarget && (

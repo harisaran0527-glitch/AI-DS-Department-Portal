@@ -753,6 +753,43 @@ export const API = {
     });
   },
 
+  previewFacultyStudentExcelImport: async (rows: any[]) => {
+    return request<{
+      faculty: { id: string; name: string; email: string; assignedYear: string; assignedSection: string };
+      assignedYear: string;
+      assignedSection: string;
+      totalRows: number;
+      validRowsCount: number;
+      updateRowsCount: number;
+      errorRowsCount: number;
+      canImport: boolean;
+      preview: Array<{
+        rowNumber: number;
+        status: 'VALID_NEW' | 'UPDATE_EXISTING' | 'ERROR';
+        errors: string[];
+        parsedData: {
+          name: string;
+          registerNo: string;
+          mobileNumber: string | null;
+          collegeEmail: string;
+          personalEmail: string | null;
+          address: string | null;
+          cgpa: number | null;
+        };
+      }>;
+    }>('/faculty/students/import-preview', {
+      method: 'POST',
+      body: JSON.stringify({ rows })
+    });
+  },
+
+  confirmFacultyStudentExcelImport: async (students: any[], batch?: string) => {
+    return request<{ message: string; count: number; importedCount: number; students: any[] }>('/faculty/students/import-confirm', {
+      method: 'POST',
+      body: JSON.stringify({ students, batch })
+    });
+  },
+
   importStudentsForFaculty: async (students: any[], defaultPassword?: string) => {
     return request<{ message: string; count: number; errors?: string[] }>('/faculty/students/import', {
       method: 'POST',
