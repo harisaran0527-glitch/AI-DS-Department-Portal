@@ -37,6 +37,9 @@ import {
 import { GeminiTopRecognitionView } from '../../components/ranking/GeminiTopRecognitionView';
 import { GeminiFullLeetCodeDashboard } from '../../components/ranking/GeminiFullLeetCodeDashboard';
 
+// Configuration Flag: Set to true to display the "System Security — HttpOnly + Bcrypt" card on the Admin Dashboard
+const SHOW_SYSTEM_SECURITY_CARD = false;
+
 export const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [session, setSession] = useState<UserSession | null>(null);
@@ -814,7 +817,7 @@ export const AdminDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className={`grid grid-cols-1 ${SHOW_SYSTEM_SECURITY_CARD ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-4`}>
               <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
                 <div className="text-xs text-slate-400 font-mono uppercase">Registered Faculty</div>
                 <div className="text-2xl font-bold text-white mt-1">{facultyList.length} Accounts</div>
@@ -823,10 +826,12 @@ export const AdminDashboard: React.FC = () => {
                 <div className="text-xs text-amber-400 font-mono uppercase font-bold">Department HOD Account</div>
                 <div className="text-2xl font-bold text-amber-300 mt-1">{activeHOD ? `Active (${activeHOD.name})` : 'No Active HOD'}</div>
               </div>
-              <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
-                <div className="text-xs text-slate-400 font-mono uppercase">System Security</div>
-                <div className="text-2xl font-bold text-emerald-400 mt-1">HttpOnly + Bcrypt</div>
-              </div>
+              {SHOW_SYSTEM_SECURITY_CARD && (
+                <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
+                  <div className="text-xs text-slate-400 font-mono uppercase">System Security</div>
+                  <div className="text-2xl font-bold text-emerald-400 mt-1">HttpOnly + Bcrypt</div>
+                </div>
+              )}
             </div>
           </div>
         )}
