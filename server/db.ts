@@ -1547,48 +1547,133 @@ export class SQLiteDB {
     await executeRun('UPDATE students SET overall_score = ?, current_rank = ? WHERE id = ?', [overallScore, currentRank, studentId]);
   }
 
-  // 360 DEGREE GETTER
+  // 360 DEGREE GETTER - High-Speed Single Combined Query
   public async getStudent360(studentId: string) {
-    const student = await this.getStudentById(studentId);
-    if (!student) return null;
+    if (!studentId) return null;
 
-    const [
-      academicsRaw,
-      arrears,
-      skillRaw,
-      historyRows,
-      nptelRaw,
-      attRaw,
-      discipline,
-      certsRaw,
-      partRaw,
-      lcRaw,
-      connLc,
-      prjRaw,
-      achievements,
-      nptelProofs,
-      leetcodeProofs,
-      connectedAccounts,
-      dailyAttendanceLogs
-    ] = await Promise.all([
-      queryAll('SELECT * FROM academic_records WHERE student_id = ?', [studentId]),
-      queryAll<ArrearRecord>('SELECT * FROM arrear_history WHERE student_id = ?', [studentId]),
-      queryOne('SELECT * FROM skilledge_records WHERE student_id = ?', [studentId]),
-      queryAll('SELECT * FROM skilledge_sync_history WHERE student_id = ? ORDER BY synced_at DESC LIMIT 15', [studentId]),
-      queryAll('SELECT * FROM nptel_records WHERE student_id = ?', [studentId]),
-      queryOne('SELECT * FROM attendance_records WHERE student_id = ?', [studentId]),
-      queryAll<DisciplineRecord>('SELECT * FROM discipline_records WHERE student_id = ?', [studentId]),
-      queryAll('SELECT * FROM certificate_records WHERE student_id = ?', [studentId]),
-      queryAll('SELECT * FROM participation_records WHERE student_id = ?', [studentId]),
-      queryOne('SELECT * FROM leetcode_stats WHERE student_id = ?', [studentId]),
-      queryOne("SELECT provider_username FROM connected_accounts WHERE student_id = ? AND LOWER(provider) = 'leetcode'", [studentId]),
-      queryAll('SELECT * FROM project_records WHERE student_id = ?', [studentId]),
-      queryAll<AchievementRecord>('SELECT * FROM achievement_records WHERE student_id = ?', [studentId]),
-      this.getNptelProofs(studentId),
-      this.getLeetcodeProofs(studentId),
-      this.getConnectedAccounts(studentId),
-      queryAll('SELECT date, status, recorded_by, recorded_at FROM daily_attendance_records WHERE student_id = ? ORDER BY date DESC', [studentId])
-    ]);
+    let student: Student | null = null;
+    let academicsRaw: any[] = [];
+    let arrears: ArrearRecord[] = [];
+    let skillRaw: any = null;
+    let historyRows: any[] = [];
+    let nptelRaw: any[] = [];
+    let attRaw: any = null;
+    let discipline: DisciplineRecord[] = [];
+    let certsRaw: any[] = [];
+    let partRaw: any[] = [];
+    let lcRaw: any = null;
+    let connLc: any = null;
+    let prjRaw: any[] = [];
+    let achievements: AchievementRecord[] = [];
+    let nptelProofs: any[] = [];
+    let leetcodeProofs: any[] = [];
+    let connectedAccounts: any[] = [];
+    let dailyAttendanceLogs: any[] = [];
+
+    if (isPostgresActive()) {
+      // 1 single combined CTE/JSON aggregation round trip instead of 18 round trips across the network
+      const singleRow = await queryOne(`
+        SELECT
+          (SELECT to_json(s) FROM (SELECT * FROM students WHERE id = $1) s) as student,
+          (SELECT coalesce(json_agg(a), '[]'::json) FROM (SELECT * FROM academic_records WHERE student_id = $1) a) as academics_raw,
+          (SELECT coalesce(json_agg(ar), '[]'::json) FROM (SELECT * FROM arrear_history WHERE student_id = $1) ar) as arrears,
+          (SELECT to_json(sk) FROM (SELECT * FROM skilledge_records WHERE student_id = $1) sk) as skill_raw,
+          (SELECT coalesce(json_agg(h), '[]'::json) FROM (SELECT * FROM skilledge_sync_history WHERE student_id = $1 ORDER BY synced_at DESC LIMIT 15) h) as history_rows,
+          (SELECT coalesce(json_agg(n), '[]'::json) FROM (SELECT * FROM nptel_records WHERE student_id = $1) n) as nptel_raw,
+          (SELECT to_json(att) FROM (SELECT * FROM attendance_records WHERE student_id = $1) att) as att_raw,
+          (SELECT coalesce(json_agg(d), '[]'::json) FROM (SELECT * FROM discipline_records WHERE student_id = $1) d) as discipline,
+          (SELECT coalesce(json_agg(c), '[]'::json) FROM (SELECT * FROM certificate_records WHERE student_id = $1) c) as certs_raw,
+          (SELECT coalesce(json_agg(p), '[]'::json) FROM (SELECT * FROM participation_records WHERE student_id = $1) p) as part_raw,
+          (SELECT to_json(lc) FROM (SELECT * FROM leetcode_stats WHERE student_id = $1) lc) as lc_raw,
+          (SELECT to_json(conn) FROM (SELECT provider_username FROM connected_accounts WHERE student_id = $1 AND LOWER(provider) = 'leetcode') conn) as conn_lc,
+          (SELECT coalesce(json_agg(prj), '[]'::json) FROM (SELECT * FROM project_records WHERE student_id = $1) prj) as prj_raw,
+          (SELECT coalesce(json_agg(ach), '[]'::json) FROM (SELECT * FROM achievement_records WHERE student_id = $1) ach) as achievements,
+          (SELECT coalesce(json_agg(np), '[]'::json) FROM (SELECT * FROM nptel_proofs WHERE student_id = $1 ORDER BY week_no ASC, uploaded_at DESC) np) as nptel_proofs,
+          (SELECT coalesce(json_agg(lp), '[]'::json) FROM (SELECT * FROM leetcode_proofs WHERE student_id = $1 ORDER BY uploaded_at DESC) lp) as leetcode_proofs,
+          (SELECT coalesce(json_agg(ca), '[]'::json) FROM (SELECT * FROM connected_accounts WHERE student_id = $1) ca) as connected_accounts,
+          (SELECT coalesce(json_agg(da), '[]'::json) FROM (SELECT date, status, recorded_by, recorded_at FROM daily_attendance_records WHERE student_id = $1 ORDER BY date DESC) da) as daily_attendance_logs
+      `, [studentId]);
+
+      if (!singleRow || !singleRow.student) return null;
+
+      student = singleRow.student;
+      academicsRaw = singleRow.academics_raw || [];
+      arrears = singleRow.arrears || [];
+      skillRaw = singleRow.skill_raw || null;
+      historyRows = singleRow.history_rows || [];
+      nptelRaw = singleRow.nptel_raw || [];
+      attRaw = singleRow.att_raw || null;
+      discipline = singleRow.discipline || [];
+      certsRaw = singleRow.certs_raw || [];
+      partRaw = singleRow.part_raw || [];
+      lcRaw = singleRow.lc_raw || null;
+      connLc = singleRow.conn_lc || null;
+      prjRaw = singleRow.prj_raw || [];
+      achievements = singleRow.achievements || [];
+      nptelProofs = singleRow.nptel_proofs || [];
+      leetcodeProofs = singleRow.leetcode_proofs || [];
+      connectedAccounts = singleRow.connected_accounts || [];
+      dailyAttendanceLogs = singleRow.daily_attendance_logs || [];
+    } else {
+      student = await this.getStudentById(studentId);
+      if (!student) return null;
+
+      const [
+        _academicsRaw,
+        _arrears,
+        _skillRaw,
+        _historyRows,
+        _nptelRaw,
+        _attRaw,
+        _discipline,
+        _certsRaw,
+        _partRaw,
+        _lcRaw,
+        _connLc,
+        _prjRaw,
+        _achievements,
+        _nptelProofs,
+        _leetcodeProofs,
+        _connectedAccounts,
+        _dailyAttendanceLogs
+      ] = await Promise.all([
+        queryAll('SELECT * FROM academic_records WHERE student_id = ?', [studentId]),
+        queryAll<ArrearRecord>('SELECT * FROM arrear_history WHERE student_id = ?', [studentId]),
+        queryOne('SELECT * FROM skilledge_records WHERE student_id = ?', [studentId]),
+        queryAll('SELECT * FROM skilledge_sync_history WHERE student_id = ? ORDER BY synced_at DESC LIMIT 15', [studentId]),
+        queryAll('SELECT * FROM nptel_records WHERE student_id = ?', [studentId]),
+        queryOne('SELECT * FROM attendance_records WHERE student_id = ?', [studentId]),
+        queryAll<DisciplineRecord>('SELECT * FROM discipline_records WHERE student_id = ?', [studentId]),
+        queryAll('SELECT * FROM certificate_records WHERE student_id = ?', [studentId]),
+        queryAll('SELECT * FROM participation_records WHERE student_id = ?', [studentId]),
+        queryOne('SELECT * FROM leetcode_stats WHERE student_id = ?', [studentId]),
+        queryOne("SELECT provider_username FROM connected_accounts WHERE student_id = ? AND LOWER(provider) = 'leetcode'", [studentId]),
+        queryAll('SELECT * FROM project_records WHERE student_id = ?', [studentId]),
+        queryAll<AchievementRecord>('SELECT * FROM achievement_records WHERE student_id = ?', [studentId]),
+        this.getNptelProofs(studentId),
+        this.getLeetcodeProofs(studentId),
+        this.getConnectedAccounts(studentId),
+        queryAll('SELECT date, status, recorded_by, recorded_at FROM daily_attendance_records WHERE student_id = ? ORDER BY date DESC', [studentId])
+      ]);
+
+      academicsRaw = _academicsRaw;
+      arrears = _arrears;
+      skillRaw = _skillRaw;
+      historyRows = _historyRows;
+      nptelRaw = _nptelRaw;
+      attRaw = _attRaw;
+      discipline = _discipline;
+      certsRaw = _certsRaw;
+      partRaw = _partRaw;
+      lcRaw = _lcRaw;
+      connLc = _connLc;
+      prjRaw = _prjRaw;
+      achievements = _achievements;
+      nptelProofs = _nptelProofs;
+      leetcodeProofs = _leetcodeProofs;
+      connectedAccounts = _connectedAccounts;
+      dailyAttendanceLogs = _dailyAttendanceLogs;
+    }
 
     const academics: AcademicRecord[] = academicsRaw.map((a) => ({
       ...a,
@@ -4239,29 +4324,6 @@ export class SQLiteDB {
       SET cgpa = ?
       WHERE id = ?
     `, [computedSgpa, studentId]);
-
-    const updatedStudent = await this.getStudentById(studentId);
-    if (updatedStudent) {
-      const full360 = await this.getStudent360(studentId);
-      if (full360) {
-        const catScores = calculateCategoryScores(
-          full360.student as any,
-          full360.academics,
-          full360.arrears,
-          full360.skillEdge,
-          full360.nptel,
-          full360.attendance,
-          full360.discipline,
-          full360.leetcode,
-          full360.projects,
-          full360.certificates,
-          full360.participation
-        );
-        const scoringConfig = await this.getScoringConfig();
-        const overallScore = computeOverallScore(catScores, scoringConfig);
-        await executeRun('UPDATE students SET overall_score = ? WHERE id = ?', [overallScore, studentId]);
-      }
-    }
   }
 
   public async getAcademicRecords(filters: {

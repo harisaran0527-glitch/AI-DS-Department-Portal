@@ -240,11 +240,13 @@ router.get('/students/:studentId/360', verifyFacultySectionAccess, async (req: A
 });
 
 // Helper function to recalculate ONLY the affected student's score and update section rank atomically
-async function recalculateAffectedStudentScore(studentId: string) {
-  const targetStudent = await db.getStudentById(studentId);
-  if (!targetStudent) return 0;
+async function recalculateAffectedStudentScore(studentId: string): Promise<{ overallScore: number; profile: any }> {
+  const full360 = await db.getStudent360(studentId);
+  if (!full360 || !full360.student) {
+    return { overallScore: 0, profile: null };
+  }
 
-  const full360 = (await db.getStudent360(studentId))!;
+  const targetStudent = full360.student;
   const scoringConfig = await db.getScoringConfig();
   const breakdown = calculateCategoryScores(
     full360.student as any,
@@ -255,7 +257,9 @@ async function recalculateAffectedStudentScore(studentId: string) {
     full360.attendance,
     full360.discipline,
     full360.leetcode,
-    full360.projects
+    full360.projects,
+    full360.certificates,
+    full360.participation
   );
 
   const newOverallScore = computeOverallScore(breakdown, scoringConfig) || 0;
@@ -291,7 +295,10 @@ async function recalculateAffectedStudentScore(studentId: string) {
     }
   }
 
-  return newOverallScore;
+  // Update in-memory profile so callers can reuse it immediately without issuing another database fetch
+  full360.student.overall_score = newOverallScore;
+
+  return { overallScore: newOverallScore, profile: full360 };
 }
 
 // PUT update student 360 performance details (verifies section access on server!)
@@ -367,12 +374,9 @@ router.put('/students/:studentId/360', verifyFacultySectionAccess, async (req: A
   if (Array.isArray(participation)) await db.saveParticipationRecords(studentId, participation);
   if (Array.isArray(projects)) await db.saveProjectRecords(studentId, projects);
 
-  const updatedOverallScore = await recalculateAffectedStudentScore(studentId);
+  const { overallScore: updatedOverallScore, profile: updatedProfile } = await recalculateAffectedStudentScore(studentId);
 
   await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'UPDATE_STUDENT_360', `STUDENT:${studentId}`);
-
-  // Return updated 360 profile so UI can immediately re-render history
-  const updatedProfile = await db.getStudent360(studentId);
 
   return res.json({
     message: 'Student 360 profile updated and score recalculated successfully.',
@@ -410,7 +414,7 @@ router.post('/students/:studentId/records/:recordType', verifyFacultySectionAcce
     return res.status(400).json({ error: `Unsupported record type: ${recordType}` });
   }
 
-  const updatedOverallScore = await recalculateAffectedStudentScore(studentId);
+  const { overallScore: updatedOverallScore } = await recalculateAffectedStudentScore(studentId);
   await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'CREATE_PERFORMANCE_RECORD', `TYPE:${recordType}:ID:${createdId}:STUDENT:${studentId}`);
 
   return res.status(201).json({
@@ -849,10 +853,8 @@ router.post('/students/:studentId/certificates/upload', verifyFacultySectionAcce
         originalFileName
       });
 
-      const updatedScore = await recalculateAffectedStudentScore(studentId);
+      const { overallScore: updatedScore, profile: full360 } = await recalculateAffectedStudentScore(studentId);
       await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'UPLOAD_CERTIFICATE', `STUDENT:${studentId}:CERT:${certId}`);
-
-      const full360 = await db.getStudent360(studentId);
 
       return res.status(201).json({
         message: 'Certificate uploaded and verified successfully.',
@@ -914,10 +916,8 @@ router.put('/students/:studentId/certificates/:certId', verifyFacultySectionAcce
         originalFileName
       });
 
-      const updatedScore = await recalculateAffectedStudentScore(studentId);
+      const { overallScore: updatedScore, profile: full360 } = await recalculateAffectedStudentScore(studentId);
       await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'UPDATE_CERTIFICATE', `STUDENT:${studentId}:CERT:${certId}`);
-
-      const full360 = await db.getStudent360(studentId);
 
       return res.json({
         message: 'Certificate record updated successfully.',
@@ -949,10 +949,8 @@ router.delete('/students/:studentId/certificates/:certId', verifyFacultySectionA
       await deleteFileFromStorage(existingCert.file_path);
     }
 
-    const updatedScore = await recalculateAffectedStudentScore(studentId);
+    const { overallScore: updatedScore, profile: full360 } = await recalculateAffectedStudentScore(studentId);
     await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'DELETE_CERTIFICATE', `STUDENT:${studentId}:CERT:${certId}`);
-
-    const full360 = await db.getStudent360(studentId);
 
     return res.json({
       message: 'Certificate record deleted successfully.',
@@ -1059,8 +1057,7 @@ router.post('/students/:studentId/participation/upload', verifyFacultySectionAcc
         originalFileName
       });
 
-      const updatedScore = await recalculateAffectedStudentScore(studentId);
-      const full360 = await db.getStudent360(studentId);
+      const { overallScore: updatedScore, profile: full360 } = await recalculateAffectedStudentScore(studentId);
 
       await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'UPLOAD_PARTICIPATION', `STUDENT:${studentId}:EVENT:${eventName}`);
 
@@ -1127,8 +1124,7 @@ router.put('/students/:studentId/participation/:partId', verifyFacultySectionAcc
         originalFileName
       });
 
-      const updatedScore = await recalculateAffectedStudentScore(studentId);
-      const full360 = await db.getStudent360(studentId);
+      const { overallScore: updatedScore, profile: full360 } = await recalculateAffectedStudentScore(studentId);
 
       await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'UPDATE_PARTICIPATION', `STUDENT:${studentId}:PART:${partId}`);
 
@@ -1163,8 +1159,7 @@ router.delete('/students/:studentId/participation/:partId', verifyFacultySection
       await deleteFileFromStorage(oldFile);
     }
 
-    const updatedScore = await recalculateAffectedStudentScore(studentId);
-    const full360 = await db.getStudent360(studentId);
+    const { overallScore: updatedScore, profile: full360 } = await recalculateAffectedStudentScore(studentId);
 
     await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'DELETE_PARTICIPATION', `STUDENT:${studentId}:PART:${partId}`);
 
@@ -1564,7 +1559,7 @@ router.delete('/students/:studentId/records/:recordType/:recordId', verifyFacult
 
   try {
     await db.deletePerformanceRecord(recordType, recordId, studentId);
-    const updatedOverallScore = await recalculateAffectedStudentScore(studentId);
+    const { overallScore: updatedOverallScore } = await recalculateAffectedStudentScore(studentId);
 
     await db.logAudit(
       req.user!.id,
@@ -1926,11 +1921,16 @@ router.post('/academics/import-confirm', requireRole('FACULTY', 'ADMIN'), async 
       savedCount++;
     }
 
-    // Trigger Gemini Reward Engine recalculation for affected students
-    for (const sId of affectedStudentIds) {
-      try {
-        await evaluateStudentRewardPoints(sId);
-      } catch (_e) {}
+    // Trigger score recalculation & reward evaluation for affected students with controlled concurrency
+    const affectedArr = Array.from(affectedStudentIds);
+    for (let i = 0; i < affectedArr.length; i += 5) {
+      const batch = affectedArr.slice(i, i + 5);
+      await Promise.all(batch.map(async (sId) => {
+        try {
+          await recalculateAffectedStudentScore(sId);
+          await evaluateStudentRewardPoints(sId);
+        } catch (_e) {}
+      }));
     }
 
     await db.createBulkImportAudit(

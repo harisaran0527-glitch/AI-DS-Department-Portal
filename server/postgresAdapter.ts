@@ -25,29 +25,43 @@ const isPgConfigured = Boolean(
 export let pgPool: pg.Pool | null = null;
 export let sqliteDb: any = null;
 
+const globalForPg = globalThis as unknown as { __pgPool?: pg.Pool };
+
 if (isPgConfigured) {
-  try {
-    const isServerless = Boolean(process.env.VERCEL);
-    pgPool = new Pool({
-      connectionString,
-      ssl: { rejectUnauthorized: false },
-      max: isServerless ? 5 : 10,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000,
-      allowExitOnIdle: true,
-      keepAlive: true,
-      keepAliveInitialDelayMillis: 10000,
-      statement_timeout: 10000,
-      query_timeout: 10000
-    });
+  if (globalForPg.__pgPool) {
+    pgPool = globalForPg.__pgPool;
+  } else {
+    try {
+      let effectiveConnStr = connectionString!;
+      // When connecting to Supabase pooler on port 5432 (Session Mode), automatically route to
+      // port 6543 (Transaction Mode / Supavisor). Transaction mode handles serverless scale
+      // without exhausting physical PostgreSQL connection limits.
+      if (effectiveConnStr.includes('pooler.supabase.com:5432')) {
+        effectiveConnStr = effectiveConnStr.replace(':5432', ':6543');
+      }
 
-    pgPool.on('error', (err) => {
-      console.warn('⚠️ PostgreSQL Pool Idle Client Error (handing gracefully):', err.message);
-    });
+      pgPool = new Pool({
+        connectionString: effectiveConnStr,
+        ssl: { rejectUnauthorized: false },
+        max: 10,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 5000,
+        allowExitOnIdle: true,
+        keepAlive: true,
+        keepAliveInitialDelayMillis: 10000,
+        statement_timeout: 10000,
+        query_timeout: 10000
+      });
 
-    console.log('⚡ PostgreSQL Adapter Initialized (Connecting via Pool)');
-  } catch (err: any) {
-    console.warn('⚠️ Failed to initialize PostgreSQL Pool:', err.message);
+      pgPool.on('error', (err) => {
+        console.warn('⚠️ PostgreSQL Pool Idle Client Error (handling gracefully):', err.message);
+      });
+
+      globalForPg.__pgPool = pgPool;
+      console.log('⚡ PostgreSQL Adapter Initialized (Connecting via Transaction Mode Pooler on Port 6543)');
+    } catch (err: any) {
+      console.warn('⚠️ Failed to initialize PostgreSQL Pool:', err.message);
+    }
   }
 }
 
