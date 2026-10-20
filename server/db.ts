@@ -2930,14 +2930,20 @@ export class SQLiteDB {
     for (const r of records) {
       if (!r.studentId) continue;
       affectedStudentIds.add(r.studentId);
-      const cleanStatus = (r.status || 'UNMARKED').trim().toUpperCase();
-      if (cleanStatus === 'UNMARKED') {
+      const clean = (r.status || 'UNMARKED').trim().toUpperCase();
+      let normStatus = clean;
+      if (clean === 'P' || clean === 'PRESENT') normStatus = 'PRESENT';
+      else if (clean === 'A' || clean === 'ABSENT') normStatus = 'ABSENT';
+      else if (clean === 'ON' || clean === 'OD' || clean === 'ON DUTY' || clean === 'ONDUTY') normStatus = 'OD';
+      else if (clean === 'ML' || clean === 'LEAVE' || clean === 'MEDICAL LEAVE') normStatus = 'ML';
+
+      if (normStatus === 'UNMARKED') {
         unmarkedIds.push(r.studentId);
       } else {
         toUpsert.push({
           id: `attd-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
           studentId: r.studentId,
-          status: cleanStatus
+          status: normStatus
         });
       }
     }
@@ -2979,9 +2985,9 @@ export class SQLiteDB {
             SELECT 
               d.student_id,
               COUNT(*)::int as total_working_days,
-              COUNT(*) FILTER (WHERE d.status = 'PRESENT')::int as present_days,
-              COUNT(*) FILTER (WHERE d.status = 'ABSENT')::int as absent_days,
-              COUNT(*) FILTER (WHERE d.status = 'OD')::int as od_days,
+              COUNT(*) FILTER (WHERE d.status = 'PRESENT' OR d.status = 'P')::int as present_days,
+              COUNT(*) FILTER (WHERE d.status = 'ABSENT' OR d.status = 'A')::int as absent_days,
+              COUNT(*) FILTER (WHERE d.status = 'OD' OR d.status = 'ON')::int as od_days,
               COUNT(*) FILTER (WHERE d.status = 'ML' OR d.status = 'LEAVE')::int as ml_days
             FROM daily_attendance_records d
             JOIN students s ON d.student_id = s.id
@@ -3017,15 +3023,22 @@ export class SQLiteDB {
     } else {
       // Local SQLite fallback
       for (const r of records) {
-        if (!r.status || r.status === 'UNMARKED') {
+        const clean = (r.status || 'UNMARKED').trim().toUpperCase();
+        let normStatus = clean;
+        if (clean === 'P' || clean === 'PRESENT') normStatus = 'PRESENT';
+        else if (clean === 'A' || clean === 'ABSENT') normStatus = 'ABSENT';
+        else if (clean === 'ON' || clean === 'OD' || clean === 'ON DUTY' || clean === 'ONDUTY') normStatus = 'OD';
+        else if (clean === 'ML' || clean === 'LEAVE' || clean === 'MEDICAL LEAVE') normStatus = 'ML';
+
+        if (!r.status || normStatus === 'UNMARKED') {
           await executeRun('DELETE FROM daily_attendance_records WHERE student_id = ? AND date = ?', [r.studentId, date]);
         } else {
           const existing = await queryOne('SELECT id FROM daily_attendance_records WHERE student_id = ? AND date = ?', [r.studentId, date]);
           if (existing) {
-            await executeRun('UPDATE daily_attendance_records SET status = ?, recorded_by = ?, recorded_at = ? WHERE id = ?', [r.status, recordedBy, now, existing.id]);
+            await executeRun('UPDATE daily_attendance_records SET status = ?, recorded_by = ?, recorded_at = ? WHERE id = ?', [normStatus, recordedBy, now, existing.id]);
           } else {
             const id = `attd-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-            await executeRun('INSERT INTO daily_attendance_records (id, student_id, date, status, recorded_by, recorded_at) VALUES (?, ?, ?, ?, ?, ?)', [id, r.studentId, date, r.status, recordedBy, now]);
+            await executeRun('INSERT INTO daily_attendance_records (id, student_id, date, status, recorded_by, recorded_at) VALUES (?, ?, ?, ?, ?, ?)', [id, r.studentId, date, normStatus, recordedBy, now]);
           }
         }
         await this.recalculateStudentAttendancePercentage(r.studentId);
@@ -3193,7 +3206,7 @@ export class SQLiteDB {
       const s = String(raw).trim().toUpperCase();
       if (['P', 'PRESENT', '1', 'YES'].includes(s)) return 'PRESENT';
       if (['A', 'ABSENT', '0', 'NO'].includes(s)) return 'ABSENT';
-      if (['OD', 'ON DUTY', 'ON_DUTY', 'ONDUTY'].includes(s)) return 'OD';
+      if (['OD', 'ON', 'ON DUTY', 'ON_DUTY', 'ONDUTY'].includes(s)) return 'OD';
       if (['ML', 'LEAVE', 'MEDICAL LEAVE', 'L', 'MEDICAL_LEAVE'].includes(s)) return 'ML';
       if (['LA', 'LONG ABSENT', 'LONG_ABSENT'].includes(s)) return 'LONG_ABSENT';
       return null;
@@ -3392,10 +3405,10 @@ export class SQLiteDB {
   public async getAttendanceHistoryForFaculty(facultyId: string): Promise<any[]> {
     const query = `
       SELECT d.date,
-        SUM(CASE WHEN d.status = 'PRESENT' THEN 1 ELSE 0 END) as presentCount,
-        SUM(CASE WHEN d.status = 'ABSENT' THEN 1 ELSE 0 END) as absentCount,
-        SUM(CASE WHEN d.status = 'OD' THEN 1 ELSE 0 END) as odCount,
-        SUM(CASE WHEN d.status = 'ML' THEN 1 ELSE 0 END) as mlCount,
+        SUM(CASE WHEN d.status = 'PRESENT' OR d.status = 'P' THEN 1 ELSE 0 END) as presentCount,
+        SUM(CASE WHEN d.status = 'ABSENT' OR d.status = 'A' THEN 1 ELSE 0 END) as absentCount,
+        SUM(CASE WHEN d.status = 'OD' OR d.status = 'ON' THEN 1 ELSE 0 END) as odCount,
+        SUM(CASE WHEN d.status = 'ML' OR d.status = 'LEAVE' THEN 1 ELSE 0 END) as mlCount,
         SUM(CASE WHEN d.status = 'LONG_ABSENT' THEN 1 ELSE 0 END) as longAbsentCount,
         COUNT(d.id) as totalMarked
       FROM daily_attendance_records d
@@ -3409,10 +3422,10 @@ export class SQLiteDB {
   public async getAttendanceHistory(year?: string, section?: string): Promise<any[]> {
     let query = `
       SELECT d.date,
-        SUM(CASE WHEN d.status = 'PRESENT' THEN 1 ELSE 0 END) as presentCount,
-        SUM(CASE WHEN d.status = 'ABSENT' THEN 1 ELSE 0 END) as absentCount,
-        SUM(CASE WHEN d.status = 'OD' THEN 1 ELSE 0 END) as odCount,
-        SUM(CASE WHEN d.status = 'ML' THEN 1 ELSE 0 END) as mlCount,
+        SUM(CASE WHEN d.status = 'PRESENT' OR d.status = 'P' THEN 1 ELSE 0 END) as presentCount,
+        SUM(CASE WHEN d.status = 'ABSENT' OR d.status = 'A' THEN 1 ELSE 0 END) as absentCount,
+        SUM(CASE WHEN d.status = 'OD' OR d.status = 'ON' THEN 1 ELSE 0 END) as odCount,
+        SUM(CASE WHEN d.status = 'ML' OR d.status = 'LEAVE' THEN 1 ELSE 0 END) as mlCount,
         SUM(CASE WHEN d.status = 'LONG_ABSENT' THEN 1 ELSE 0 END) as longAbsentCount,
         COUNT(d.id) as totalMarked
       FROM daily_attendance_records d
@@ -3488,10 +3501,10 @@ export class SQLiteDB {
     const startDate = (stu && (stu.entry_type === 'Lateral Entry' || (stu as any).entryType === 'Lateral Entry')) ? '2026-08-11' : '2026-07-13';
     const rows = await queryAll("SELECT status FROM daily_attendance_records WHERE student_id = ? AND date >= ?", [studentId, startDate]);
     const totalWorkingDays = rows.length;
-    const presentDays = rows.filter((r) => r.status === 'PRESENT').length;
-    const absentDays = rows.filter((r) => r.status === 'ABSENT').length;
-    const odDays = rows.filter((r) => r.status === 'OD').length;
-    const mlDays = rows.filter((r) => r.status === 'ML').length;
+    const presentDays = rows.filter((r) => r.status === 'PRESENT' || r.status === 'P').length;
+    const absentDays = rows.filter((r) => r.status === 'ABSENT' || r.status === 'A').length;
+    const odDays = rows.filter((r) => r.status === 'OD' || r.status === 'ON').length;
+    const mlDays = rows.filter((r) => r.status === 'ML' || r.status === 'LEAVE').length;
     const attendedCount = presentDays + odDays + mlDays;
     const percentage = totalWorkingDays > 0 ? parseFloat(((attendedCount / totalWorkingDays) * 100).toFixed(2)) : 0.0;
     const now = new Date().toISOString();

@@ -344,12 +344,16 @@ html.light button[class*="bg-red-"],
 html.light button[class*="bg-cyan-6"],
 html.light button[class*="bg-blue-"],
 html.light button[class*="bg-purple-"],
+html.light button[class*="bg-amber-"],
+html.light button[class*="bg-sky-"],
 html.light button.btn-primary,
 html.light a[class*="bg-indigo-"],
 html.light a[class*="bg-emerald-"],
 html.light a[class*="bg-rose-"],
 html.light a[class*="bg-cyan-6"],
 html.light a[class*="bg-blue-"],
+html.light a[class*="bg-amber-"],
+html.light a[class*="bg-sky-"],
 html.light button[class*="bg-indigo-"] *,
 html.light button[class*="bg-emerald-"] *,
 html.light button[class*="bg-rose-"] *,
@@ -357,6 +361,8 @@ html.light button[class*="bg-red-"] *,
 html.light button[class*="bg-cyan-6"] *,
 html.light button[class*="bg-blue-"] *,
 html.light button[class*="bg-purple-"] *,
+html.light button[class*="bg-amber-"] *,
+html.light button[class*="bg-sky-"] *,
 html.light button.btn-primary * {
   color: #FFFFFF !important;
 }
@@ -519,6 +525,7 @@ html.light [class*="bg-cyan-950"] { background-color: #E0F2FE !important; color:
 html.light [class*="bg-indigo-950"] { background-color: #E0E7FF !important; color: #3730A3 !important; border-color: #C7D2FE !important; }
 html.light [class*="bg-emerald-950"] { background-color: #D1FAE5 !important; color: #065F46 !important; border-color: #A7F3D0 !important; }
 html.light [class*="bg-rose-950"] { background-color: #FFE4E6 !important; color: #9F1239 !important; border-color: #FECDD3 !important; }
+html.light [class*="bg-sky-950"] { background-color: #E0F2FE !important; color: #0369A1 !important; border-color: #BAE6FD !important; }
 
 /* Light Mode Custom Scrollbars */
 html.light ::-webkit-scrollbar-track {

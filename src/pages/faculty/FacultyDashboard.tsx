@@ -262,6 +262,17 @@ export const FacultyDashboard: React.FC = () => {
   const [nptelProofWeek, setNptelProofWeek] = useState('Week 1');
   const [nptelProofFile, setNptelProofFile] = useState<File | null>(null);
 
+  // Helper to normalize attendance status to 4 short-form options
+  const toShortAttendanceStatus = (status: string | null | undefined): 'P' | 'A' | 'ON' | 'ML' | 'UNMARKED' => {
+    if (!status) return 'UNMARKED';
+    const clean = status.trim().toUpperCase();
+    if (clean === 'P' || clean === 'PRESENT') return 'P';
+    if (clean === 'A' || clean === 'ABSENT') return 'A';
+    if (clean === 'ON' || clean === 'OD' || clean === 'ON DUTY' || clean === 'ONDUTY') return 'ON';
+    if (clean === 'ML' || clean === 'LEAVE' || clean === 'MEDICAL LEAVE') return 'ML';
+    return 'UNMARKED';
+  };
+
   // --- ATTENDANCE STATE (CR ATTENDANCE WORKFLOW) ---
   const [attGroup, setAttGroup] = useState<'REGULAR' | 'LATERAL'>('REGULAR');
   const [attDate, setAttDate] = useState<string>(() => {
@@ -1003,7 +1014,10 @@ export const FacultyDashboard: React.FC = () => {
         if (Array.isArray(data.records)) {
           const map: Record<string, string> = {};
           data.records.forEach((r: any) => {
-            map[r.studentId || r.student_id] = r.status;
+            const short = toShortAttendanceStatus(r.status);
+            if (short !== 'UNMARKED') {
+              map[r.studentId || r.student_id] = short;
+            }
           });
           setAttStudentStatuses(map);
         }
@@ -1418,10 +1432,18 @@ export const FacultyDashboard: React.FC = () => {
     });
 
     const recordsPayload = targetStudents
-      .map((s) => ({
-        studentId: s.id,
-        status: attStudentStatuses[s.id] || 'UNMARKED'
-      }))
+      .map((s) => {
+        const short = toShortAttendanceStatus(attStudentStatuses[s.id]);
+        let normStatus = 'UNMARKED';
+        if (short === 'P') normStatus = 'PRESENT';
+        else if (short === 'A') normStatus = 'ABSENT';
+        else if (short === 'ON') normStatus = 'OD';
+        else if (short === 'ML') normStatus = 'ML';
+        return {
+          studentId: s.id,
+          status: normStatus
+        };
+      })
       .filter((r) => r.status !== 'UNMARKED');
 
     try {
@@ -3123,21 +3145,21 @@ export const FacultyDashboard: React.FC = () => {
                     return attGroup === 'LATERAL' ? isLat : !isLat;
                   });
                   const total = groupStudents.length;
-                  let present = 0, absent = 0, od = 0, leave = 0, unmarked = 0;
+                  let present = 0, absent = 0, od = 0, ml = 0, unmarked = 0;
 
                   groupStudents.forEach((stu) => {
-                    const st = attStudentStatuses[stu.id] || 'UNMARKED';
-                    if (st === 'PRESENT') present++;
-                    else if (st === 'ABSENT') absent++;
-                    else if (st === 'OD') od++;
-                    else if (st === 'LEAVE' || st === 'ML') leave++;
+                    const st = toShortAttendanceStatus(attStudentStatuses[stu.id]);
+                    if (st === 'P') present++;
+                    else if (st === 'A') absent++;
+                    else if (st === 'ON') od++;
+                    else if (st === 'ML') ml++;
                     else unmarked++;
                   });
 
                   const presentPct = total > 0 ? ((present / total) * 100).toFixed(1) : '0.0';
                   const absentPct = total > 0 ? ((absent / total) * 100).toFixed(1) : '0.0';
                   const odPct = total > 0 ? ((od / total) * 100).toFixed(1) : '0.0';
-                  const leavePct = total > 0 ? ((leave / total) * 100).toFixed(1) : '0.0';
+                  const mlPct = total > 0 ? ((ml / total) * 100).toFixed(1) : '0.0';
 
                   return (
                     <div className="space-y-3">
@@ -3150,7 +3172,7 @@ export const FacultyDashboard: React.FC = () => {
 
                         <div className="bg-emerald-950/40 border border-emerald-800/60 p-3.5 rounded-xl">
                           <div className="text-[10px] text-emerald-400 font-mono uppercase font-bold flex items-center justify-between">
-                            <span>Present</span>
+                            <span>P</span>
                             <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
                           </div>
                           <div className="text-xl font-black text-emerald-300 font-mono mt-1">{present}</div>
@@ -3159,7 +3181,7 @@ export const FacultyDashboard: React.FC = () => {
 
                         <div className="bg-red-950/40 border border-red-800/60 p-3.5 rounded-xl">
                           <div className="text-[10px] text-red-400 font-mono uppercase font-bold flex items-center justify-between">
-                            <span>Absent</span>
+                            <span>A</span>
                             <XCircle className="w-3.5 h-3.5 text-red-400" />
                           </div>
                           <div className="text-xl font-black text-red-300 font-mono mt-1">{absent}</div>
@@ -3168,7 +3190,7 @@ export const FacultyDashboard: React.FC = () => {
 
                         <div className="bg-amber-950/40 border border-amber-800/60 p-3.5 rounded-xl">
                           <div className="text-[10px] text-amber-400 font-mono uppercase font-bold flex items-center justify-between">
-                            <span>On Duty (OD)</span>
+                            <span>ON</span>
                             <Star className="w-3.5 h-3.5 text-amber-400" />
                           </div>
                           <div className="text-xl font-black text-amber-300 font-mono mt-1">{od}</div>
@@ -3177,11 +3199,11 @@ export const FacultyDashboard: React.FC = () => {
 
                         <div className="bg-sky-950/40 border border-sky-800/60 p-3.5 rounded-xl">
                           <div className="text-[10px] text-sky-400 font-mono uppercase font-bold flex items-center justify-between">
-                            <span>Leave / ML</span>
+                            <span>ML</span>
                             <FileText className="w-3.5 h-3.5 text-sky-400" />
                           </div>
-                          <div className="text-xl font-black text-sky-300 font-mono mt-1">{leave}</div>
-                          <div className="text-[10px] text-sky-400/80 font-mono mt-0.5">{leavePct}% of total</div>
+                          <div className="text-xl font-black text-sky-300 font-mono mt-1">{ml}</div>
+                          <div className="text-[10px] text-sky-400/80 font-mono mt-0.5">{mlPct}% of total</div>
                         </div>
 
                         <div className="bg-slate-950 border border-slate-800 p-3.5 rounded-xl">
@@ -3194,10 +3216,10 @@ export const FacultyDashboard: React.FC = () => {
                       {/* Visual Ratio Progress Bar */}
                       {total > 0 && (
                         <div className="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden flex border border-slate-800">
-                          <div style={{ width: `${(present / total) * 100}%` }} className="bg-emerald-500 h-full transition-all" title={`Present: ${present}`} />
-                          <div style={{ width: `${(absent / total) * 100}%` }} className="bg-red-500 h-full transition-all" title={`Absent: ${absent}`} />
-                          <div style={{ width: `${(od / total) * 100}%` }} className="bg-amber-500 h-full transition-all" title={`On Duty: ${od}`} />
-                          <div style={{ width: `${(leave / total) * 100}%` }} className="bg-sky-500 h-full transition-all" title={`Leave: ${leave}`} />
+                          <div style={{ width: `${(present / total) * 100}%` }} className="bg-emerald-500 h-full transition-all" title={`P: ${present}`} />
+                          <div style={{ width: `${(absent / total) * 100}%` }} className="bg-red-500 h-full transition-all" title={`A: ${absent}`} />
+                          <div style={{ width: `${(od / total) * 100}%` }} className="bg-amber-500 h-full transition-all" title={`ON: ${od}`} />
+                          <div style={{ width: `${(ml / total) * 100}%` }} className="bg-sky-500 h-full transition-all" title={`ML: ${ml}`} />
                           <div style={{ width: `${(unmarked / total) * 100}%` }} className="bg-slate-800 h-full transition-all" title={`Unmarked: ${unmarked}`} />
                         </div>
                       )}
@@ -3223,7 +3245,7 @@ export const FacultyDashboard: React.FC = () => {
                         students.forEach((s) => {
                           const isLat = (s.entryType === 'Lateral Entry' || (s as any).entry_type === 'Lateral Entry');
                           if (attGroup === 'LATERAL' ? isLat : !isLat) {
-                            copy[s.id] = 'PRESENT';
+                            copy[s.id] = 'P';
                           }
                         });
                         setAttStudentStatuses(copy);
@@ -3231,7 +3253,7 @@ export const FacultyDashboard: React.FC = () => {
                       className="bg-emerald-950 text-emerald-300 border border-emerald-700/80 hover:bg-emerald-900 px-3 py-1.5 rounded-lg font-bold flex items-center space-x-1.5 transition-all"
                     >
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Mark All Present</span>
+                      <span>Mark All P</span>
                     </button>
                     <button
                       type="button"
@@ -3240,7 +3262,7 @@ export const FacultyDashboard: React.FC = () => {
                         students.forEach((s) => {
                           const isLat = (s.entryType === 'Lateral Entry' || (s as any).entry_type === 'Lateral Entry');
                           if (attGroup === 'LATERAL' ? isLat : !isLat) {
-                            copy[s.id] = 'ABSENT';
+                            copy[s.id] = 'A';
                           }
                         });
                         setAttStudentStatuses(copy);
@@ -3248,7 +3270,7 @@ export const FacultyDashboard: React.FC = () => {
                       className="bg-red-950 text-red-300 border border-red-700/80 hover:bg-red-900 px-3 py-1.5 rounded-lg font-bold flex items-center space-x-1.5 transition-all"
                     >
                       <XCircle className="w-3.5 h-3.5 text-red-400" />
-                      <span>Mark All Absent</span>
+                      <span>Mark All A</span>
                     </button>
                     <button
                       type="button"
@@ -3284,7 +3306,7 @@ export const FacultyDashboard: React.FC = () => {
                     }
 
                     return list.map((stu, idx) => {
-                      const currentStatus = attStudentStatuses[stu.id] || 'UNMARKED';
+                      const currentStatus = toShortAttendanceStatus(attStudentStatuses[stu.id]);
                       const isSelected = selectedStudent?.id === stu.id;
 
                       return (
@@ -3307,28 +3329,28 @@ export const FacultyDashboard: React.FC = () => {
                             </div>
 
                             <div>
-                              {currentStatus === 'PRESENT' && (
+                              {currentStatus === 'P' && (
                                 <span className="inline-flex items-center space-x-1 bg-emerald-950 border border-emerald-700 text-emerald-300 text-[10px] font-mono px-2 py-0.5 rounded-full font-bold">
                                   <CheckCircle className="w-3 h-3 text-emerald-400" />
-                                  <span>PRESENT</span>
+                                  <span>P</span>
                                 </span>
                               )}
-                              {currentStatus === 'ABSENT' && (
+                              {currentStatus === 'A' && (
                                 <span className="inline-flex items-center space-x-1 bg-red-950 border border-red-700 text-red-300 text-[10px] font-mono px-2 py-0.5 rounded-full font-bold">
                                   <XCircle className="w-3 h-3 text-red-400" />
-                                  <span>ABSENT</span>
+                                  <span>A</span>
                                 </span>
                               )}
-                              {currentStatus === 'OD' && (
+                              {currentStatus === 'ON' && (
                                 <span className="inline-flex items-center space-x-1 bg-amber-950 border border-amber-700 text-amber-300 text-[10px] font-mono px-2 py-0.5 rounded-full font-bold">
                                   <Star className="w-3 h-3 text-amber-400" />
-                                  <span>ON DUTY</span>
+                                  <span>ON</span>
                                 </span>
                               )}
-                              {(currentStatus === 'LEAVE' || currentStatus === 'ML') && (
+                              {currentStatus === 'ML' && (
                                 <span className="inline-flex items-center space-x-1 bg-sky-950 border border-sky-700 text-sky-300 text-[10px] font-mono px-2 py-0.5 rounded-full font-bold">
                                   <FileText className="w-3 h-3 text-sky-400" />
-                                  <span>LEAVE</span>
+                                  <span>ML</span>
                                 </span>
                               )}
                               {currentStatus === 'UNMARKED' && (
@@ -3342,10 +3364,10 @@ export const FacultyDashboard: React.FC = () => {
                           {/* Attendance Mark Action Buttons - Touch friendly */}
                           <div className="grid grid-cols-4 gap-1.5 pt-1 border-t border-slate-900">
                             {[
-                              { key: 'PRESENT', label: 'Present', color: 'bg-emerald-600 text-white shadow-emerald-900/50' },
-                              { key: 'ABSENT', label: 'Absent', color: 'bg-red-600 text-white shadow-red-900/50' },
-                              { key: 'OD', label: 'OD', color: 'bg-amber-600 text-white shadow-amber-900/50' },
-                              { key: 'LEAVE', label: 'Leave', color: 'bg-sky-600 text-white shadow-sky-900/50' }
+                              { key: 'P', label: 'P', color: 'bg-emerald-600 text-white shadow-emerald-900/50' },
+                              { key: 'A', label: 'A', color: 'bg-red-600 text-white shadow-red-900/50' },
+                              { key: 'ON', label: 'ON', color: 'bg-amber-600 text-white shadow-amber-900/50' },
+                              { key: 'ML', label: 'ML', color: 'bg-sky-600 text-white shadow-sky-900/50' }
                             ].map((opt) => {
                               const isActive = currentStatus === opt.key;
                               return (
@@ -3408,7 +3430,7 @@ export const FacultyDashboard: React.FC = () => {
                           }
 
                           return list.map((stu, idx) => {
-                            const currentStatus = attStudentStatuses[stu.id] || 'UNMARKED';
+                            const currentStatus = toShortAttendanceStatus(attStudentStatuses[stu.id]);
                             const isSelected = selectedStudent?.id === stu.id;
 
                             return (
@@ -3457,10 +3479,10 @@ export const FacultyDashboard: React.FC = () => {
                                 <td className="py-3.5 px-4">
                                   <div className="flex items-center justify-center space-x-1.5 max-w-xs mx-auto">
                                     {[
-                                      { key: 'PRESENT', label: 'Present', color: 'bg-emerald-600 text-white shadow-emerald-900/50' },
-                                      { key: 'ABSENT', label: 'Absent', color: 'bg-red-600 text-white shadow-red-900/50' },
-                                      { key: 'OD', label: 'On Duty', color: 'bg-amber-600 text-white shadow-amber-900/50' },
-                                      { key: 'LEAVE', label: 'Leave', color: 'bg-sky-600 text-white shadow-sky-900/50' }
+                                      { key: 'P', label: 'P', color: 'bg-emerald-600 text-white shadow-emerald-900/50' },
+                                      { key: 'A', label: 'A', color: 'bg-red-600 text-white shadow-red-900/50' },
+                                      { key: 'ON', label: 'ON', color: 'bg-amber-600 text-white shadow-amber-900/50' },
+                                      { key: 'ML', label: 'ML', color: 'bg-sky-600 text-white shadow-sky-900/50' }
                                     ].map((opt) => {
                                       const isActive = currentStatus === opt.key;
                                       return (
@@ -3481,28 +3503,28 @@ export const FacultyDashboard: React.FC = () => {
                                   </div>
                                 </td>
                                 <td className="py-3.5 px-4 text-center">
-                                  {currentStatus === 'PRESENT' && (
+                                  {currentStatus === 'P' && (
                                     <span className="inline-flex items-center space-x-1 bg-emerald-950 border border-emerald-700 text-emerald-300 text-[11px] font-mono px-2.5 py-1 rounded-full font-bold">
                                       <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                                      <span>PRESENT</span>
+                                      <span>P</span>
                                     </span>
                                   )}
-                                  {currentStatus === 'ABSENT' && (
+                                  {currentStatus === 'A' && (
                                     <span className="inline-flex items-center space-x-1 bg-red-950 border border-red-700 text-red-300 text-[11px] font-mono px-2.5 py-1 rounded-full font-bold">
                                       <XCircle className="w-3.5 h-3.5 text-red-400" />
-                                      <span>ABSENT</span>
+                                      <span>A</span>
                                     </span>
                                   )}
-                                  {currentStatus === 'OD' && (
+                                  {currentStatus === 'ON' && (
                                     <span className="inline-flex items-center space-x-1 bg-amber-950 border border-amber-700 text-amber-300 text-[11px] font-mono px-2.5 py-1 rounded-full font-bold">
                                       <Star className="w-3.5 h-3.5 text-amber-400" />
-                                      <span>ON DUTY</span>
+                                      <span>ON</span>
                                     </span>
                                   )}
-                                  {(currentStatus === 'LEAVE' || currentStatus === 'ML') && (
+                                  {currentStatus === 'ML' && (
                                     <span className="inline-flex items-center space-x-1 bg-sky-950 border border-sky-700 text-sky-300 text-[11px] font-mono px-2.5 py-1 rounded-full font-bold">
                                       <FileText className="w-3.5 h-3.5 text-sky-400" />
-                                      <span>LEAVE</span>
+                                      <span>ML</span>
                                     </span>
                                   )}
                                   {currentStatus === 'UNMARKED' && (
@@ -3627,15 +3649,15 @@ export const FacultyDashboard: React.FC = () => {
                               <span className="text-white font-bold">{stu.totalWorkingDays || 0}</span>
                             </div>
                             <div className="bg-emerald-950/40 p-1.5 rounded">
-                              <span className="text-emerald-500 block text-[9px]">Pres</span>
+                              <span className="text-emerald-500 block text-[9px]">P</span>
                               <span className="text-emerald-300 font-bold">{stu.presentDays || 0}</span>
                             </div>
                             <div className="bg-red-950/40 p-1.5 rounded">
-                              <span className="text-red-500 block text-[9px]">Abs</span>
+                              <span className="text-red-500 block text-[9px]">A</span>
                               <span className="text-red-300 font-bold">{stu.absentDays || 0}</span>
                             </div>
                             <div className="bg-amber-950/40 p-1.5 rounded">
-                              <span className="text-amber-500 block text-[9px]">OD</span>
+                              <span className="text-amber-500 block text-[9px]">ON</span>
                               <span className="text-amber-300 font-bold">{stu.odDays || 0}</span>
                             </div>
                             <div className="bg-sky-950/40 p-1.5 rounded">
@@ -3659,10 +3681,10 @@ export const FacultyDashboard: React.FC = () => {
                           <th className="py-3.5 px-4 font-bold">Register Number</th>
                           <th className="py-3.5 px-4 font-bold">Student Name</th>
                           <th className="py-3.5 px-4 font-bold text-center">Working Days</th>
-                          <th className="py-3.5 px-4 font-bold text-center">Present</th>
-                          <th className="py-3.5 px-4 font-bold text-center">Absent</th>
-                          <th className="py-3.5 px-4 font-bold text-center">On Duty</th>
-                          <th className="py-3.5 px-4 font-bold text-center">Leave / ML</th>
+                          <th className="py-3.5 px-4 font-bold text-center">P</th>
+                          <th className="py-3.5 px-4 font-bold text-center">A</th>
+                          <th className="py-3.5 px-4 font-bold text-center">ON</th>
+                          <th className="py-3.5 px-4 font-bold text-center">ML</th>
                           <th className="py-3.5 px-4 font-bold text-center">Attendance %</th>
                         </tr>
                       </thead>
@@ -3768,7 +3790,7 @@ export const FacultyDashboard: React.FC = () => {
 
                     <textarea
                       rows={4}
-                      placeholder={`Register Number, Date, Status\n23AD001, 2026-09-01, PRESENT\n23AD002, 2026-09-01, ABSENT\n23AD003, 2026-09-01, OD`}
+                      placeholder={`Register Number, Date, Status\n23AD001, 2026-09-01, P\n23AD002, 2026-09-01, A\n23AD003, 2026-09-01, ON\n23AD004, 2026-09-01, ML`}
                       value={bulkInputText}
                       onChange={(e) => setBulkInputText(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-amber-500"
@@ -3951,14 +3973,20 @@ export const FacultyDashboard: React.FC = () => {
                                 <td className="py-2.5 px-4 text-white font-sans font-bold">{r.studentName}</td>
                                 <td className="py-2.5 px-4 text-center text-emerald-400 font-bold">{r.date}</td>
                                 <td className="py-2.5 px-4 text-center">
-                                  <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
-                                    r.status === 'PRESENT' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
-                                    r.status === 'ABSENT' ? 'bg-red-950 text-red-300 border border-red-800' :
-                                    r.status === 'OD' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
-                                    'bg-sky-950 text-sky-300 border border-sky-800'
-                                  }`}>
-                                    {r.status}
-                                  </span>
+                                  {(() => {
+                                    const short = toShortAttendanceStatus(r.status);
+                                    return (
+                                      <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
+                                        short === 'P' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+                                        short === 'A' ? 'bg-red-950 text-red-300 border border-red-800' :
+                                        short === 'ON' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                                        short === 'ML' ? 'bg-sky-950 text-sky-300 border border-sky-800' :
+                                        'bg-slate-800 text-slate-400 border border-slate-700'
+                                      }`}>
+                                        {short}
+                                      </span>
+                                    );
+                                  })()}
                                 </td>
                               </tr>
                             ))}

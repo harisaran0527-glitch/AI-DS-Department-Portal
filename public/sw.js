@@ -1,5 +1,5 @@
 // AVSEC Salem AI & DS Department Portal — Service Worker
-const CACHE_NAME = 'avsec-aids-portal-v3';
+const CACHE_NAME = 'avsec-aids-portal-v4';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

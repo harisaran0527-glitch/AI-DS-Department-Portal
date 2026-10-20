@@ -795,29 +795,29 @@ export const StudentDashboard: React.FC = () => {
                         <div className="text-xl font-black text-white mt-1">{totalWorking}</div>
                       </div>
                       <div className="bg-emerald-950/40 border border-emerald-800/60 p-3.5 rounded-xl">
-                        <div className="text-[10px] text-emerald-400 uppercase font-bold flex items-center justify-between">
-                          <span>Present</span>
+                        <div className="text-[10px] text-emerald-400 font-mono uppercase font-bold flex items-center justify-between">
+                          <span>P</span>
                           <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
                         </div>
                         <div className="text-xl font-black text-emerald-300 mt-1">{presentDays}</div>
                       </div>
                       <div className="bg-red-950/40 border border-red-800/60 p-3.5 rounded-xl">
-                        <div className="text-[10px] text-red-400 uppercase font-bold flex items-center justify-between">
-                          <span>Absent</span>
+                        <div className="text-[10px] text-red-400 font-mono uppercase font-bold flex items-center justify-between">
+                          <span>A</span>
                           <XCircle className="w-3.5 h-3.5 text-red-400" />
                         </div>
                         <div className="text-xl font-black text-red-300 mt-1">{absentDays}</div>
                       </div>
                       <div className="bg-amber-950/40 border border-amber-800/60 p-3.5 rounded-xl">
-                        <div className="text-[10px] text-amber-400 uppercase font-bold flex items-center justify-between">
-                          <span>On Duty (OD)</span>
+                        <div className="text-[10px] text-amber-400 font-mono uppercase font-bold flex items-center justify-between">
+                          <span>ON</span>
                           <Star className="w-3.5 h-3.5 text-amber-400" />
                         </div>
                         <div className="text-xl font-black text-amber-300 mt-1">{odDays}</div>
                       </div>
                       <div className="bg-sky-950/40 border border-sky-800/60 p-3.5 rounded-xl">
-                        <div className="text-[10px] text-sky-400 uppercase font-bold flex items-center justify-between">
-                          <span>Medical Leave</span>
+                        <div className="text-[10px] text-sky-400 font-mono uppercase font-bold flex items-center justify-between">
+                          <span>ML</span>
                           <FileText className="w-3.5 h-3.5 text-sky-400" />
                         </div>
                         <div className="text-xl font-black text-sky-300 mt-1">{mlDays}</div>
@@ -835,9 +835,9 @@ export const StudentDashboard: React.FC = () => {
                     {/* Progress Bar */}
                     {totalWorking > 0 && (
                       <div className="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden flex border border-slate-800">
-                        <div style={{ width: `${(presentDays / totalWorking) * 100}%` }} className="bg-emerald-500 h-full" title={`Present: ${presentDays}`} />
-                        <div style={{ width: `${(absentDays / totalWorking) * 100}%` }} className="bg-red-500 h-full" title={`Absent: ${absentDays}`} />
-                        <div style={{ width: `${(odDays / totalWorking) * 100}%` }} className="bg-amber-500 h-full" title={`OD: ${odDays}`} />
+                        <div style={{ width: `${(presentDays / totalWorking) * 100}%` }} className="bg-emerald-500 h-full" title={`P: ${presentDays}`} />
+                        <div style={{ width: `${(absentDays / totalWorking) * 100}%` }} className="bg-red-500 h-full" title={`A: ${absentDays}`} />
+                        <div style={{ width: `${(odDays / totalWorking) * 100}%` }} className="bg-amber-500 h-full" title={`ON: ${odDays}`} />
                         <div style={{ width: `${(mlDays / totalWorking) * 100}%` }} className="bg-sky-500 h-full" title={`ML: ${mlDays}`} />
                       </div>
                     )}
@@ -866,48 +866,64 @@ export const StudentDashboard: React.FC = () => {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
-                          {_attendance.historyLogs.map((log: any, idx: number) => (
-                            <tr key={idx} className="hover:bg-slate-900/60">
-                              <td className="py-2.5 px-4 text-center text-slate-500">{idx + 1}</td>
-                              <td className="py-2.5 px-4 font-bold text-emerald-400">{log.date}</td>
-                              <td className="py-2.5 px-4 text-center">
-                                <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
-                                  log.status === 'PRESENT' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
-                                  log.status === 'ABSENT' ? 'bg-red-950 text-red-300 border border-red-800' :
-                                  log.status === 'OD' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
-                                  'bg-sky-950 text-sky-300 border border-sky-800'
-                                }`}>
-                                  {log.status}
-                                </span>
-                              </td>
-                              <td className="py-2.5 px-4 text-slate-400 text-[11px]">{log.recordedBy || 'Faculty'}</td>
-                            </tr>
-                          ))}
+                          {_attendance.historyLogs.map((log: any, idx: number) => {
+                            const raw = (log.status || '').trim().toUpperCase();
+                            const shortStatus = (raw === 'P' || raw === 'PRESENT') ? 'P' :
+                                                (raw === 'A' || raw === 'ABSENT') ? 'A' :
+                                                (raw === 'ON' || raw === 'OD' || raw === 'ON DUTY' || raw === 'ONDUTY') ? 'ON' :
+                                                (raw === 'ML' || raw === 'LEAVE' || raw === 'MEDICAL LEAVE') ? 'ML' : (raw || 'UNMARKED');
+                            return (
+                              <tr key={idx} className="hover:bg-slate-900/60">
+                                <td className="py-2.5 px-4 text-center text-slate-500">{idx + 1}</td>
+                                <td className="py-2.5 px-4 font-bold text-emerald-400">{log.date}</td>
+                                <td className="py-2.5 px-4 text-center">
+                                  <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
+                                    shortStatus === 'P' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+                                    shortStatus === 'A' ? 'bg-red-950 text-red-300 border border-red-800' :
+                                    shortStatus === 'ON' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                                    shortStatus === 'ML' ? 'bg-sky-950 text-sky-300 border border-sky-800' :
+                                    'bg-slate-800 text-slate-400 border border-slate-700'
+                                  }`}>
+                                    {shortStatus}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-4 text-slate-400 text-[11px]">{log.recordedBy || 'Faculty'}</td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
 
                     {/* Mobile cards */}
                     <div className="sm:hidden space-y-2 max-h-96 overflow-y-auto pr-1">
-                      {_attendance.historyLogs.map((log: any, idx: number) => (
-                        <div key={idx} className="bg-slate-950 border border-slate-800/80 rounded-xl p-2.5 flex items-center justify-between text-xs">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-[10px] text-slate-500 font-mono w-5">#{idx + 1}</span>
-                            <div>
-                              <div className="font-bold text-emerald-400 font-mono">{log.date}</div>
-                              <div className="text-[10px] text-slate-500">{log.recordedBy || 'Faculty'}</div>
+                      {_attendance.historyLogs.map((log: any, idx: number) => {
+                        const raw = (log.status || '').trim().toUpperCase();
+                        const shortStatus = (raw === 'P' || raw === 'PRESENT') ? 'P' :
+                                            (raw === 'A' || raw === 'ABSENT') ? 'A' :
+                                            (raw === 'ON' || raw === 'OD' || raw === 'ON DUTY' || raw === 'ONDUTY') ? 'ON' :
+                                            (raw === 'ML' || raw === 'LEAVE' || raw === 'MEDICAL LEAVE') ? 'ML' : (raw || 'UNMARKED');
+                        return (
+                          <div key={idx} className="bg-slate-950 border border-slate-800/80 rounded-xl p-2.5 flex items-center justify-between text-xs">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-[10px] text-slate-500 font-mono w-5">#{idx + 1}</span>
+                              <div>
+                                <div className="font-bold text-emerald-400 font-mono">{log.date}</div>
+                                <div className="text-[10px] text-slate-500">{log.recordedBy || 'Faculty'}</div>
+                              </div>
                             </div>
+                            <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] font-mono ${
+                              shortStatus === 'P' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+                              shortStatus === 'A' ? 'bg-red-950 text-red-300 border border-red-800' :
+                              shortStatus === 'ON' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                              shortStatus === 'ML' ? 'bg-sky-950 text-sky-300 border border-sky-800' :
+                              'bg-slate-800 text-slate-400 border border-slate-700'
+                            }`}>
+                              {shortStatus}
+                            </span>
                           </div>
-                          <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] font-mono ${
-                            log.status === 'PRESENT' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
-                            log.status === 'ABSENT' ? 'bg-red-950 text-red-300 border border-red-800' :
-                            log.status === 'OD' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
-                            'bg-sky-950 text-sky-300 border border-sky-800'
-                          }`}>
-                            {log.status}
-                          </span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </>
                 ) : (
