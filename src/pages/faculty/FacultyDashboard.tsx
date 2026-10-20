@@ -606,6 +606,23 @@ export const FacultyDashboard: React.FC = () => {
       return;
     }
 
+    if (nptelProofFile.size > 10 * 1024 * 1024) {
+      alert('File size exceeds 10 MB. Please upload a smaller file.');
+      return;
+    }
+
+    const nptelExt = nptelProofFile.name.toLowerCase();
+    const dangerousExts = ['.exe', '.bat', '.cmd', '.sh', '.bash', '.php', '.pl', '.py', '.cgi', '.jar', '.vbs', '.js', '.ts', '.msi'];
+    if (dangerousExts.some(ext => nptelExt.endsWith(ext))) {
+      alert('Executable or script files are strictly prohibited.');
+      return;
+    }
+
+    if (!nptelExt.match(/\.(pdf|jpg|jpeg|png)$/i)) {
+      alert('Invalid file format. Only PDF (.pdf) and Images (.jpg, .jpeg, .png) are allowed.');
+      return;
+    }
+
     const weekNo = parseInt(nptelProofWeek.replace('Week ', ''), 10);
     if (isNaN(weekNo) || weekNo < 1 || weekNo > 10) {
       alert('Invalid week selection. Please select Week 1 through Week 10.');
@@ -668,18 +685,23 @@ export const FacultyDashboard: React.FC = () => {
     }
 
     if (!editingCert && !certFile) {
-      setCertError('Please select a certificate file (PDF, JPG, or PNG under 10MB).');
+      setCertError('Please select a certificate file (PDF, JPG, or PNG under 10 MB).');
       return;
     }
 
     if (certFile) {
-      const allowed = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
-      if (!allowed.includes(certFile.type) && !certFile.name.match(/\.(pdf|jpg|jpeg|png)$/i)) {
-        setCertError('Invalid file type. Only PDF, JPG, and PNG files are allowed.');
+      if (certFile.size > 10 * 1024 * 1024) {
+        setCertError('File size exceeds 10 MB. Please upload a smaller file.');
         return;
       }
-      if (certFile.size > 10 * 1024 * 1024) {
-        setCertError('File size exceeds the 10MB limit.');
+      const certExt = certFile.name.toLowerCase();
+      const dangerousExts = ['.exe', '.bat', '.cmd', '.sh', '.bash', '.php', '.pl', '.py', '.cgi', '.jar', '.vbs', '.js', '.ts', '.msi'];
+      if (dangerousExts.some(ext => certExt.endsWith(ext))) {
+        setCertError('Executable or script files are strictly prohibited.');
+        return;
+      }
+      if (!certExt.match(/\.(pdf|jpg|jpeg|png)$/i)) {
+        setCertError('Invalid file type. Only PDF, JPG, and PNG files are allowed.');
         return;
       }
     }
@@ -770,18 +792,23 @@ export const FacultyDashboard: React.FC = () => {
     }
 
     if (!editingPart && !partFile) {
-      setPartError('Please select a proof document or certificate file (PDF, JPG, or PNG under 10MB).');
+      setPartError('Please select a proof document or certificate file (PDF, JPG, or PNG under 10 MB).');
       return;
     }
 
     if (partFile) {
-      const allowed = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
-      if (!allowed.includes(partFile.type) && !partFile.name.match(/\.(pdf|jpg|jpeg|png)$/i)) {
-        setPartError('Invalid file type. Only PDF, JPG, and PNG files are allowed.');
+      if (partFile.size > 10 * 1024 * 1024) {
+        setPartError('File size exceeds 10 MB. Please upload a smaller file.');
         return;
       }
-      if (partFile.size > 10 * 1024 * 1024) {
-        setPartError('File size exceeds the 10MB limit.');
+      const partExt = partFile.name.toLowerCase();
+      const dangerousExts = ['.exe', '.bat', '.cmd', '.sh', '.bash', '.php', '.pl', '.py', '.cgi', '.jar', '.vbs', '.js', '.ts', '.msi'];
+      if (dangerousExts.some(ext => partExt.endsWith(ext))) {
+        setPartError('Executable or script files are strictly prohibited.');
+        return;
+      }
+      if (!partExt.match(/\.(pdf|jpg|jpeg|png)$/i)) {
+        setPartError('Invalid file type. Only PDF, JPG, and PNG files are allowed.');
         return;
       }
     }
@@ -878,6 +905,24 @@ export const FacultyDashboard: React.FC = () => {
   const handleBulkFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File size exceeds 10 MB. Please upload a smaller file.');
+      return;
+    }
+
+    const fileName = file.name.toLowerCase();
+    const dangerousExts = ['.exe', '.bat', '.cmd', '.sh', '.bash', '.php', '.pl', '.py', '.cgi', '.jar', '.vbs', '.js', '.ts', '.msi'];
+    if (dangerousExts.some(ext => fileName.endsWith(ext))) {
+      alert('Executable or script files are strictly prohibited.');
+      return;
+    }
+
+    if (!fileName.endsWith('.csv') && !fileName.endsWith('.txt')) {
+      alert('Invalid file format. Only CSV (.csv) files are allowed.');
+      return;
+    }
+
     setBulkFile(file);
     Papa.parse(file, {
       header: true,
@@ -3824,6 +3869,7 @@ export const FacultyDashboard: React.FC = () => {
                     <div>
                       <h4 className="font-bold text-white text-xs font-sans uppercase mb-1">Option 1: Upload CSV File</h4>
                       <p className="text-[11px] text-slate-400">Select or drop a `.csv` file containing monthly attendance data.</p>
+                      <p className="text-[11px] text-cyan-400 font-mono font-semibold">Maximum file size: 10 MB</p>
                     </div>
 
                     <div className="border-2 border-dashed border-slate-800 hover:border-amber-500/50 p-6 rounded-xl text-center transition-all bg-slate-900/30 space-y-2">
@@ -5692,7 +5738,8 @@ export const FacultyDashboard: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-slate-300 font-bold block mb-1">Proof File (JPG, JPEG, PNG, PDF)</label>
+                <label className="text-slate-300 font-bold block mb-0.5">Proof File (JPG, JPEG, PNG, PDF)</label>
+                <p className="text-[11px] text-cyan-400 font-mono mb-1.5 font-semibold">Maximum file size: 10 MB</p>
                 <input
                   type="file"
                   required
@@ -6144,8 +6191,8 @@ export const FacultyDashboard: React.FC = () => {
                   onChange={(e) => setCertFile(e.target.files?.[0] || null)}
                   className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-slate-300 font-mono text-xs file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-sky-950 file:text-sky-300 hover:file:bg-sky-900"
                 />
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Supported Formats: PDF, JPG, PNG | Max File Size: 10MB {editingCert && '(Leave empty to keep existing file)'}
+                <p className="text-[10px] text-cyan-400 font-mono mt-1 font-semibold">
+                  Maximum file size: 10 MB | Supported Formats: PDF, JPG, PNG {editingCert && '(Leave empty to keep existing file)'}
                 </p>
               </div>
 
@@ -6366,8 +6413,8 @@ export const FacultyDashboard: React.FC = () => {
                   onChange={(e) => setPartFile(e.target.files?.[0] || null)}
                   className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-slate-300 font-mono text-xs file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-indigo-950 file:text-indigo-300 hover:file:bg-indigo-900"
                 />
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Supported Formats: PDF, JPG, PNG | Max File Size: 10MB {editingPart && '(Leave empty to keep existing proof file)'}
+                <p className="text-[10px] text-cyan-400 font-mono mt-1 font-semibold">
+                  Maximum file size: 10 MB | Supported Formats: PDF, JPG, PNG {editingPart && '(Leave empty to keep existing proof file)'}
                 </p>
               </div>
 

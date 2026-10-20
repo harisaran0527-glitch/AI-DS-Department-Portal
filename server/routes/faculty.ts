@@ -6,52 +6,33 @@ import { db } from '../db.js';
 import { authenticateToken, requireRole, verifyFacultySectionAccess, AuthRequest } from '../middleware/auth.js';
 import { calculateCategoryScores, computeOverallScore } from '../scoringEngine.js';
 import { generateSecureRandomPassword } from '../services/security.js';
+import {
+  MAX_FILE_SIZE_BYTES,
+  MSG_FILE_TOO_LARGE,
+  DANGEROUS_EXTENSIONS,
+  PROOF_ALLOWED_EXTENSIONS,
+  uploadFileToStorage,
+  downloadFileFromStorage,
+  deleteFileFromStorage,
+  getMimeFromPath
+} from '../storage.js';
 
 const router = Router();
 
-const UPLOADS_DIR = process.env.VERCEL ? '/tmp' : path.resolve(process.cwd(), 'server', 'uploads');
-try {
-  if (!fs.existsSync(UPLOADS_DIR)) {
-    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-  }
-} catch (_err) {
-  // Ignore filesystem error in read-only environment
-}
-
-const nptelProofStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, UPLOADS_DIR);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const safeName = `nptel-proof-${Date.now()}-${Math.random().toString(36).substring(2, 8)}${ext}`;
-    cb(null, safeName);
-  }
-});
-
-const certStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, UPLOADS_DIR);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const safeName = `cert-${Date.now()}-${Math.random().toString(36).substring(2, 8)}${ext}`;
-    cb(null, safeName);
-  }
-});
-
-const ALLOWED_CERT_EXTS = new Set(['.jpg', '.jpeg', '.png', '.pdf']);
-const ALLOWED_CERT_MIMES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/pjpeg', 'application/pdf']);
+// In-Memory storage: avoids ephemeral /tmp loss on Vercel Serverless
+const nptelProofStorage = multer.memoryStorage();
+const certStorage = multer.memoryStorage();
 
 const nptelProofUpload = multer({
   storage: nptelProofStorage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: MAX_FILE_SIZE_BYTES },
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    const mime = file.mimetype.toLowerCase();
-
-    if (!ALLOWED_CERT_EXTS.has(ext) || !ALLOWED_CERT_MIMES.has(mime)) {
-      return cb(new Error('Invalid file type. Supported formats are JPG, JPEG, PNG, and PDF under 10 MB.'));
+    if (DANGEROUS_EXTENSIONS.has(ext)) {
+      return cb(new Error('Executable or script files are strictly prohibited.'));
+    }
+    if (!PROOF_ALLOWED_EXTENSIONS.has(ext)) {
+      return cb(new Error('Invalid file type. Supported formats are PDF, JPG, and PNG under 10 MB.'));
     }
     cb(null, true);
   }
@@ -59,12 +40,13 @@ const nptelProofUpload = multer({
 
 const certUpload = multer({
   storage: certStorage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: MAX_FILE_SIZE_BYTES },
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    const mime = file.mimetype.toLowerCase();
-
-    if (!ALLOWED_CERT_EXTS.has(ext) || !ALLOWED_CERT_MIMES.has(mime)) {
+    if (DANGEROUS_EXTENSIONS.has(ext)) {
+      return cb(new Error('Executable or script files are strictly prohibited.'));
+    }
+    if (!PROOF_ALLOWED_EXTENSIONS.has(ext)) {
       return cb(new Error('Invalid file type. Supported formats are PDF, JPG, and PNG under 10 MB.'));
     }
     cb(null, true);
@@ -840,6 +822,9 @@ router.get('/students/:studentId/nptel-proofs', verifyFacultySectionAccess, asyn
 router.post('/students/:studentId/nptel-proofs', verifyFacultySectionAccess, (req: AuthRequest, res: Response) => {
   nptelProofUpload.single('file')(req, res, async (err: any) => {
     if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE' || err.message?.includes('File size exceeds')) {
+        return res.status(400).json({ error: MSG_FILE_TOO_LARGE });
+      }
       return res.status(400).json({ error: err.message || 'Proof file upload failed.' });
     }
 
@@ -847,17 +832,24 @@ router.post('/students/:studentId/nptel-proofs', verifyFacultySectionAccess, (re
       return res.status(400).json({ error: 'Proof screenshot/file is required.' });
     }
 
+    if (req.file.size > MAX_FILE_SIZE_BYTES) {
+      return res.status(400).json({ error: MSG_FILE_TOO_LARGE });
+    }
+
     const { studentId } = req.params;
     const weekVal = req.body.weekNo || req.body.week;
     const weekNo = parseInt(String(weekVal).replace('Week ', ''), 10);
 
     if (isNaN(weekNo) || weekNo < 1 || weekNo > 10) {
-      if (req.file.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
       return res.status(400).json({ error: 'Week number must be an integer between 1 and 10.' });
     }
 
     try {
-      const proofRecord = await db.addNptelProof(studentId, weekNo, req.file.filename, req.file.originalname);
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      const storagePath = `nptel/${studentId}/week-${weekNo}-${Date.now()}${ext}`;
+      await uploadFileToStorage(storagePath, req.file.buffer, req.file.mimetype);
+
+      const proofRecord = await db.addNptelProof(studentId, weekNo, storagePath, req.file.originalname);
       await db.logAudit(
         req.user!.id,
         req.user!.email,
@@ -875,7 +867,6 @@ router.post('/students/:studentId/nptel-proofs', verifyFacultySectionAccess, (re
         }
       });
     } catch (dbErr: any) {
-      if (req.file.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
       return res.status(500).json({ error: dbErr.message || 'Failed to persist NPTEL proof record.' });
     }
   });
@@ -897,8 +888,7 @@ router.delete('/students/:studentId/nptel-proofs/:proofId', verifyFacultySection
   try {
     await db.deleteNptelProof(proofId, studentId);
     if (proof.proof_file_path) {
-      const fullPath = path.join(UPLOADS_DIR, proof.proof_file_path);
-      if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+      await deleteFileFromStorage(proof.proof_file_path);
     }
 
     await db.logAudit(
@@ -968,22 +958,17 @@ router.get('/nptel-proofs/:proofId/view', async (req: AuthRequest, res: Response
     return res.status(403).json({ error: 'Forbidden: You do not have permission to view files for this student.' });
   }
 
-  const filePath = path.join(UPLOADS_DIR, proof.proof_file_path);
-  if (!fs.existsSync(filePath)) {
+  const fileData = await downloadFileFromStorage(proof.proof_file_path);
+  if (!fileData) {
     return res.status(404).json({ error: 'Proof file missing on server storage.' });
   }
 
   const ext = path.extname(proof.proof_file_path).toLowerCase();
-  const mimeMap: Record<string, string> = {
-    '.pdf': 'application/pdf',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.png': 'image/png'
-  };
-
-  res.setHeader('Content-Type', mimeMap[ext] || 'application/octet-stream');
+  res.setHeader('Content-Type', fileData.contentType || getMimeFromPath(proof.proof_file_path));
+  res.setHeader('Content-Length', fileData.buffer.length.toString());
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(proof.original_file_name || 'proof' + ext)}"`);
-  return res.sendFile(filePath);
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+  return res.send(fileData.buffer);
 });
 
 router.get('/nptel-proofs/:proofId/download', async (req: AuthRequest, res: Response) => {
@@ -999,18 +984,25 @@ router.get('/nptel-proofs/:proofId/download', async (req: AuthRequest, res: Resp
     return res.status(403).json({ error: 'Forbidden: You do not have permission to download files for this student.' });
   }
 
-  const filePath = path.join(UPLOADS_DIR, proof.proof_file_path);
-  if (!fs.existsSync(filePath)) {
+  const fileData = await downloadFileFromStorage(proof.proof_file_path);
+  if (!fileData) {
     return res.status(404).json({ error: 'Proof file missing on server storage.' });
   }
 
-  return res.download(filePath, proof.original_file_name || 'nptel-proof');
+  const ext = path.extname(proof.proof_file_path).toLowerCase();
+  res.setHeader('Content-Type', fileData.contentType || getMimeFromPath(proof.proof_file_path));
+  res.setHeader('Content-Length', fileData.buffer.length.toString());
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(proof.original_file_name || 'nptel-proof' + ext)}"`);
+  return res.send(fileData.buffer);
 });
 
 // CERTIFICATE MODULE FILE UPLOAD & MANAGEMENT ENDPOINTS
 router.post('/students/:studentId/certificates/upload', verifyFacultySectionAccess, (req: AuthRequest, res: Response) => {
   certUpload.single('file')(req, res, async (err: any) => {
     if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE' || err.message?.includes('File size exceeds')) {
+        return res.status(400).json({ error: MSG_FILE_TOO_LARGE });
+      }
       return res.status(400).json({ error: err.message || 'Certificate file upload failed.' });
     }
 
@@ -1021,10 +1013,20 @@ router.post('/students/:studentId/certificates/upload', verifyFacultySectionAcce
       return res.status(400).json({ error: 'Certificate Course Name and Issuing Organization/Platform are required.' });
     }
 
-    const filePath = req.file ? req.file.filename : '';
+    if (req.file && req.file.size > MAX_FILE_SIZE_BYTES) {
+      return res.status(400).json({ error: MSG_FILE_TOO_LARGE });
+    }
+
+    let filePath = '';
     const originalFileName = req.file ? req.file.originalname : '';
 
     try {
+      if (req.file) {
+        const ext = path.extname(req.file.originalname).toLowerCase();
+        filePath = `certificates/${studentId}/cert-${Date.now()}-${Math.random().toString(36).substring(2, 6)}${ext}`;
+        await uploadFileToStorage(filePath, req.file.buffer, req.file.mimetype);
+      }
+
       const certId = await db.saveCertificateUpload({
         studentId,
         courseName: courseName.trim(),
@@ -1055,6 +1057,9 @@ router.post('/students/:studentId/certificates/upload', verifyFacultySectionAcce
 router.put('/students/:studentId/certificates/:certId', verifyFacultySectionAccess, (req: AuthRequest, res: Response) => {
   certUpload.single('file')(req, res, async (err: any) => {
     if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE' || err.message?.includes('File size exceeds')) {
+        return res.status(400).json({ error: MSG_FILE_TOO_LARGE });
+      }
       return res.status(400).json({ error: err.message || 'Certificate file upload failed.' });
     }
 
@@ -1065,15 +1070,29 @@ router.put('/students/:studentId/certificates/:certId', verifyFacultySectionAcce
       return res.status(400).json({ error: 'Certificate Course Name and Issuing Organization/Platform are required.' });
     }
 
+    if (req.file && req.file.size > MAX_FILE_SIZE_BYTES) {
+      return res.status(400).json({ error: MSG_FILE_TOO_LARGE });
+    }
+
     const existingCert = await db.getCertificateById(certId);
     if (!existingCert || existingCert.student_id !== studentId) {
       return res.status(404).json({ error: 'Certificate record not found.' });
     }
 
-    const filePath = req.file ? req.file.filename : undefined;
-    const originalFileName = req.file ? req.file.originalname : undefined;
+    let filePath = existingCert.file_path;
+    let originalFileName = existingCert.original_file_name;
 
     try {
+      if (req.file) {
+        if (existingCert.file_path) {
+          await deleteFileFromStorage(existingCert.file_path);
+        }
+        const ext = path.extname(req.file.originalname).toLowerCase();
+        filePath = `certificates/${studentId}/cert-${Date.now()}-${Math.random().toString(36).substring(2, 6)}${ext}`;
+        await uploadFileToStorage(filePath, req.file.buffer, req.file.mimetype);
+        originalFileName = req.file.originalname;
+      }
+
       await db.updateCertificateUpload(certId, studentId, {
         courseName: courseName.trim(),
         platform: platform.trim(),
@@ -1082,12 +1101,6 @@ router.put('/students/:studentId/certificates/:certId', verifyFacultySectionAcce
         filePath,
         originalFileName
       });
-
-      // If old file replaced and new file provided, unlink old file
-      if (filePath && existingCert.file_path && existingCert.file_path !== filePath) {
-        const oldPath = path.join(UPLOADS_DIR, existingCert.file_path);
-        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-      }
 
       const updatedScore = await recalculateAffectedStudentScore(studentId);
       await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'UPDATE_CERTIFICATE', `STUDENT:${studentId}:CERT:${certId}`);
@@ -1121,8 +1134,7 @@ router.delete('/students/:studentId/certificates/:certId', verifyFacultySectionA
     await db.deleteStudent360Record(studentId, 'certificates', certId);
 
     if (existingCert.file_path) {
-      const fullPath = path.join(UPLOADS_DIR, existingCert.file_path);
-      if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+      await deleteFileFromStorage(existingCert.file_path);
     }
 
     const updatedScore = await recalculateAffectedStudentScore(studentId);
@@ -1153,22 +1165,17 @@ router.get('/certificates/:certId/view', async (req: AuthRequest, res: Response)
     return res.status(403).json({ error: 'Forbidden: You do not have permission to view files for this student.' });
   }
 
-  const filePath = path.join(UPLOADS_DIR, cert.file_path);
-  if (!fs.existsSync(filePath)) {
+  const fileData = await downloadFileFromStorage(cert.file_path);
+  if (!fileData) {
     return res.status(404).json({ error: 'Certificate file missing on server storage.' });
   }
 
   const ext = path.extname(cert.file_path).toLowerCase();
-  const mimeMap: Record<string, string> = {
-    '.pdf': 'application/pdf',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.png': 'image/png'
-  };
-
-  res.setHeader('Content-Type', mimeMap[ext] || 'application/octet-stream');
+  res.setHeader('Content-Type', fileData.contentType || getMimeFromPath(cert.file_path));
+  res.setHeader('Content-Length', fileData.buffer.length.toString());
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(cert.original_file_name || 'certificate' + ext)}"`);
-  return res.sendFile(filePath);
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+  return res.send(fileData.buffer);
 });
 
 router.get('/certificates/:certId/download', async (req: AuthRequest, res: Response) => {
@@ -1184,19 +1191,25 @@ router.get('/certificates/:certId/download', async (req: AuthRequest, res: Respo
     return res.status(403).json({ error: 'Forbidden: You do not have permission to download files for this student.' });
   }
 
-  const filePath = path.join(UPLOADS_DIR, cert.file_path);
-  if (!fs.existsSync(filePath)) {
+  const fileData = await downloadFileFromStorage(cert.file_path);
+  if (!fileData) {
     return res.status(404).json({ error: 'Certificate file missing on server storage.' });
   }
 
   const ext = path.extname(cert.file_path).toLowerCase();
-  return res.download(filePath, cert.original_file_name || `${cert.course_name}_Certificate${ext}`);
+  res.setHeader('Content-Type', fileData.contentType || getMimeFromPath(cert.file_path));
+  res.setHeader('Content-Length', fileData.buffer.length.toString());
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(cert.original_file_name || `${cert.course_name}_Certificate${ext}`)}"`);
+  return res.send(fileData.buffer);
 });
 
 // PARTICIPATION MODULE FILE UPLOAD & MANAGEMENT ENDPOINTS
 router.post('/students/:studentId/participation/upload', verifyFacultySectionAccess, (req: AuthRequest, res: Response) => {
   certUpload.single('file')(req, res, async (err: any) => {
     if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE' || err.message?.includes('File size exceeds')) {
+        return res.status(400).json({ error: MSG_FILE_TOO_LARGE });
+      }
       return res.status(400).json({ error: err.message || 'Proof file upload failed.' });
     }
 
@@ -1204,14 +1217,23 @@ router.post('/students/:studentId/participation/upload', verifyFacultySectionAcc
     const { eventName, category, eventLevel, organizer, date, achievement, description } = req.body;
 
     if (!eventName || !organizer) {
-      if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
       return res.status(400).json({ error: 'Event Name and Organizer/Host Institution are required.' });
     }
 
-    const filePath = req.file ? req.file.filename : '';
+    if (req.file && req.file.size > MAX_FILE_SIZE_BYTES) {
+      return res.status(400).json({ error: MSG_FILE_TOO_LARGE });
+    }
+
+    let filePath = '';
     const originalFileName = req.file ? req.file.originalname : '';
 
     try {
+      if (req.file) {
+        const ext = path.extname(req.file.originalname).toLowerCase();
+        filePath = `participation/${studentId}/part-${Date.now()}-${Math.random().toString(36).substring(2, 6)}${ext}`;
+        await uploadFileToStorage(filePath, req.file.buffer, req.file.mimetype);
+      }
+
       const partId = await db.saveParticipationUpload({
         studentId,
         eventName: eventName.trim(),
@@ -1237,7 +1259,6 @@ router.post('/students/:studentId/participation/upload', verifyFacultySectionAcc
         overallScore: updatedScore
       });
     } catch (dbErr: any) {
-      if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
       return res.status(400).json({ error: dbErr.message || 'Failed to save participation record.' });
     }
   });
@@ -1246,6 +1267,9 @@ router.post('/students/:studentId/participation/upload', verifyFacultySectionAcc
 router.put('/students/:studentId/participation/:partId', verifyFacultySectionAccess, (req: AuthRequest, res: Response) => {
   certUpload.single('file')(req, res, async (err: any) => {
     if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE' || err.message?.includes('File size exceeds')) {
+        return res.status(400).json({ error: MSG_FILE_TOO_LARGE });
+      }
       return res.status(400).json({ error: err.message || 'Proof file upload failed.' });
     }
 
@@ -1253,20 +1277,32 @@ router.put('/students/:studentId/participation/:partId', verifyFacultySectionAcc
     const { eventName, category, eventLevel, organizer, date, achievement, description } = req.body;
 
     if (!eventName || !organizer) {
-      if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
       return res.status(400).json({ error: 'Event Name and Organizer/Host Institution are required.' });
+    }
+
+    if (req.file && req.file.size > MAX_FILE_SIZE_BYTES) {
+      return res.status(400).json({ error: MSG_FILE_TOO_LARGE });
     }
 
     const existingPart = await db.getParticipationById(partId);
     if (!existingPart || existingPart.student_id !== studentId) {
-      if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
       return res.status(404).json({ error: 'Participation record not found.' });
     }
 
-    const filePath = req.file ? req.file.filename : undefined;
-    const originalFileName = req.file ? req.file.originalname : undefined;
+    let filePath = existingPart.proof_file_path || existingPart.file_path;
+    let originalFileName = existingPart.original_file_name;
 
     try {
+      if (req.file) {
+        if (filePath) {
+          await deleteFileFromStorage(filePath);
+        }
+        const ext = path.extname(req.file.originalname).toLowerCase();
+        filePath = `participation/${studentId}/part-${Date.now()}-${Math.random().toString(36).substring(2, 6)}${ext}`;
+        await uploadFileToStorage(filePath, req.file.buffer, req.file.mimetype);
+        originalFileName = req.file.originalname;
+      }
+
       await db.updateParticipationUpload(partId, studentId, {
         eventName: eventName.trim(),
         category: (category || 'Symposium').trim(),
@@ -1279,13 +1315,6 @@ router.put('/students/:studentId/participation/:partId', verifyFacultySectionAcc
         originalFileName
       });
 
-      // Unlink old file if replaced
-      const oldFile = existingPart.proof_file_path || existingPart.file_path;
-      if (filePath && oldFile && oldFile !== filePath) {
-        const oldPath = path.join(UPLOADS_DIR, oldFile);
-        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-      }
-
       const updatedScore = await recalculateAffectedStudentScore(studentId);
       const full360 = await db.getStudent360(studentId);
 
@@ -1297,7 +1326,6 @@ router.put('/students/:studentId/participation/:partId', verifyFacultySectionAcc
         overallScore: updatedScore
       });
     } catch (dbErr: any) {
-      if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
       return res.status(400).json({ error: dbErr.message || 'Failed to update participation record.' });
     }
   });
@@ -1320,8 +1348,7 @@ router.delete('/students/:studentId/participation/:partId', verifyFacultySection
 
     const oldFile = existingPart.proof_file_path || existingPart.file_path;
     if (oldFile) {
-      const fullPath = path.join(UPLOADS_DIR, oldFile);
-      if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+      await deleteFileFromStorage(oldFile);
     }
 
     const updatedScore = await recalculateAffectedStudentScore(studentId);
@@ -1353,23 +1380,18 @@ router.get('/participation/:partId/view', async (req: AuthRequest, res: Response
     return res.status(403).json({ error: 'Forbidden: You do not have permission to view files for this student.' });
   }
 
-  const filePath = path.join(UPLOADS_DIR, proofFile);
-  if (!fs.existsSync(filePath)) {
+  const fileData = await downloadFileFromStorage(proofFile);
+  if (!fileData) {
     return res.status(404).json({ error: 'Proof file missing on server storage.' });
   }
 
   const ext = path.extname(proofFile).toLowerCase();
-  const mimeMap: Record<string, string> = {
-    '.pdf': 'application/pdf',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.png': 'image/png'
-  };
-
   const origName = part.original_file_name || part.originalFileName || `${part.event_name}_Proof${ext}`;
-  res.setHeader('Content-Type', mimeMap[ext] || 'application/octet-stream');
+  res.setHeader('Content-Type', fileData.contentType || getMimeFromPath(proofFile));
+  res.setHeader('Content-Length', fileData.buffer.length.toString());
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(origName)}"`);
-  return res.sendFile(filePath);
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+  return res.send(fileData.buffer);
 });
 
 router.get('/participation/:partId/download', async (req: AuthRequest, res: Response) => {
@@ -1386,14 +1408,17 @@ router.get('/participation/:partId/download', async (req: AuthRequest, res: Resp
     return res.status(403).json({ error: 'Forbidden: You do not have permission to download files for this student.' });
   }
 
-  const filePath = path.join(UPLOADS_DIR, proofFile);
-  if (!fs.existsSync(filePath)) {
+  const fileData = await downloadFileFromStorage(proofFile);
+  if (!fileData) {
     return res.status(404).json({ error: 'Proof file missing on server storage.' });
   }
 
   const ext = path.extname(proofFile).toLowerCase();
   const origName = part.original_file_name || part.originalFileName || `${part.event_name}_Proof${ext}`;
-  return res.download(filePath, origName);
+  res.setHeader('Content-Type', fileData.contentType || getMimeFromPath(proofFile));
+  res.setHeader('Content-Length', fileData.buffer.length.toString());
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(origName)}"`);
+  return res.send(fileData.buffer);
 });
 
 // ATTENDANCE MODULE ENDPOINTS

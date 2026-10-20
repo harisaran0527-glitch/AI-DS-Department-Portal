@@ -159,11 +159,30 @@ export const HodStudentBulkUploadView: React.FC<{
       return;
     }
 
+    // Strict 10 MB file size limit
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File size exceeds 10 MB. Please upload a smaller file.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    const fileName = file.name.toLowerCase();
+    const dangerousExts = ['.exe', '.bat', '.cmd', '.sh', '.bash', '.php', '.pl', '.py', '.cgi', '.jar', '.vbs', '.js', '.ts', '.msi'];
+    if (dangerousExts.some(ext => fileName.endsWith(ext))) {
+      alert('Executable or script files are strictly prohibited.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls') && !fileName.endsWith('.csv')) {
+      alert('Invalid file format. Only Excel (.xlsx, .xls) and CSV (.csv) files are allowed.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     setSelectedFile(file);
     setPreviewData(null);
     setImportResult(null);
-
-    const fileName = file.name.toLowerCase();
 
     if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
       try {
@@ -457,6 +476,9 @@ export const HodStudentBulkUploadView: React.FC<{
               <p className="text-xs text-slate-400 font-mono mt-1">
                 Accepted formats: <strong className="text-amber-300">.xlsx</strong>, <strong className="text-amber-300">.xls</strong>, <strong className="text-amber-300">.csv</strong>
               </p>
+              <p className="text-xs text-cyan-400 font-mono font-semibold mt-0.5">
+                Maximum file size: 10 MB
+              </p>
               <p className="text-[11px] text-slate-500 font-mono mt-0.5">
                 Standard headers: Name, Register Number, College Mail ID, Mobile Number, Personal Mail ID, Address, CGPA
               </p>
@@ -465,7 +487,7 @@ export const HodStudentBulkUploadView: React.FC<{
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv,.xlsx,.xls,.txt"
+              accept=".xlsx,.xls,.csv"
               onChange={handleFileChange}
               disabled={!selectedFacultyId || isValidating || isImporting}
               className="hidden"

@@ -12,6 +12,7 @@
     "skilledge": "node --import tsx/esm scripts/skilledge_connector.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
     "@types/multer": "^2.2.0",
     "@types/papaparse": "^5.5.2",
     "@types/pg": "^8.23.1",

@@ -151,6 +151,20 @@ export const AdminDashboard: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Strict 10 MB file size limit
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File size exceeds 10 MB. Please upload a smaller file.');
+      if (csvFileInputRef.current) csvFileInputRef.current.value = '';
+      return;
+    }
+
+    const dangerousExts = ['.exe', '.bat', '.cmd', '.sh', '.bash', '.php', '.pl', '.py', '.cgi', '.jar', '.vbs', '.js', '.ts', '.msi'];
+    if (dangerousExts.some(ext => file.name.toLowerCase().endsWith(ext))) {
+      alert('Executable or script files are strictly prohibited.');
+      if (csvFileInputRef.current) csvFileInputRef.current.value = '';
+      return;
+    }
+
     if (!file.name.toLowerCase().endsWith('.csv') && !file.name.toLowerCase().endsWith('.txt') && !file.name.toLowerCase().endsWith('.xlsx')) {
       alert('Invalid file format. Please select a valid CSV or Excel file.');
       if (csvFileInputRef.current) csvFileInputRef.current.value = '';
@@ -1746,6 +1760,9 @@ export const AdminDashboard: React.FC = () => {
                   <Upload className="w-4 h-4" />
                   <span>Choose CSV File</span>
                 </button>
+                <p className="text-[11px] text-cyan-400 font-mono mt-1 font-semibold">
+                  Maximum file size: 10 MB
+                </p>
                 <p className="text-[11px] text-slate-400 font-mono mt-2">
                   Select a <code className="text-white">.csv</code> file containing student records. Format: Register Number, Student Name, Email, Department, Year, Section, Batch.
                 </p>

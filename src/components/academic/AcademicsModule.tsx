@@ -72,6 +72,19 @@ export const AcademicsModule: React.FC<AcademicsModuleProps> = ({
   const handleSubjectFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      setSubjectErrMsg('File size exceeds 10 MB. Please upload a smaller file.');
+      return;
+    }
+
+    const fileName = file.name.toLowerCase();
+    const dangerousExts = ['.exe', '.bat', '.cmd', '.sh', '.bash', '.php', '.pl', '.py', '.cgi', '.jar', '.vbs', '.js', '.ts', '.msi'];
+    if (dangerousExts.some(ext => fileName.endsWith(ext))) {
+      setSubjectErrMsg('Executable or script files are strictly prohibited.');
+      return;
+    }
+
     setSubjectFile(file);
     setSubjectPreviewResult(null);
     setSubjectErrMsg('');
@@ -118,6 +131,19 @@ export const AcademicsModule: React.FC<AcademicsModuleProps> = ({
   const handleMarksFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      setMarksErrMsg('File size exceeds 10 MB. Please upload a smaller file.');
+      return;
+    }
+
+    const fileName = file.name.toLowerCase();
+    const dangerousExts = ['.exe', '.bat', '.cmd', '.sh', '.bash', '.php', '.pl', '.py', '.cgi', '.jar', '.vbs', '.js', '.ts', '.msi'];
+    if (dangerousExts.some(ext => fileName.endsWith(ext))) {
+      setMarksErrMsg('Executable or script files are strictly prohibited.');
+      return;
+    }
+
     setMarksFile(file);
     setMarksPreviewResult(null);
     setMarksErrMsg('');
@@ -251,24 +277,27 @@ export const AcademicsModule: React.FC<AcademicsModuleProps> = ({
               )}
 
               {/* Upload Input & Button */}
-              <div className="flex flex-col sm:flex-row items-center gap-3">
-                <label className="flex-1 w-full flex items-center justify-center space-x-2 py-3 px-4 rounded-xl bg-slate-950 border border-cyan-500/40 hover:border-cyan-400 cursor-pointer text-xs font-mono text-slate-300 transition-colors">
-                  <Upload className="w-4 h-4 text-cyan-400" />
-                  <span>{subjectFile ? subjectFile.name : 'Select or Drop Subject Master Excel/CSV File'}</span>
-                  <input
-                    type="file"
-                    accept=".csv, .xlsx, .xls"
-                    onChange={handleSubjectFileChange}
-                    className="hidden"
-                  />
-                </label>
+              <div className="space-y-1">
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  <label className="flex-1 w-full flex items-center justify-center space-x-2 py-3 px-4 rounded-xl bg-slate-950 border border-cyan-500/40 hover:border-cyan-400 cursor-pointer text-xs font-mono text-slate-300 transition-colors">
+                    <Upload className="w-4 h-4 text-cyan-400" />
+                    <span>{subjectFile ? subjectFile.name : 'Select or Drop Subject Master Excel/CSV File'}</span>
+                    <input
+                      type="file"
+                      accept=".csv, .xlsx, .xls"
+                      onChange={handleSubjectFileChange}
+                      className="hidden"
+                    />
+                  </label>
 
-                {subjectParsing && (
-                  <div className="flex items-center space-x-2 text-xs font-mono text-cyan-400 px-4 py-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Validating Subject Master...</span>
-                  </div>
-                )}
+                  {subjectParsing && (
+                    <div className="flex items-center space-x-2 text-xs font-mono text-cyan-400 px-4 py-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Validating Subject Master...</span>
+                    </div>
+                  )}
+                </div>
+                <p className="text-[11px] text-cyan-400 font-mono text-center sm:text-left">Maximum file size: 10 MB</p>
               </div>
 
               {/* Subject Master Preview & Validation Report */}
@@ -382,24 +411,27 @@ export const AcademicsModule: React.FC<AcademicsModuleProps> = ({
             )}
 
             {/* Upload File Box */}
-            <div className="flex flex-col sm:flex-row items-center gap-3">
-              <label className="flex-1 w-full flex items-center justify-center space-x-2 py-3.5 px-4 rounded-xl bg-slate-950 border border-cyan-500/40 hover:border-cyan-400 cursor-pointer text-xs font-mono text-slate-300 transition-colors">
-                <FileSpreadsheet className="w-4 h-4 text-cyan-400" />
-                <span>{marksFile ? marksFile.name : 'Select or Drop Academic Marks Excel/CSV File'}</span>
-                <input
-                  type="file"
-                  accept=".csv, .xlsx, .xls"
-                  onChange={handleMarksFileChange}
-                  className="hidden"
-                />
-              </label>
+            <div className="space-y-1">
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                <label className="flex-1 w-full flex items-center justify-center space-x-2 py-3.5 px-4 rounded-xl bg-slate-950 border border-cyan-500/40 hover:border-cyan-400 cursor-pointer text-xs font-mono text-slate-300 transition-colors">
+                  <FileSpreadsheet className="w-4 h-4 text-cyan-400" />
+                  <span>{marksFile ? marksFile.name : 'Select or Drop Academic Marks Excel/CSV File'}</span>
+                  <input
+                    type="file"
+                    accept=".csv, .xlsx, .xls"
+                    onChange={handleMarksFileChange}
+                    className="hidden"
+                  />
+                </label>
 
-              {marksParsing && (
-                <div className="flex items-center space-x-2 text-xs font-mono text-cyan-400 px-4 py-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Validating Register Numbers & Subject Master...</span>
-                </div>
-              )}
+                {marksParsing && (
+                  <div className="flex items-center space-x-2 text-xs font-mono text-cyan-400 px-4 py-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Validating Register Numbers & Subject Master...</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-[11px] text-cyan-400 font-mono text-center sm:text-left">Maximum file size: 10 MB</p>
             </div>
 
             {/* Validation & Preview Report */}

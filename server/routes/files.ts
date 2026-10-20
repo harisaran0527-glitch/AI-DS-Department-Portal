@@ -1,58 +1,43 @@
 import { Router, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
 import { db } from '../db.js';
 import { authenticateToken, AuthRequest } from '../middleware/auth.js';
+import {
+  MAX_FILE_SIZE_BYTES,
+  MSG_FILE_TOO_LARGE,
+  DANGEROUS_EXTENSIONS,
+  validateUploadedFile,
+  uploadFileToStorage,
+  downloadFileFromStorage,
+  deleteFileFromStorage
+} from '../storage.js';
 
 const router = Router();
 
-// PROTECTED SERVER FILE STORAGE DIRECTORY
-const UPLOADS_DIR = process.env.VERCEL ? '/tmp' : path.resolve(process.cwd(), 'server', 'uploads');
-try {
-  if (!fs.existsSync(UPLOADS_DIR)) {
-    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-  }
-} catch (_err) {
-  // Ignore filesystem error in read-only environment
-}
-
-// ALLOWED SAFE ACADEMIC MIME TYPES AND EXTENSIONS
-const ALLOWED_MIME_TYPES = new Set([
-  'application/pdf',
-  'image/jpeg',
-  'image/jpg',
-  'image/png',
-  'image/pjpeg'
-]);
-
-const ALLOWED_EXTENSIONS = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
-const DANGEROUS_EXTENSIONS = new Set(['.exe', '.bat', '.cmd', '.js', '.sh', '.vbs', '.ps1', '.msi', '.php', '.py', '.pl', '.rb']);
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, UPLOADS_DIR);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const safeName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}${ext}`;
-    cb(null, safeName);
-  }
-});
+// In-Memory storage: avoids ephemeral /tmp loss on Vercel Serverless
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // Strict 10 MB limit
+  limits: { fileSize: MAX_FILE_SIZE_BYTES },
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    const mime = file.mimetype.toLowerCase();
 
     if (DANGEROUS_EXTENSIONS.has(ext)) {
-      return cb(new Error('Executable or dangerous file types are strictly prohibited.'));
+      return cb(new Error('Executable or script files are strictly prohibited.'));
     }
 
-    if (!ALLOWED_EXTENSIONS.has(ext) || !ALLOWED_MIME_TYPES.has(mime)) {
-      return cb(new Error('Invalid file type. Only PDF, JPG, JPEG, and PNG files under 10 MB are allowed.'));
+    const recordType = (req.body?.recordType || '').toLowerCase();
+    const moduleType = recordType === 'projects' ? 'project' : 'proof';
+
+    const check = validateUploadedFile(
+      { originalname: file.originalname, mimetype: file.mimetype, size: 0 },
+      moduleType
+    );
+
+    if (!check.valid) {
+      return cb(new Error(check.error || 'Invalid file format.'));
     }
 
     cb(null, true);
@@ -85,10 +70,13 @@ function checkFilePermission(req: AuthRequest, student: any): boolean {
   return false;
 }
 
-// POST Upload Proof File (Faculty / HOD / Admin)
+// POST Upload Proof File (Faculty / Admin)
 router.post('/upload', authenticateToken, (req: AuthRequest, res: Response) => {
   upload.single('file')(req, res, async (err: any) => {
     if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE' || err.message?.includes('File size exceeds')) {
+        return res.status(400).json({ error: MSG_FILE_TOO_LARGE });
+      }
       return res.status(400).json({ error: err.message || 'File upload failed.' });
     }
 
@@ -96,29 +84,27 @@ router.post('/upload', authenticateToken, (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'No file uploaded.' });
     }
 
+    // Double check size
+    if (req.file.size > MAX_FILE_SIZE_BYTES) {
+      return res.status(400).json({ error: MSG_FILE_TOO_LARGE });
+    }
+
     const { studentId, recordType, recordId } = req.body;
     if (!studentId || !recordType || !recordId) {
-      // Remove stored file if metadata is missing
-      if (req.file.path && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
       return res.status(400).json({ error: 'studentId, recordType, and recordId are required.' });
     }
 
     if (req.user!.role === 'STUDENT' || req.user!.role === 'HOD') {
-      if (req.file.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
       return res.status(403).json({ error: 'Unauthorized: Students and HOD are strictly view-only for proof attachments.' });
     }
 
     const student = await db.getStudentById(studentId);
     if (!student) {
-      if (req.file.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
       return res.status(404).json({ error: 'Student record not found.' });
     }
 
     // Faculty Section Guard
     if (req.user!.role === 'FACULTY' && !checkFilePermission(req, student)) {
-      if (req.file.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
       return res.status(403).json({ error: 'Unauthorized: Faculty can only upload proof for assigned section students.' });
     }
 
@@ -127,30 +113,33 @@ router.post('/upload', authenticateToken, (req: AuthRequest, res: Response) => {
 
     if (existingAtt) {
       await db.softDeleteAttachment(existingAtt.id, req.user!.id);
-    }
-
-    // Read file buffer to Base64 for 100% database persistence on Vercel
-    let fileDataBase64: string | undefined = undefined;
-    if (req.file.path && fs.existsSync(req.file.path)) {
-      const fileBuffer = fs.readFileSync(req.file.path);
-      fileDataBase64 = fileBuffer.toString('base64');
+      if (existingAtt.stored_file_name) {
+        await deleteFileFromStorage(existingAtt.stored_file_name);
+      }
     }
 
     const attachmentId = `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    const safeBase = path.basename(req.file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const storagePath = `proofs/${recordType}/${studentId}/${attachmentId}-${safeBase}${ext}`;
+
+    // Upload binary directly to Supabase Storage
+    await uploadFileToStorage(storagePath, req.file.buffer, req.file.mimetype);
+
+    // Save structured metadata in PostgreSQL (DO NOT store base64 binary in PostgreSQL)
     const newAtt = {
       id: attachmentId,
       student_id: studentId,
       record_type: recordType,
       record_id: recordId,
       original_file_name: req.file.originalname,
-      stored_file_name: req.file.filename,
+      stored_file_name: storagePath,
       mime_type: req.file.mimetype,
       file_size: req.file.size,
       uploaded_by_user_id: req.user!.id,
       uploaded_by_role: req.user!.role,
       uploaded_at: new Date().toISOString(),
-      is_deleted: 0,
-      file_data: fileDataBase64
+      is_deleted: 0
     };
 
     await db.createAttachment(newAtt);
@@ -233,22 +222,16 @@ router.get('/:fileId', authenticateToken, async (req: AuthRequest, res: Response
     return res.status(403).json({ error: 'Unauthorized access to requested file.' });
   }
 
-  const filePath = path.join(UPLOADS_DIR, att.stored_file_name);
-  if (fs.existsSync(filePath)) {
-    res.setHeader('Content-Type', att.mime_type);
-    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(att.original_file_name)}"`);
-    return res.sendFile(filePath);
+  const fileData = await downloadFileFromStorage(att.stored_file_name);
+  if (!fileData) {
+    return res.status(404).json({ error: 'File content missing from server storage.' });
   }
 
-  if (att.file_data) {
-    const buffer = Buffer.from(att.file_data, 'base64');
-    res.setHeader('Content-Type', att.mime_type);
-    res.setHeader('Content-Length', buffer.length.toString());
-    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(att.original_file_name)}"`);
-    return res.send(buffer);
-  }
-
-  return res.status(404).json({ error: 'File content missing from server storage.' });
+  res.setHeader('Content-Type', att.mime_type || fileData.contentType);
+  res.setHeader('Content-Length', fileData.buffer.length.toString());
+  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(att.original_file_name)}"`);
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+  return res.send(fileData.buffer);
 });
 
 // GET Download File attachment
@@ -265,34 +248,23 @@ router.get('/:fileId/download', authenticateToken, async (req: AuthRequest, res:
     return res.status(403).json({ error: 'Unauthorized access to requested file.' });
   }
 
-  const filePath = path.join(UPLOADS_DIR, att.stored_file_name);
-  if (fs.existsSync(filePath)) {
-    await db.logAudit(
-      req.user!.id,
-      req.user!.email,
-      req.user!.role,
-      'DOWNLOAD_FILE',
-      `FILE:${att.original_file_name} (Attachment:${att.id})`
-    );
-    return res.download(filePath, att.original_file_name);
+  const fileData = await downloadFileFromStorage(att.stored_file_name);
+  if (!fileData) {
+    return res.status(404).json({ error: 'File content missing from server storage.' });
   }
 
-  if (att.file_data) {
-    await db.logAudit(
-      req.user!.id,
-      req.user!.email,
-      req.user!.role,
-      'DOWNLOAD_FILE',
-      `FILE:${att.original_file_name} (Attachment:${att.id})`
-    );
-    const buffer = Buffer.from(att.file_data, 'base64');
-    res.setHeader('Content-Type', att.mime_type);
-    res.setHeader('Content-Length', buffer.length.toString());
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(att.original_file_name)}"`);
-    return res.send(buffer);
-  }
+  await db.logAudit(
+    req.user!.id,
+    req.user!.email,
+    req.user!.role,
+    'DOWNLOAD_FILE',
+    `FILE:${att.original_file_name} (Attachment:${att.id})`
+  );
 
-  return res.status(404).json({ error: 'File content missing from server storage.' });
+  res.setHeader('Content-Type', att.mime_type || fileData.contentType);
+  res.setHeader('Content-Length', fileData.buffer.length.toString());
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(att.original_file_name)}"`);
+  return res.send(fileData.buffer);
 });
 
 // DELETE Attachment
@@ -313,6 +285,7 @@ router.delete('/:fileId', authenticateToken, async (req: AuthRequest, res: Respo
     return res.status(403).json({ error: 'Unauthorized access to requested file.' });
   }
 
+  await deleteFileFromStorage(att.stored_file_name);
   await db.softDeleteAttachment(fileId, req.user!.id);
   await db.logAudit(
     req.user!.id,

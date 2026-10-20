@@ -60,6 +60,16 @@ export const ProofAttachmentControl: React.FC<ProofAttachmentControlProps> = ({
     fetchAttachment();
   }, [fetchAttachment]);
 
+  const isProjectRecord = recordType === 'projects';
+  const allowedExtensions = isProjectRecord
+    ? ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.jpg', '.jpeg', '.png']
+    : ['.pdf', '.jpg', '.jpeg', '.png'];
+
+  const dangerousExtensions = [
+    '.exe', '.bat', '.cmd', '.sh', '.bash', '.php', '.pl', '.py',
+    '.cgi', '.jar', '.vbs', '.js', '.ts', '.jsx', '.tsx', '.msi', '.ps1'
+  ];
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -67,18 +77,29 @@ export const ProofAttachmentControl: React.FC<ProofAttachmentControlProps> = ({
     setErrorMsg('');
     setSuccessMsg('');
 
-    // Check size limit (10 MB)
+    // Strict 10 MB Size limit (10 * 1024 * 1024)
     if (file.size > 10 * 1024 * 1024) {
-      setErrorMsg('File size exceeds 10 MB limit. Please select a smaller file.');
+      setErrorMsg('File size exceeds 10 MB. Please upload a smaller file.');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
-    // Check extension
     const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-    const validExts = ['.pdf', '.jpg', '.jpeg', '.png'];
-    if (!validExts.includes(ext)) {
-      setErrorMsg('Invalid file type. Only PDF, JPG, JPEG, and PNG files under 10 MB are allowed.');
+
+    // Dangerous extension check
+    if (dangerousExtensions.includes(ext)) {
+      setErrorMsg('Executable and script files are strictly prohibited.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    // Module-specific format check
+    if (!allowedExtensions.includes(ext)) {
+      setErrorMsg(
+        isProjectRecord
+          ? 'Invalid file type. Projects accept Documents (.pdf, .doc, .docx, .ppt, .pptx) and Images (.jpg, .jpeg, .png).'
+          : 'Invalid file type. Only PDF, JPG, JPEG, and PNG files are allowed.'
+      );
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -128,7 +149,11 @@ export const ProofAttachmentControl: React.FC<ProofAttachmentControlProps> = ({
         type="file"
         ref={fileInputRef}
         onChange={handleFileSelect}
-        accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+        accept={
+          isProjectRecord
+            ? '.pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,image/jpeg,image/png'
+            : '.pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png'
+        }
         className="hidden"
       />
 
@@ -217,7 +242,11 @@ export const ProofAttachmentControl: React.FC<ProofAttachmentControlProps> = ({
         <div className="flex items-center justify-between py-1">
           <div className="text-[11px] text-slate-400 font-mono">
             <span>No proof attached</span>
-            {!isStudentReadOnly && <span className="text-slate-500 block text-[10px]">Maximum file size: 10 MB (PDF, JPG, PNG)</span>}
+            {!isStudentReadOnly && (
+              <span className="text-slate-500 block text-[10px]">
+                Maximum file size: 10 MB ({isProjectRecord ? 'PDF, DOCX, PPTX, JPG, PNG' : 'PDF, JPG, PNG'})
+              </span>
+            )}
           </div>
 
           {!isStudentReadOnly && (

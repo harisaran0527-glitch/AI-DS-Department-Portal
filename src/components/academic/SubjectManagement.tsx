@@ -103,6 +103,20 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File size exceeds 10 MB. Please upload a smaller file.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    const fileName = file.name.toLowerCase();
+    const dangerousExts = ['.exe', '.bat', '.cmd', '.sh', '.bash', '.php', '.pl', '.py', '.cgi', '.jar', '.vbs', '.js', '.ts', '.msi'];
+    if (dangerousExts.some(ext => fileName.endsWith(ext))) {
+      alert('Executable or script files are strictly prohibited.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     setExcelFile(file);
     setExcelPreviewSummary(null);
     setExcelValidRows([]);

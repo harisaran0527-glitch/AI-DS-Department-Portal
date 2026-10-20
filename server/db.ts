@@ -3256,8 +3256,8 @@ export class SQLiteDB {
   // ATTACHMENT / PROOF FILE ENGINE
   public async createAttachment(att: AttachmentRecord): Promise<void> {
     await executeRun(`
-      INSERT INTO attachments (id, student_id, record_type, record_id, original_file_name, stored_file_name, mime_type, file_size, uploaded_by_user_id, uploaded_by_role, uploaded_at, is_deleted, file_data)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+      INSERT INTO attachments (id, student_id, record_type, record_id, original_file_name, stored_file_name, mime_type, file_size, uploaded_by_user_id, uploaded_by_role, uploaded_at, is_deleted)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
     `, [
       att.id,
       att.student_id,
@@ -3269,8 +3269,7 @@ export class SQLiteDB {
       att.file_size,
       att.uploaded_by_user_id,
       att.uploaded_by_role,
-      att.uploaded_at,
-      att.file_data || null
+      att.uploaded_at
     ]);
   }
 
