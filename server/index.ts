@@ -94,7 +94,8 @@ app.use((req, res, next) => {
   });
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
 // API Routes (Mounted on both /api and direct root for Vercel Serverless Function compatibility)

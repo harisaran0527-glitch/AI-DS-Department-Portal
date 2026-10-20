@@ -34,7 +34,8 @@
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.2",
     "tailwind-merge": "^3.6.0",
-    "tsx": "^4.23.12"
+    "tsx": "^4.23.12",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

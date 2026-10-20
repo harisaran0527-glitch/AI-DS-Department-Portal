@@ -1263,11 +1263,13 @@ export class SQLiteDB {
     mobileNumber?: string;
     personalEmail?: string;
     address?: string;
-    cgpa?: number;
+    cgpa?: number | null;
     year?: string;
     section?: string;
     batch?: string;
     createdByFacultyId?: string;
+    facultyWorkspaceId?: string;
+    classCoordinatorName?: string;
   }): Promise<StudentRecord> {
     const cleanRegNo = stu.registerNo.trim();
     const cleanEmail = stu.email.trim().toLowerCase();
@@ -1279,6 +1281,8 @@ export class SQLiteDB {
     const yearToUse = stu.year || '1st Year';
     const sectionToUse = stu.section || 'A';
     const batchToUse = stu.batch || '2024-2028';
+    const facultyIdToUse = stu.facultyWorkspaceId || stu.createdByFacultyId || null;
+    const coordinatorToUse = stu.classCoordinatorName || 'Assigned Faculty';
 
     let existing = await this.getStudentByRegisterNo(cleanRegNo);
     if (!existing) {
@@ -1291,14 +1295,17 @@ export class SQLiteDB {
     if (existing) {
       await executeRun(`
         UPDATE students
-        SET name = ?, email = ?, personal_email = ?, mobile_number = ?, address = ?, cgpa = ?, year = ?, section = ?, batch = ?
+        SET name = ?, email = ?, personal_email = ?, mobile_number = ?, address = ?, cgpa = ?, year = ?, section = ?, batch = ?,
+            faculty_workspace_id = COALESCE(?, faculty_workspace_id),
+            created_by_faculty_id = COALESCE(?, created_by_faculty_id),
+            class_coordinator_name = COALESCE(?, class_coordinator_name)
         WHERE id = ?
-      `, [cleanName, cleanEmail, cleanPersonalEmail, cleanMobile, cleanAddress, cleanCgpa, yearToUse, sectionToUse, batchToUse, existing.id]);
+      `, [cleanName, cleanEmail, cleanPersonalEmail, cleanMobile, cleanAddress, cleanCgpa, yearToUse, sectionToUse, batchToUse, facultyIdToUse, facultyIdToUse, coordinatorToUse, existing.id]);
     } else {
       await executeRun(`
         INSERT INTO students (id, register_no, name, email, personal_email, mobile_number, address, department, year, section, batch, class_coordinator_name, cgpa, overall_score, current_rank, created_by_faculty_id, faculty_workspace_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'AI & DS', ?, ?, ?, 'Assigned Faculty', ?, 0, 99, ?, ?)
-      `, [studentId, cleanRegNo, cleanName, cleanEmail, cleanPersonalEmail, cleanMobile, cleanAddress, yearToUse, sectionToUse, batchToUse, cleanCgpa, stu.createdByFacultyId || null, stu.createdByFacultyId || null]);
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'AI & DS', ?, ?, ?, ?, ?, 0, 99, ?, ?)
+      `, [studentId, cleanRegNo, cleanName, cleanEmail, cleanPersonalEmail, cleanMobile, cleanAddress, yearToUse, sectionToUse, batchToUse, coordinatorToUse, cleanCgpa, facultyIdToUse, facultyIdToUse]);
     }
 
     // AUTOMATIC STUDENT LOGIN ACCOUNT CREATION / SYNC IN users TABLE

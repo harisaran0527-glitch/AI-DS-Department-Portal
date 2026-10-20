@@ -128,13 +128,32 @@ router.get('/students', async (req: AuthRequest, res: Response) => {
   return res.json({ count: enriched.length, students: enriched });
 });
 
+// Helper for flexible, case-insensitive, alias-tolerant column extraction
+const getRowValue = (row: any, ...aliases: string[]): string => {
+  if (!row || typeof row !== 'object') return '';
+  for (const k of aliases) {
+    if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') {
+      return String(row[k]).trim();
+    }
+  }
+  const rowKeys = Object.keys(row);
+  for (const k of aliases) {
+    const cleanAlias = k.toLowerCase().replace(/[\s_\-]/g, '');
+    const foundKey = rowKeys.find((rk) => rk.toLowerCase().replace(/[\s_\-]/g, '') === cleanAlias);
+    if (foundKey && row[foundKey] !== undefined && row[foundKey] !== null && String(row[foundKey]).trim() !== '') {
+      return String(row[foundKey]).trim();
+    }
+  }
+  return '';
+};
+
 // POST HOD Student Excel Import Preview (Validation & Conflict Detection)
 router.post('/students/import-preview', async (req: AuthRequest, res: Response) => {
   try {
     const { facultyId, year, section, rows } = req.body || {};
 
-    if (!facultyId || !year || !section) {
-      return res.status(400).json({ error: 'Assigned Faculty, Year, and Section selection are required.' });
+    if (!facultyId) {
+      return res.status(400).json({ error: 'Assigned Faculty selection is required.' });
     }
 
     if (!Array.isArray(rows) || rows.length === 0) {
@@ -147,6 +166,11 @@ router.post('/students/import-preview', async (req: AuthRequest, res: Response) 
       return res.status(400).json({ error: `Selected Faculty account does not exist in system.` });
     }
 
+    // Dynamically derive Year and Section from relational assignment if not specified
+    const assignment = await db.getFacultyAssignment(facultyId);
+    const resolvedYear = String(year || assignment?.year || targetFaculty.year || '1st Year').trim();
+    const resolvedSection = String(section || assignment?.section || targetFaculty.section || 'A').trim();
+
     const allDbStudents = await db.getStudents('ALL', 'ALL');
     const existingRegNos = new Set(allDbStudents.map((s) => s.register_no.trim().toLowerCase()));
     const dbEmailToRegNo = new Map<string, string>();
@@ -157,8 +181,8 @@ router.post('/students/import-preview', async (req: AuthRequest, res: Response) 
 
     // First pass to detect file-level duplicates
     rows.forEach((r) => {
-      const reg = String(r['Register Number'] || r['Register No'] || r.registerNo || r.register_no || r.regNo || '').trim().toLowerCase();
-      const email = String(r['College Mail ID'] || r['College Email ID'] || r['College Mail'] || r.collegeEmail || r.email || '').trim().toLowerCase();
+      const reg = getRowValue(r, 'Register Number', 'Register No', 'registerNo', 'register_no', 'regNo', 'Roll No').toLowerCase();
+      const email = getRowValue(r, 'College Mail ID', 'College Email ID', 'College Mail', 'College Email', 'collegeEmail', 'college_mail_id', 'email').toLowerCase();
       if (reg) regNoInFileCount.set(reg, (regNoInFileCount.get(reg) || 0) + 1);
       if (email) emailInFileCount.set(email, (emailInFileCount.get(email) || 0) + 1);
     });
@@ -171,14 +195,14 @@ router.post('/students/import-preview', async (req: AuthRequest, res: Response) 
       const rowNumber = index + 1;
       const errors: string[] = [];
 
-      const name = String(r['Name'] || r['Student Name'] || r.name || '').trim();
-      const registerNo = String(r['Register Number'] || r['Register No'] || r.registerNo || r.register_no || r.regNo || '').trim();
-      const mobileNumber = String(r['Mobile Number'] || r['Mobile No'] || r.mobileNumber || r.mobile_number || r.phone || r['Contact Number'] || '').trim();
-      const collegeEmail = String(r['College Mail ID'] || r['College Email ID'] || r['College Mail'] || r.collegeEmail || r.email || '').trim().toLowerCase();
-      const personalEmail = String(r['Personal Mail ID'] || r['Personal Email ID'] || r['Personal Email'] || r.personalEmail || r.personal_email || '').trim().toLowerCase();
-      const address = String(r['Address'] || r.address || '').trim();
+      const name = getRowValue(r, 'Name', 'Student Name', 'name', 'student_name', 'StudentName', 'Full Name');
+      const registerNo = getRowValue(r, 'Register Number', 'Register No', 'registerNo', 'register_no', 'regNo', 'Reg No', 'Roll No', 'Roll Number', 'Register');
+      const mobileNumber = getRowValue(r, 'Mobile Number', 'Mobile No', 'mobileNumber', 'mobile_number', 'phone', 'Phone', 'Contact Number', 'Contact', 'Mobile');
+      const collegeEmail = getRowValue(r, 'College Mail ID', 'College Email ID', 'College Mail', 'College Email', 'collegeEmail', 'college_mail_id', 'email', 'Email', 'Mail ID').toLowerCase();
+      const personalEmail = getRowValue(r, 'Personal Mail ID', 'Personal Email ID', 'Personal Email', 'Personal Mail', 'personalEmail', 'personal_email').toLowerCase();
+      const address = getRowValue(r, 'Address', 'address', 'City', 'Location', 'Residential Address');
+      const rawCgpaStr = getRowValue(r, 'CGPA', 'cgpa', 'Cgpa', 'GPA', 'gpa');
       
-      const rawCgpa = r['CGPA'] !== undefined ? r['CGPA'] : (r.cgpa !== undefined ? r.cgpa : undefined);
       let cgpa: number | null = null;
 
       if (!name) errors.push('Missing required student Name.');
@@ -193,14 +217,14 @@ router.post('/students/import-preview', async (req: AuthRequest, res: Response) 
         errors.push('Invalid Personal Mail ID format (missing @).');
       }
 
-      if (rawCgpa !== undefined && rawCgpa !== null) {
-        const str = String(rawCgpa).trim();
-        if (str !== '' && str.toUpperCase() !== 'N/A' && str.toUpperCase() !== 'NULL' && str.toUpperCase() !== 'NOT AVAILABLE') {
-          const parsedCgpa = parseFloat(str);
+      if (rawCgpaStr) {
+        const upper = rawCgpaStr.toUpperCase();
+        if (upper !== 'N/A' && upper !== 'NULL' && upper !== 'NOT AVAILABLE' && upper !== 'NONE') {
+          const parsedCgpa = parseFloat(rawCgpaStr);
           if (isNaN(parsedCgpa) || parsedCgpa < 0 || parsedCgpa > 10) {
             errors.push('CGPA must be a valid number between 0.00 and 10.00 or left blank.');
           } else {
-            cgpa = parsedCgpa;
+            cgpa = Math.round(parsedCgpa * 100) / 100;
           }
         }
       }
@@ -254,9 +278,16 @@ router.post('/students/import-preview', async (req: AuthRequest, res: Response) 
     });
 
     return res.json({
-      faculty: { id: targetFaculty.id, name: targetFaculty.name, email: targetFaculty.email },
-      year,
-      section,
+      faculty: {
+        id: targetFaculty.id,
+        name: targetFaculty.name,
+        email: targetFaculty.email,
+        identifier: targetFaculty.identifier,
+        assignedYear: resolvedYear,
+        assignedSection: resolvedSection
+      },
+      year: resolvedYear,
+      section: resolvedSection,
       totalRows: rows.length,
       validRowsCount: validCount,
       updateRowsCount: updateCount,
@@ -275,8 +306,8 @@ router.post('/students/import-confirm', async (req: AuthRequest, res: Response) 
   try {
     const { facultyId, year, section, batch, students } = req.body || {};
 
-    if (!facultyId || !year || !section) {
-      return res.status(400).json({ error: 'Assigned Faculty, Year, and Section selection are required.' });
+    if (!facultyId) {
+      return res.status(400).json({ error: 'Assigned Faculty selection is required.' });
     }
 
     if (!Array.isArray(students) || students.length === 0) {
@@ -289,40 +320,51 @@ router.post('/students/import-confirm', async (req: AuthRequest, res: Response) 
       return res.status(400).json({ error: `Selected Faculty account does not exist in system.` });
     }
 
+    // Dynamically derive Year and Section from relational assignment
+    const assignment = await db.getFacultyAssignment(facultyId);
+    const yearToUse = String(year || assignment?.year || targetFaculty.year || '1st Year').trim();
+    const sectionToUse = String(section || assignment?.section || targetFaculty.section || 'A').trim();
+    const batchToUse = batch || (yearToUse.includes('1st') ? '2024-2028' : yearToUse.includes('2nd') ? '2023-2027' : yearToUse.includes('3rd') ? '2022-2026' : '2021-2025');
+
     const importedList: any[] = [];
-    const yearToUse = String(year).trim();
-    const sectionToUse = String(section).trim();
-    const batchToUse = batch || '2023-2027';
 
     for (const s of students) {
-      const reg = String(s.registerNo || s.register_no || s['Register Number'] || s['Register No'] || '').trim();
-      const mail = String(s.collegeEmail || s.email || s['College Mail ID'] || s['College Email ID'] || '').trim();
-      const name = String(s.name || s['Name'] || s['Student Name'] || '').trim();
+      const reg = getRowValue(s, 'registerNo', 'register_no', 'Register Number', 'Register No', 'regNo', 'Roll No');
+      const mail = getRowValue(s, 'collegeEmail', 'college_mail_id', 'email', 'College Mail ID', 'College Email ID', 'Email').toLowerCase();
+      const name = getRowValue(s, 'name', 'Name', 'studentName', 'Student Name', 'Full Name');
 
       if (!reg || !mail || !name) continue;
 
-      const rawCgpa = s.cgpa !== undefined ? s.cgpa : (s['CGPA'] !== undefined ? s['CGPA'] : undefined);
+      const rawCgpaStr = getRowValue(s, 'cgpa', 'CGPA', 'Cgpa', 'GPA', 'gpa');
       let cgpaVal: number | null = null;
-      if (rawCgpa !== undefined && rawCgpa !== null) {
-        const str = String(rawCgpa).trim();
-        if (str !== '' && str.toUpperCase() !== 'N/A' && str.toUpperCase() !== 'NULL' && str.toUpperCase() !== 'NOT AVAILABLE') {
-          const parsed = parseFloat(str);
-          if (!isNaN(parsed)) cgpaVal = parsed;
+      if (rawCgpaStr) {
+        const upper = rawCgpaStr.toUpperCase();
+        if (upper !== 'N/A' && upper !== 'NULL' && upper !== 'NOT AVAILABLE' && upper !== 'NONE') {
+          const parsed = parseFloat(rawCgpaStr);
+          if (!isNaN(parsed) && parsed >= 0 && parsed <= 10) {
+            cgpaVal = Math.round(parsed * 100) / 100;
+          }
         }
       }
+
+      const mobile = getRowValue(s, 'mobileNumber', 'mobile_number', 'Mobile Number', 'Mobile No', 'phone', 'Phone');
+      const personalMail = getRowValue(s, 'personalEmail', 'personal_email', 'Personal Mail ID', 'Personal Email ID').toLowerCase();
+      const addressVal = getRowValue(s, 'address', 'Address', 'City');
 
       const updatedStudent = await db.upsertStudentWithUserLogin({
         registerNo: reg,
         name,
         email: mail,
-        mobileNumber: s.mobileNumber || s.mobile_number || s['Mobile Number'] || s['Mobile No'],
-        personalEmail: s.personalEmail || s.personal_email || s['Personal Mail ID'] || s['Personal Email ID'],
-        address: s.address || s['Address'],
+        mobileNumber: mobile || undefined,
+        personalEmail: personalMail || undefined,
+        address: addressVal || undefined,
         cgpa: cgpaVal,
         year: yearToUse,
         section: sectionToUse,
         batch: s.batch || batchToUse,
-        createdByFacultyId: facultyId
+        createdByFacultyId: targetFaculty.id,
+        facultyWorkspaceId: targetFaculty.id,
+        classCoordinatorName: targetFaculty.name
       });
 
       importedList.push(updatedStudent);
