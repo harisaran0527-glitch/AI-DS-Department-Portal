@@ -1113,16 +1113,15 @@ export class SQLiteDB {
     const params: any[] = [];
 
     if (facultyId) {
-      sql += ' AND (created_by_faculty_id = ? OR faculty_workspace_id = ?)';
-      params.push(facultyId, facultyId);
-
-      if (cleanYear && cleanYear !== 'ALL') {
-        sql += ' AND LOWER(TRIM(year)) = LOWER(TRIM(?))';
-        params.push(cleanYear);
-      }
-      if (cleanSec && cleanSec !== 'ALL') {
-        sql += ' AND UPPER(TRIM(section)) = UPPER(TRIM(?))';
-        params.push(cleanSec);
+      if (cleanYear && cleanYear !== 'ALL' && cleanSec && cleanSec !== 'ALL') {
+        sql += ' AND (created_by_faculty_id = ? OR faculty_workspace_id = ? OR (LOWER(TRIM(year)) = LOWER(TRIM(?)) AND UPPER(TRIM(section)) = UPPER(TRIM(?))))';
+        params.push(facultyId, facultyId, cleanYear, cleanSec);
+      } else if (cleanYear && cleanYear !== 'ALL') {
+        sql += ' AND (created_by_faculty_id = ? OR faculty_workspace_id = ? OR LOWER(TRIM(year)) = LOWER(TRIM(?)))';
+        params.push(facultyId, facultyId, cleanYear);
+      } else {
+        sql += ' AND (created_by_faculty_id = ? OR faculty_workspace_id = ?)';
+        params.push(facultyId, facultyId);
       }
     } else {
       if (cleanYear && cleanYear !== 'ALL') {
@@ -1290,9 +1289,10 @@ export class SQLiteDB {
       if (rowByEmail) existing = normalizeStudentRecord(rowByEmail) as StudentRecord;
     }
 
-    const studentId = existing ? existing.id : `stu-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    let studentId = existing ? existing.id : `stu-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
     if (existing) {
+      studentId = existing.id;
       await executeRun(`
         UPDATE students
         SET name = ?, email = ?, personal_email = ?, mobile_number = ?, address = ?, cgpa = ?, year = ?, section = ?, batch = ?,
@@ -1302,10 +1302,28 @@ export class SQLiteDB {
         WHERE id = ?
       `, [cleanName, cleanEmail, cleanPersonalEmail, cleanMobile, cleanAddress, cleanCgpa, yearToUse, sectionToUse, batchToUse, facultyIdToUse, facultyIdToUse, coordinatorToUse, existing.id]);
     } else {
-      await executeRun(`
-        INSERT INTO students (id, register_no, name, email, personal_email, mobile_number, address, department, year, section, batch, class_coordinator_name, cgpa, overall_score, current_rank, created_by_faculty_id, faculty_workspace_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'AI & DS', ?, ?, ?, ?, ?, 0, 99, ?, ?)
-      `, [studentId, cleanRegNo, cleanName, cleanEmail, cleanPersonalEmail, cleanMobile, cleanAddress, yearToUse, sectionToUse, batchToUse, coordinatorToUse, cleanCgpa, facultyIdToUse, facultyIdToUse]);
+      try {
+        await executeRun(`
+          INSERT INTO students (id, register_no, name, email, personal_email, mobile_number, address, department, year, section, batch, class_coordinator_name, cgpa, overall_score, current_rank, created_by_faculty_id, faculty_workspace_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'AI & DS', ?, ?, ?, ?, ?, 0, 99, ?, ?)
+        `, [studentId, cleanRegNo, cleanName, cleanEmail, cleanPersonalEmail, cleanMobile, cleanAddress, yearToUse, sectionToUse, batchToUse, coordinatorToUse, cleanCgpa, facultyIdToUse, facultyIdToUse]);
+      } catch (insertErr: any) {
+        // Fallback for concurrent collision / race condition
+        const retryExisting = (await this.getStudentByRegisterNo(cleanRegNo)) || (await queryOne('SELECT * FROM students WHERE LOWER(email) = ?', [cleanEmail]));
+        if (retryExisting) {
+          studentId = retryExisting.id;
+          await executeRun(`
+            UPDATE students
+            SET name = ?, email = ?, personal_email = ?, mobile_number = ?, address = ?, cgpa = ?, year = ?, section = ?, batch = ?,
+                faculty_workspace_id = COALESCE(?, faculty_workspace_id),
+                created_by_faculty_id = COALESCE(?, created_by_faculty_id),
+                class_coordinator_name = COALESCE(?, class_coordinator_name)
+            WHERE id = ?
+          `, [cleanName, cleanEmail, cleanPersonalEmail, cleanMobile, cleanAddress, cleanCgpa, yearToUse, sectionToUse, batchToUse, facultyIdToUse, facultyIdToUse, coordinatorToUse, studentId]);
+        } else {
+          throw insertErr;
+        }
+      }
     }
 
     // AUTOMATIC STUDENT LOGIN ACCOUNT CREATION / SYNC IN users TABLE
@@ -1313,12 +1331,20 @@ export class SQLiteDB {
     const existingUser = await queryOne("SELECT id, password_hash FROM users WHERE (LOWER(email) = ? OR LOWER(identifier) = ?) AND UPPER(role) = 'STUDENT'", [cleanEmail, cleanRegNo.toLowerCase()]);
 
     if (!existingUser) {
-      const initialPasswordHash = await bcrypt.hash(cleanRegNo, 10);
-      const userId = `usr-stu-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-      await executeRun(`
-        INSERT INTO users (id, email, identifier, name, role, password_hash, year, section, is_active, created_at)
-        VALUES (?, ?, ?, ?, 'STUDENT', ?, ?, ?, 1, ?)
-      `, [userId, cleanEmail, cleanRegNo, cleanName, initialPasswordHash, yearToUse, sectionToUse, new Date().toISOString()]);
+      try {
+        const initialPasswordHash = await bcrypt.hash(cleanRegNo, 10);
+        const userId = `usr-stu-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+        await executeRun(`
+          INSERT INTO users (id, email, identifier, name, role, password_hash, year, section, is_active, created_at)
+          VALUES (?, ?, ?, ?, 'STUDENT', ?, ?, ?, 1, ?)
+        `, [userId, cleanEmail, cleanRegNo, cleanName, initialPasswordHash, yearToUse, sectionToUse, new Date().toISOString()]);
+      } catch (_userErr) {
+        await executeRun(`
+          UPDATE users
+          SET name = ?, email = ?, identifier = ?, year = ?, section = ?
+          WHERE (LOWER(email) = ? OR LOWER(identifier) = ?) AND UPPER(role) = 'STUDENT'
+        `, [cleanName, cleanEmail, cleanRegNo, yearToUse, sectionToUse, cleanEmail, cleanRegNo.toLowerCase()]);
+      }
     } else {
       await executeRun(`
         UPDATE users

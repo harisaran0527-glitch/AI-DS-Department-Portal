@@ -128,6 +128,12 @@ router.get('/students', async (req: AuthRequest, res: Response) => {
   return res.json({ count: enriched.length, students: enriched });
 });
 
+// Helper to identify completely blank rows
+const isRowEmpty = (row: any): boolean => {
+  if (!row || typeof row !== 'object') return true;
+  return Object.values(row).every(v => v === undefined || v === null || String(v).trim() === '');
+};
+
 // Helper for flexible, case-insensitive, alias-tolerant column extraction
 const getRowValue = (row: any, ...aliases: string[]): string => {
   if (!row || typeof row !== 'object') return '';
@@ -160,6 +166,12 @@ router.post('/students/import-preview', async (req: AuthRequest, res: Response) 
       return res.status(400).json({ error: 'No student rows provided in Excel file.' });
     }
 
+    // Filter out completely blank trailing rows
+    const nonBlankRows = rows.filter((r) => !isRowEmpty(r));
+    if (nonBlankRows.length === 0) {
+      return res.status(400).json({ error: 'The uploaded file does not contain any student data rows.' });
+    }
+
     // Verify assigned Faculty exists in DB with role 'FACULTY'
     const targetFaculty = await db.getUserById(facultyId);
     if (!targetFaculty || targetFaculty.role !== 'FACULTY') {
@@ -179,10 +191,10 @@ router.post('/students/import-preview', async (req: AuthRequest, res: Response) 
     const regNoInFileCount = new Map<string, number>();
     const emailInFileCount = new Map<string, number>();
 
-    // First pass to detect file-level duplicates
-    rows.forEach((r) => {
-      const reg = getRowValue(r, 'Register Number', 'Register No', 'registerNo', 'register_no', 'regNo', 'Roll No').toLowerCase();
-      const email = getRowValue(r, 'College Mail ID', 'College Email ID', 'College Mail', 'College Email', 'collegeEmail', 'college_mail_id', 'email').toLowerCase();
+    // First pass to detect file-level duplicates on non-blank rows
+    nonBlankRows.forEach((r) => {
+      const reg = getRowValue(r, 'Register Number', 'Register No', 'registerNo', 'register_no', 'regNo', 'Roll No', 'Roll Number', 'Register').trim().toLowerCase();
+      const email = getRowValue(r, 'College Mail ID', 'College Email ID', 'College Mail', 'College Email', 'collegeEmail', 'college_mail_id', 'email', 'Email', 'Mail ID').trim().toLowerCase();
       if (reg) regNoInFileCount.set(reg, (regNoInFileCount.get(reg) || 0) + 1);
       if (email) emailInFileCount.set(email, (emailInFileCount.get(email) || 0) + 1);
     });
@@ -191,7 +203,7 @@ router.post('/students/import-preview', async (req: AuthRequest, res: Response) 
     let updateCount = 0;
     let errorCount = 0;
 
-    const preview = rows.map((r, index) => {
+    const preview = nonBlankRows.map((r, index) => {
       const rowNumber = index + 1;
       const errors: string[] = [];
 
@@ -218,26 +230,26 @@ router.post('/students/import-preview', async (req: AuthRequest, res: Response) 
       }
 
       if (rawCgpaStr) {
-        const upper = rawCgpaStr.toUpperCase();
-        if (upper !== 'N/A' && upper !== 'NULL' && upper !== 'NOT AVAILABLE' && upper !== 'NONE') {
+        const upper = rawCgpaStr.toUpperCase().trim();
+        if (upper !== 'N/A' && upper !== 'NA' && upper !== 'NULL' && upper !== 'NOT AVAILABLE' && upper !== 'NONE') {
           const parsedCgpa = parseFloat(rawCgpaStr);
           if (isNaN(parsedCgpa) || parsedCgpa < 0 || parsedCgpa > 10) {
-            errors.push('CGPA must be a valid number between 0.00 and 10.00 or left blank.');
+            errors.push('CGPA must be a valid number between 0.00 and 10.00 or "N/A".');
           } else {
             cgpa = Math.round(parsedCgpa * 100) / 100;
           }
         }
       }
 
-      const lowerReg = registerNo.toLowerCase();
-      const lowerEmail = collegeEmail.toLowerCase();
+      const lowerReg = registerNo.trim().toLowerCase();
+      const lowerEmail = collegeEmail.trim().toLowerCase();
 
       if (lowerReg && (regNoInFileCount.get(lowerReg) || 0) > 1) {
-        errors.push(`Duplicate Register Number "${registerNo}" found in Excel file.`);
+        errors.push(`Duplicate Register Number "${registerNo}" found multiple times in this file.`);
       }
 
       if (lowerEmail && (emailInFileCount.get(lowerEmail) || 0) > 1) {
-        errors.push(`Duplicate College Mail ID "${collegeEmail}" found in Excel file.`);
+        errors.push(`Duplicate College Mail ID "${collegeEmail}" found multiple times in this file.`);
       }
 
       if (lowerEmail && dbEmailToRegNo.has(lowerEmail)) {
@@ -256,7 +268,6 @@ router.post('/students/import-preview', async (req: AuthRequest, res: Response) 
       } else if (isUpdate) {
         status = 'UPDATE_EXISTING';
         updateCount++;
-        validCount++;
       } else {
         validCount++;
       }
@@ -288,11 +299,11 @@ router.post('/students/import-preview', async (req: AuthRequest, res: Response) 
       },
       year: resolvedYear,
       section: resolvedSection,
-      totalRows: rows.length,
+      totalRows: nonBlankRows.length,
       validRowsCount: validCount,
       updateRowsCount: updateCount,
       errorRowsCount: errorCount,
-      canImport: errorCount === 0 && validCount > 0,
+      canImport: (validCount + updateCount) > 0,
       preview
     });
   } catch (err: any) {
@@ -314,6 +325,12 @@ router.post('/students/import-confirm', async (req: AuthRequest, res: Response) 
       return res.status(400).json({ error: 'No student records provided for import.' });
     }
 
+    // Filter out empty rows
+    const nonBlankStudents = students.filter((s) => !isRowEmpty(s));
+    if (nonBlankStudents.length === 0) {
+      return res.status(400).json({ error: 'No valid student records provided for import.' });
+    }
+
     // Verify assigned Faculty exists in DB with role 'FACULTY'
     const targetFaculty = await db.getUserById(facultyId);
     if (!targetFaculty || targetFaculty.role !== 'FACULTY') {
@@ -328,9 +345,9 @@ router.post('/students/import-confirm', async (req: AuthRequest, res: Response) 
 
     const importedList: any[] = [];
 
-    for (const s of students) {
-      const reg = getRowValue(s, 'registerNo', 'register_no', 'Register Number', 'Register No', 'regNo', 'Roll No');
-      const mail = getRowValue(s, 'collegeEmail', 'college_mail_id', 'email', 'College Mail ID', 'College Email ID', 'Email').toLowerCase();
+    for (const s of nonBlankStudents) {
+      const reg = getRowValue(s, 'registerNo', 'register_no', 'Register Number', 'Register No', 'regNo', 'Roll No', 'Roll Number', 'Register');
+      const mail = getRowValue(s, 'collegeEmail', 'college_mail_id', 'email', 'College Mail ID', 'College Email ID', 'Email', 'Mail ID').toLowerCase();
       const name = getRowValue(s, 'name', 'Name', 'studentName', 'Student Name', 'Full Name');
 
       if (!reg || !mail || !name) continue;
@@ -338,8 +355,8 @@ router.post('/students/import-confirm', async (req: AuthRequest, res: Response) 
       const rawCgpaStr = getRowValue(s, 'cgpa', 'CGPA', 'Cgpa', 'GPA', 'gpa');
       let cgpaVal: number | null = null;
       if (rawCgpaStr) {
-        const upper = rawCgpaStr.toUpperCase();
-        if (upper !== 'N/A' && upper !== 'NULL' && upper !== 'NOT AVAILABLE' && upper !== 'NONE') {
+        const upper = rawCgpaStr.toUpperCase().trim();
+        if (upper !== 'N/A' && upper !== 'NA' && upper !== 'NULL' && upper !== 'NOT AVAILABLE' && upper !== 'NONE') {
           const parsed = parseFloat(rawCgpaStr);
           if (!isNaN(parsed) && parsed >= 0 && parsed <= 10) {
             cgpaVal = Math.round(parsed * 100) / 100;

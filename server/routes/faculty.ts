@@ -424,8 +424,8 @@ const getRowValue = (row: any, ...aliases: string[]): string => {
   return '';
 };
 
-// POST Add Single Student by Faculty (Class Coordinator)
-router.post('/students', requireClassCoordinator, async (req: AuthRequest, res: Response) => {
+// POST Add Single Student by Faculty (Emergency Single-Student Onboarding)
+router.post(['/students', '/students/emergency-add'], requireClassCoordinator, async (req: AuthRequest, res: Response) => {
   try {
     const facultyId = req.user!.id;
     const targetFaculty = await db.getUserById(facultyId);
@@ -439,22 +439,28 @@ router.post('/students', requireClassCoordinator, async (req: AuthRequest, res: 
     const assignedSection = String(assignment?.section || targetFaculty.section || 'A').trim();
     const batchToUse = req.body.batch || (assignedYear.includes('1st') ? '2024-2028' : assignedYear.includes('2nd') ? '2023-2027' : assignedYear.includes('3rd') ? '2022-2026' : '2021-2025');
 
-    const { registerNo, name, email, mobileNumber, personalEmail, address, cgpa } = req.body || {};
+    const { registerNo, name, email, collegeEmail, mobileNumber, personalEmail, address, cgpa } = req.body || {};
+    const effectiveEmail = (email || collegeEmail || '').trim().toLowerCase();
 
-    if (!registerNo || !name || !email) {
+    if (!registerNo || !name || !effectiveEmail) {
       return res.status(400).json({ error: 'Register Number, Name, and College Mail ID are required.' });
     }
 
     let cgpaVal: number | null = null;
     if (cgpa !== undefined && cgpa !== null && cgpa !== '') {
-      const parsed = parseFloat(String(cgpa));
-      if (!isNaN(parsed) && parsed >= 0 && parsed <= 10) cgpaVal = Math.round(parsed * 100) / 100;
+      const upper = String(cgpa).trim().toUpperCase();
+      if (upper !== 'N/A' && upper !== 'NA' && upper !== 'NULL' && upper !== 'NOT AVAILABLE' && upper !== 'NONE') {
+        const parsed = parseFloat(String(cgpa));
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 10) {
+          cgpaVal = Math.round(parsed * 100) / 100;
+        }
+      }
     }
 
     const updatedStudent = await db.upsertStudentWithUserLogin({
       registerNo: String(registerNo).trim(),
       name: String(name).trim(),
-      email: String(email).trim().toLowerCase(),
+      email: effectiveEmail,
       mobileNumber: mobileNumber ? String(mobileNumber).trim() : undefined,
       personalEmail: personalEmail ? String(personalEmail).trim().toLowerCase() : undefined,
       address: address ? String(address).trim() : undefined,
@@ -472,7 +478,7 @@ router.post('/students', requireClassCoordinator, async (req: AuthRequest, res: 
       targetFaculty.email,
       targetFaculty.role,
       'FACULTY_CREATE_STUDENT',
-      `Created student ${updatedStudent.name} (${updatedStudent.register_no}) in ${assignedYear} Sec ${assignedSection}.`
+      `Emergency added student ${updatedStudent.name} (${updatedStudent.register_no}) in ${assignedYear} Sec ${assignedSection}.`
     );
 
     return res.status(201).json({
@@ -485,236 +491,18 @@ router.post('/students', requireClassCoordinator, async (req: AuthRequest, res: 
   }
 });
 
-// POST Faculty Student Excel/CSV Import Preview (Validation & Conflict Detection)
-router.post('/students/import-preview', requireClassCoordinator, async (req: AuthRequest, res: Response) => {
-  try {
-    const facultyId = req.user!.id;
-    const targetFaculty = await db.getUserById(facultyId);
-    if (!targetFaculty) {
-      return res.status(404).json({ error: 'Faculty account not found in system.' });
-    }
-
-    // Strict Section Authorization: Always derive Year and Section from authenticated faculty assignment
-    const assignment = await db.getFacultyAssignment(facultyId);
-    const assignedYear = String(assignment?.year || targetFaculty.year || '1st Year').trim();
-    const assignedSection = String(assignment?.section || targetFaculty.section || 'A').trim();
-
-    const { rows } = req.body || {};
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return res.status(400).json({ error: 'No student rows provided in Excel/CSV file.' });
-    }
-
-    const allDbStudents = await db.getStudents('ALL', 'ALL');
-    const existingRegNos = new Set(allDbStudents.map((s) => s.register_no.trim().toLowerCase()));
-    const dbEmailToRegNo = new Map<string, string>();
-    allDbStudents.forEach((s) => dbEmailToRegNo.set(s.email.trim().toLowerCase(), s.register_no.trim().toLowerCase()));
-
-    const regNoInFileCount = new Map<string, number>();
-    const emailInFileCount = new Map<string, number>();
-
-    // First pass to detect file-level duplicates
-    rows.forEach((r) => {
-      const reg = getRowValue(r, 'Register Number', 'Register No', 'registerNo', 'register_no', 'regNo', 'Roll No').toLowerCase();
-      const email = getRowValue(r, 'College Mail ID', 'College Email ID', 'College Mail', 'College Email', 'collegeEmail', 'college_mail_id', 'email').toLowerCase();
-      if (reg) regNoInFileCount.set(reg, (regNoInFileCount.get(reg) || 0) + 1);
-      if (email) emailInFileCount.set(email, (emailInFileCount.get(email) || 0) + 1);
-    });
-
-    let validCount = 0;
-    let updateCount = 0;
-    let errorCount = 0;
-
-    const preview = rows.map((r, index) => {
-      const rowNumber = index + 1;
-      const errors: string[] = [];
-
-      const name = getRowValue(r, 'Name', 'Student Name', 'name', 'student_name', 'StudentName', 'Full Name');
-      const registerNo = getRowValue(r, 'Register Number', 'Register No', 'registerNo', 'register_no', 'regNo', 'Reg No', 'Roll No', 'Roll Number', 'Register');
-      const mobileNumber = getRowValue(r, 'Mobile Number', 'Mobile No', 'mobileNumber', 'mobile_number', 'phone', 'Phone', 'Contact Number', 'Contact', 'Mobile');
-      const collegeEmail = getRowValue(r, 'College Mail ID', 'College Email ID', 'College Mail', 'College Email', 'collegeEmail', 'college_mail_id', 'email', 'Email', 'Mail ID').toLowerCase();
-      const personalEmail = getRowValue(r, 'Personal Mail ID', 'Personal Email ID', 'Personal Email', 'Personal Mail', 'personalEmail', 'personal_email').toLowerCase();
-      const address = getRowValue(r, 'Address', 'address', 'City', 'Location', 'Residential Address');
-      const rawCgpaStr = getRowValue(r, 'CGPA', 'cgpa', 'Cgpa', 'GPA', 'gpa');
-
-      let cgpa: number | null = null;
-
-      if (!name) errors.push('Missing required student Name.');
-      if (!registerNo) errors.push('Missing required Register Number.');
-      if (!collegeEmail) errors.push('Missing required College Mail ID.');
-
-      if (collegeEmail && !collegeEmail.includes('@')) {
-        errors.push('Invalid College Mail ID format (missing @).');
-      }
-
-      if (personalEmail && !personalEmail.includes('@')) {
-        errors.push('Invalid Personal Mail ID format (missing @).');
-      }
-
-      if (rawCgpaStr) {
-        const upper = rawCgpaStr.toUpperCase();
-        if (upper !== 'N/A' && upper !== 'NULL' && upper !== 'NOT AVAILABLE' && upper !== 'NONE') {
-          const parsedCgpa = parseFloat(rawCgpaStr);
-          if (isNaN(parsedCgpa) || parsedCgpa < 0 || parsedCgpa > 10) {
-            errors.push('CGPA must be a valid number between 0.00 and 10.00 or left blank.');
-          } else {
-            cgpa = Math.round(parsedCgpa * 100) / 100;
-          }
-        }
-      }
-
-      const lowerReg = registerNo.toLowerCase();
-      const lowerEmail = collegeEmail.toLowerCase();
-
-      if (lowerReg && (regNoInFileCount.get(lowerReg) || 0) > 1) {
-        errors.push(`Duplicate Register Number "${registerNo}" found in file.`);
-      }
-
-      if (lowerEmail && (emailInFileCount.get(lowerEmail) || 0) > 1) {
-        errors.push(`Duplicate College Mail ID "${collegeEmail}" found in file.`);
-      }
-
-      if (lowerEmail && dbEmailToRegNo.has(lowerEmail)) {
-        const ownerReg = dbEmailToRegNo.get(lowerEmail);
-        if (ownerReg && ownerReg !== lowerReg) {
-          errors.push(`College Mail ID "${collegeEmail}" is already assigned to student ${ownerReg.toUpperCase()} in system.`);
-        }
-      }
-
-      const isUpdate = existingRegNos.has(lowerReg);
-      let status: 'VALID_NEW' | 'UPDATE_EXISTING' | 'ERROR' = 'VALID_NEW';
-
-      if (errors.length > 0) {
-        status = 'ERROR';
-        errorCount++;
-      } else if (isUpdate) {
-        status = 'UPDATE_EXISTING';
-        updateCount++;
-      } else {
-        validCount++;
-      }
-
-      return {
-        rowNumber,
-        status,
-        errors,
-        parsedData: {
-          name,
-          registerNo,
-          mobileNumber: mobileNumber || null,
-          collegeEmail,
-          personalEmail: personalEmail || null,
-          address: address || null,
-          cgpa
-        }
-      };
-    });
-
-    return res.json({
-      faculty: {
-        id: targetFaculty.id,
-        name: targetFaculty.name,
-        email: targetFaculty.email,
-        identifier: targetFaculty.identifier,
-        assignedYear,
-        assignedSection
-      },
-      assignedYear,
-      assignedSection,
-      totalRows: rows.length,
-      validRowsCount: validCount,
-      updateRowsCount: updateCount,
-      errorRowsCount: errorCount,
-      canImport: errorCount === 0 && (validCount > 0 || updateCount > 0),
-      preview
-    });
-  } catch (err: any) {
-    console.error('❌ Faculty Excel Preview Error:', err);
-    return res.status(500).json({ error: err.message || 'Failed to parse and validate student rows.' });
-  }
+// POST Faculty Student Excel/CSV Import Preview (BLOCKED: Restrict bulk import to HOD only)
+router.post('/students/import-preview', (req: Request, res: Response) => {
+  return res.status(403).json({
+    error: 'Bulk student import is strictly restricted to HOD only. Faculty may use Emergency Add Student to add one student at a time.'
+  });
 });
 
-// POST Faculty Student Excel/CSV Import Confirm
-router.post(['/students/import-confirm', '/students/import'], requireClassCoordinator, async (req: AuthRequest, res: Response) => {
-  try {
-    const facultyId = req.user!.id;
-    const targetFaculty = await db.getUserById(facultyId);
-    if (!targetFaculty) {
-      return res.status(404).json({ error: 'Faculty account not found in system.' });
-    }
-
-    // Strict Section Authorization: Always derive Year and Section from authenticated faculty assignment
-    const assignment = await db.getFacultyAssignment(facultyId);
-    const assignedYear = String(assignment?.year || targetFaculty.year || '1st Year').trim();
-    const assignedSection = String(assignment?.section || targetFaculty.section || 'A').trim();
-    const batchToUse = req.body.batch || (assignedYear.includes('1st') ? '2024-2028' : assignedYear.includes('2nd') ? '2023-2027' : assignedYear.includes('3rd') ? '2022-2026' : '2021-2025');
-
-    const students = req.body.students || req.body.rows;
-    if (!Array.isArray(students) || students.length === 0) {
-      return res.status(400).json({ error: 'No student records provided for import.' });
-    }
-
-    const importedList: any[] = [];
-
-    for (const s of students) {
-      const reg = getRowValue(s, 'registerNo', 'register_no', 'Register Number', 'Register No', 'regNo', 'Roll No');
-      const mail = getRowValue(s, 'collegeEmail', 'college_mail_id', 'email', 'College Mail ID', 'College Email ID', 'Email').toLowerCase();
-      const name = getRowValue(s, 'name', 'Name', 'studentName', 'Student Name', 'Full Name');
-
-      if (!reg || !mail || !name) continue;
-
-      const rawCgpaStr = getRowValue(s, 'cgpa', 'CGPA', 'Cgpa', 'GPA', 'gpa');
-      let cgpaVal: number | null = null;
-      if (rawCgpaStr) {
-        const upper = rawCgpaStr.toUpperCase();
-        if (upper !== 'N/A' && upper !== 'NULL' && upper !== 'NOT AVAILABLE' && upper !== 'NONE') {
-          const parsed = parseFloat(rawCgpaStr);
-          if (!isNaN(parsed) && parsed >= 0 && parsed <= 10) {
-            cgpaVal = Math.round(parsed * 100) / 100;
-          }
-        }
-      }
-
-      const mobile = getRowValue(s, 'mobileNumber', 'mobile_number', 'Mobile Number', 'Mobile No', 'phone', 'Phone');
-      const personalMail = getRowValue(s, 'personalEmail', 'personal_email', 'Personal Mail ID', 'Personal Email ID').toLowerCase();
-      const addressVal = getRowValue(s, 'address', 'Address', 'City');
-
-      const updatedStudent = await db.upsertStudentWithUserLogin({
-        registerNo: reg,
-        name,
-        email: mail,
-        mobileNumber: mobile || undefined,
-        personalEmail: personalMail || undefined,
-        address: addressVal || undefined,
-        cgpa: cgpaVal,
-        year: assignedYear,
-        section: assignedSection,
-        batch: s.batch || batchToUse,
-        createdByFacultyId: targetFaculty.id,
-        facultyWorkspaceId: targetFaculty.id,
-        classCoordinatorName: targetFaculty.name
-      });
-
-      importedList.push(updatedStudent);
-    }
-
-    await db.logAudit(
-      targetFaculty.id,
-      targetFaculty.email,
-      targetFaculty.role,
-      'FACULTY_BULK_IMPORT_STUDENTS',
-      `Imported ${importedList.length} student records assigned to Faculty ${targetFaculty.name} (${assignedYear} Sec ${assignedSection}).`
-    );
-
-    return res.status(201).json({
-      message: `Successfully imported/updated ${importedList.length} individual student accounts mapped to Faculty ${targetFaculty.name} (${assignedYear} Section ${assignedSection}). Student logins synchronized with initial password = Register Number.`,
-      count: importedList.length,
-      importedCount: importedList.length,
-      students: importedList
-    });
-  } catch (err: any) {
-    console.error('❌ Faculty Excel Import Confirm Error:', err);
-    return res.status(500).json({ error: err.message || 'Failed to execute bulk student import.' });
-  }
+// POST Faculty Student Excel/CSV Import Confirm (BLOCKED: Restrict bulk import to HOD only)
+router.post(['/students/import-confirm', '/students/import'], (req: Request, res: Response) => {
+  return res.status(403).json({
+    error: 'Bulk student import is strictly restricted to HOD only. Faculty may use Emergency Add Student to add one student at a time.'
+  });
 });
 
 // POST Reset Student Password by Class Coordinator

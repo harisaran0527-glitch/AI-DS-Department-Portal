@@ -252,3 +252,4 @@ export function getMimeFromPath(filePath: string): string {
   };
   return map[ext] || 'application/octet-stream';
 }
+

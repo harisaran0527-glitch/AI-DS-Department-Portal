@@ -13,7 +13,6 @@ import { GeminiTopRecognitionView } from '../../components/ranking/GeminiTopReco
 import { GeminiCategoryBestPerformerCard } from '../../components/ranking/GeminiCategoryBestPerformerCard';
 import { GeminiFullLeetCodeDashboard } from '../../components/ranking/GeminiFullLeetCodeDashboard';
 import { DisciplineIssueModule } from '../../components/discipline/DisciplineIssueModule';
-import { FacultyStudentBulkUploadModal } from '../../components/faculty/FacultyStudentBulkUploadModal';
 import { getNptelUrlForStudent } from '../../services/nptelUrlHelper';
 import {
   Users,
@@ -93,13 +92,15 @@ export const FacultyDashboard: React.FC = () => {
   // Modals Visibility
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
 
-  // Single Student Onboarding Form State (My Students)
+  // Single Student Onboarding Form State (Emergency Add Student)
   const [addRegNo, setAddRegNo] = useState('');
   const [addName, setAddName] = useState('');
   const [addCollegeMail, setAddCollegeMail] = useState('');
   const [addPersonalMail, setAddPersonalMail] = useState('');
+  const [addMobileNumber, setAddMobileNumber] = useState('');
+  const [addAddress, setAddAddress] = useState('');
+  const [addCgpa, setAddCgpa] = useState('N/A');
   const [addPassword, setAddPassword] = useState('');
   const [addEntryType, setAddEntryType] = useState<'Regular' | 'Lateral Entry'>('Regular');
   const [showAddPassword, setShowAddPassword] = useState(false);
@@ -1037,7 +1038,7 @@ export const FacultyDashboard: React.FC = () => {
     setIsAddingStudent(true);
 
     const targetEmail = addCollegeMail.trim() || `${addRegNo.trim().toLowerCase()}@aids.edu`;
-    const targetPassword = addPassword.trim();
+    const targetPassword = addPassword.trim() || addRegNo.trim();
 
     if (!addRegNo.trim() || !addName.trim()) {
       setAddError('Please enter Student Register Number and Name.');
@@ -1049,10 +1050,14 @@ export const FacultyDashboard: React.FC = () => {
       setIsAddingStudent(false);
       return;
     }
-    if (!targetPassword) {
-      setAddError('Please enter a valid College Portal Password.');
-      setIsAddingStudent(false);
-      return;
+
+    let cleanCgpaVal: number | null = null;
+    const rawCgpa = (addCgpa || '').trim().toUpperCase();
+    if (rawCgpa && rawCgpa !== 'N/A' && rawCgpa !== 'NA' && rawCgpa !== 'NULL' && rawCgpa !== 'NONE') {
+      const parsed = parseFloat(rawCgpa);
+      if (!isNaN(parsed) && parsed >= 0 && parsed <= 10) {
+        cleanCgpaVal = Math.round(parsed * 100) / 100;
+      }
     }
 
     try {
@@ -1061,16 +1066,19 @@ export const FacultyDashboard: React.FC = () => {
         name: addName.trim(),
         email: targetEmail,
         collegeEmail: targetEmail,
-        personalEmail: addPersonalMail.trim(),
+        personalEmail: addPersonalMail.trim() || undefined,
+        mobileNumber: addMobileNumber.trim() || undefined,
+        address: addAddress.trim() || undefined,
+        cgpa: cleanCgpaVal,
         entryType: addEntryType,
         year: assignedYear,
         section: assignedSection,
-        batch: '2023-2027',
+        batch: assignedYear.includes('1st') ? '2024-2028' : assignedYear.includes('2nd') ? '2023-2027' : assignedYear.includes('3rd') ? '2022-2026' : '2021-2025',
         password: targetPassword,
         portalPassword: targetPassword
       });
       setAddSuccess(`Student ${addName} (${addRegNo}) onboarded successfully into Section ${assignedSection}!`);
-      setAddRegNo(''); setAddName(''); setAddCollegeMail(''); setAddPersonalMail(''); setAddEntryType('Regular'); setAddPassword('');
+      setAddRegNo(''); setAddName(''); setAddCollegeMail(''); setAddPersonalMail(''); setAddMobileNumber(''); setAddAddress(''); setAddCgpa('N/A'); setAddEntryType('Regular'); setAddPassword('');
       setShowAddStudentModal(false);
       await fetchRoster();
       if (res.student) handleSelectStudent(res.student);
@@ -1978,17 +1986,11 @@ export const FacultyDashboard: React.FC = () => {
                     <div className="flex items-center space-x-2">
                       <button
                         onClick={() => setShowAddStudentModal(true)}
-                        className="bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 transition-all shadow-md cursor-pointer shrink-0"
+                        className="min-h-[44px] bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 transition-all shadow-md cursor-pointer shrink-0"
+                        title="Emergency manual student onboarding for assigned section"
                       >
                         <UserPlus className="w-4 h-4" />
-                        <span>+ Add Student</span>
-                      </button>
-                      <button
-                        onClick={() => setShowImportModal(true)}
-                        className="min-h-[44px] bg-sky-600 hover:bg-sky-500 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 transition-all shadow-md cursor-pointer shrink-0"
-                      >
-                        <FileSpreadsheet className="w-4 h-4" />
-                        <span>Upload Student Excel / CSV</span>
+                        <span>+ Add Student (Emergency)</span>
                       </button>
                     </div>
                   )}
@@ -5518,14 +5520,20 @@ export const FacultyDashboard: React.FC = () => {
       </div>
 
       {/* ADD STUDENT MODAL (MY STUDENTS CENTRAL ONBOARDING) */}
+      {/* EMERGENCY ADD SINGLE STUDENT MODAL */}
       {showAddStudentModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl p-6 shadow-2xl space-y-4 text-xs">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl p-6 shadow-2xl space-y-4 text-xs max-h-[92vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="font-bold text-white text-sm flex items-center space-x-2 font-sans">
-                <UserPlus className="w-4 h-4 text-emerald-400" />
-                <span>Onboard New Student — Section {assignedSection}</span>
-              </h3>
+              <div>
+                <h3 className="font-bold text-white text-sm flex items-center space-x-2 font-sans">
+                  <UserPlus className="w-4 h-4 text-emerald-400" />
+                  <span>Emergency Student Onboarding — Section {assignedSection}</span>
+                </h3>
+                <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                  Manual onboarding for emergency individual student enrollment into your assigned class.
+                </p>
+              </div>
               <button onClick={() => setShowAddStudentModal(false)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
             </div>
 
@@ -5534,33 +5542,42 @@ export const FacultyDashboard: React.FC = () => {
             <form onSubmit={handleAddStudentByFaculty} className="space-y-3 font-mono">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-300 font-bold block mb-1">Register Number</label>
-                  <input type="text" required placeholder="e.g. 312822205001" value={addRegNo} onChange={(e) => setAddRegNo(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                  <label className="text-slate-300 font-bold block mb-1">Register Number *</label>
+                  <input type="text" required placeholder="e.g. 620125243101" value={addRegNo} onChange={(e) => setAddRegNo(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
                 </div>
                 <div>
-                  <label className="text-slate-300 font-bold block mb-1">Name</label>
-                  <input type="text" required placeholder="e.g. Saran" value={addName} onChange={(e) => setAddName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white font-sans font-bold" />
+                  <label className="text-slate-300 font-bold block mb-1">Student Name *</label>
+                  <input type="text" required placeholder="e.g. Aravind Kumar" value={addName} onChange={(e) => setAddName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white font-sans font-bold" />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-300 font-bold block mb-1">College Mail ID</label>
-                  <input type="email" placeholder="saran.aids@avs.edu" value={addCollegeMail} onChange={(e) => setAddCollegeMail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                  <label className="text-slate-300 font-bold block mb-1">College Mail ID *</label>
+                  <input type="email" required placeholder="aravind.aids@avsec.edu.in" value={addCollegeMail} onChange={(e) => setAddCollegeMail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
                 </div>
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">Mobile Number</label>
+                  <input type="text" placeholder="e.g. 9876543210" value={addMobileNumber} onChange={(e) => setAddMobileNumber(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-slate-300 font-bold block mb-1">Personal Mail ID</label>
-                  <input type="email" placeholder="saran.personal@gmail.com" value={addPersonalMail} onChange={(e) => setAddPersonalMail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                  <input type="email" placeholder="aravind@gmail.com" value={addPersonalMail} onChange={(e) => setAddPersonalMail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                </div>
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">Address / City</label>
+                  <input type="text" placeholder="e.g. Salem, Tamil Nadu" value={addAddress} onChange={(e) => setAddAddress(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-300 font-bold block mb-1">Portal Password</label>
-                  <div className="relative">
-                    <input type={showAddPassword ? 'text' : 'password'} required value={addPassword} onChange={(e) => setAddPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 pr-9 rounded-xl text-white" />
-                    <button type="button" onClick={() => setShowAddPassword(!showAddPassword)} className="absolute right-2.5 top-3 text-slate-400 cursor-pointer">{showAddPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}</button>
-                  </div>
+                  <label className="text-slate-300 font-bold block mb-1">CGPA (or N/A)</label>
+                  <input type="text" placeholder="e.g. 8.45 or N/A" value={addCgpa} onChange={(e) => setAddCgpa(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                  <span className="text-[10px] text-slate-500 block mt-0.5">Use &quot;N/A&quot; if not yet graded</span>
                 </div>
                 <div>
                   <label className="text-slate-300 font-bold block mb-1">Entry Type</label>
@@ -5571,10 +5588,19 @@ export const FacultyDashboard: React.FC = () => {
                 </div>
               </div>
 
+              <div>
+                <label className="text-slate-300 font-bold block mb-1">Portal Password (Optional)</label>
+                <div className="relative">
+                  <input type={showAddPassword ? 'text' : 'password'} placeholder="Defaults to Register Number if blank" value={addPassword} onChange={(e) => setAddPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 pr-9 rounded-xl text-white" />
+                  <button type="button" onClick={() => setShowAddPassword(!showAddPassword)} className="absolute right-2.5 top-3 text-slate-400 cursor-pointer">{showAddPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}</button>
+                </div>
+                <span className="text-[10px] text-slate-500 block mt-0.5">Student can log in using College Email and their Register Number</span>
+              </div>
+
               <div className="grid grid-cols-3 gap-2 bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-[10px]">
                 <div><span className="text-slate-500 block">Department</span><span className="text-sky-400 font-bold">AI & DS</span></div>
-                <div><span className="text-slate-500 block">Year</span><span className="text-slate-300 font-bold">{assignedYear}</span></div>
-                <div><span className="text-slate-500 block">Section</span><span className="text-indigo-400 font-bold">Section {assignedSection}</span></div>
+                <div><span className="text-slate-500 block">Assigned Year</span><span className="text-slate-300 font-bold">{assignedYear}</span></div>
+                <div><span className="text-slate-500 block">Assigned Section</span><span className="text-indigo-400 font-bold">Section {assignedSection}</span></div>
               </div>
 
               <div className="flex justify-end space-x-2 pt-2 font-sans">
@@ -5582,7 +5608,7 @@ export const FacultyDashboard: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isAddingStudent}
-                  className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-slate-950 font-bold px-4 py-2 rounded-xl cursor-pointer flex items-center space-x-2"
+                  className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-slate-950 font-bold px-4 py-2 rounded-xl cursor-pointer flex items-center space-x-2 min-h-[44px]"
                 >
                   {isAddingStudent ? (
                     <>
@@ -5598,19 +5624,6 @@ export const FacultyDashboard: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* IMPORT STUDENTS EXCEL / CSV MODAL */}
-      <FacultyStudentBulkUploadModal
-        isOpen={showImportModal}
-        onClose={() => setShowImportModal(false)}
-        assignedYear={assignedYear}
-        assignedSection={assignedSection}
-        facultyName={session?.name}
-        onImportCompleted={async () => {
-          setShowImportModal(false);
-          await fetchRoster();
-        }}
-      />
 
       {/* STUDENT PASSWORD RESET MODAL */}
       {resetStudentTarget && (

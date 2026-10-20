@@ -73,6 +73,13 @@ export const HodStudentBulkUploadView: React.FC<{
   } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const isImportingRef = useRef(false);
+
+  // Helper to detect completely blank rows
+  const isRowEmpty = (row: any): boolean => {
+    if (!row || typeof row !== 'object') return true;
+    return Object.values(row).every((v) => v === undefined || v === null || String(v).trim() === '');
+  };
 
   useEffect(() => {
     fetchFacultyList();
@@ -196,8 +203,14 @@ export const HodStudentBulkUploadView: React.FC<{
           return;
         }
         const worksheet = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
-        await runValidationPreview(rows);
+        const rawRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+        const cleanRows = rawRows.filter((r: any) => !isRowEmpty(r));
+        if (cleanRows.length === 0) {
+          alert('Uploaded Excel file contains no student data rows.');
+          setIsValidating(false);
+          return;
+        }
+        await runValidationPreview(cleanRows);
       } catch (err: any) {
         alert(`Failed to parse Excel workbook: ${err.message || err}`);
         setIsValidating(false);
@@ -208,8 +221,14 @@ export const HodStudentBulkUploadView: React.FC<{
         header: true,
         skipEmptyLines: true,
         complete: async (results) => {
-          const rows = results.data as any[];
-          await runValidationPreview(rows);
+          const rawRows = results.data as any[];
+          const cleanRows = rawRows.filter((r: any) => !isRowEmpty(r));
+          if (cleanRows.length === 0) {
+            alert('Uploaded CSV file contains no student data rows.');
+            setIsValidating(false);
+            return;
+          }
+          await runValidationPreview(cleanRows);
         },
         error: (err) => {
           alert(`Failed to parse CSV file: ${err.message}`);
@@ -238,6 +257,7 @@ export const HodStudentBulkUploadView: React.FC<{
 
   // Safe chunked import: chunks into batches of 25 to prevent 413 & 504 timeouts
   const handleConfirmImport = async () => {
+    if (isImportingRef.current || isImporting) return;
     if (!previewData || !selectedFacultyId) return;
 
     const validStudents = previewData.preview
@@ -250,6 +270,7 @@ export const HodStudentBulkUploadView: React.FC<{
     }
 
     try {
+      isImportingRef.current = true;
       setIsImporting(true);
       const BATCH_SIZE = 25;
       const totalCount = validStudents.length;
@@ -306,6 +327,7 @@ export const HodStudentBulkUploadView: React.FC<{
     } finally {
       setIsImporting(false);
       setImportProgress(null);
+      isImportingRef.current = false;
     }
   };
 
@@ -604,7 +626,17 @@ export const HodStudentBulkUploadView: React.FC<{
             </div>
           </div>
 
-          {/* CONFIRMATION TOOLBAR */}
+          {/* WARNING WHEN ERRORS EXIST */}
+          {previewData.errorRowsCount > 0 && (
+            <div className="bg-amber-950/70 border border-amber-800 text-amber-200 px-4 py-3 rounded-xl text-xs flex items-center space-x-2 font-mono">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                <strong>{previewData.errorRowsCount} invalid rows</strong> were detected and will be skipped. Only the <strong>{previewData.validRowsCount + previewData.updateRowsCount} valid student records</strong> will be imported.
+              </span>
+            </div>
+          )}
+
+          {/* CONFIRMATION TOOLBAR (TOP) */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950 border border-slate-800 p-4 rounded-xl">
             <div className="text-xs font-mono text-slate-300">
               Assigned Faculty: <strong className="text-white">{previewData.faculty?.name || activeStaff?.name || 'Assigned Faculty'}</strong> | Target: <strong className="text-cyan-400">{previewData.year || selectedYear} Sec {previewData.section || selectedSection}</strong>
@@ -623,9 +655,9 @@ export const HodStudentBulkUploadView: React.FC<{
               </button>
               <button
                 onClick={handleConfirmImport}
-                disabled={!previewData.canImport || isImporting}
+                disabled={!previewData.canImport || isImporting || (previewData.validRowsCount + previewData.updateRowsCount) === 0}
                 className={`min-h-[44px] font-extrabold px-5 py-2 rounded-xl text-xs flex items-center space-x-2 shadow-lg cursor-pointer ${
-                  !previewData.canImport || isImporting
+                  !previewData.canImport || isImporting || (previewData.validRowsCount + previewData.updateRowsCount) === 0
                     ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
                     : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20'
                 }`}
@@ -713,6 +745,47 @@ export const HodStudentBulkUploadView: React.FC<{
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* BOTTOM CONFIRMATION TOOLBAR */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950 border border-slate-800 p-4 rounded-xl">
+            <div className="text-xs font-mono text-slate-300">
+              Ready to import <strong className="text-emerald-400">{previewData.validRowsCount + previewData.updateRowsCount} students</strong> into <strong className="text-cyan-400">{previewData.year || selectedYear} Sec {previewData.section || selectedSection}</strong>
+            </div>
+
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <button
+                onClick={() => {
+                  resetForm();
+                  if (onClose) onClose();
+                }}
+                disabled={isImporting}
+                className="min-h-[44px] bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-3 py-2 rounded-xl text-xs cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmImport}
+                disabled={!previewData.canImport || isImporting || (previewData.validRowsCount + previewData.updateRowsCount) === 0}
+                className={`min-h-[44px] font-extrabold px-5 py-2 rounded-xl text-xs flex items-center space-x-2 shadow-lg cursor-pointer ${
+                  !previewData.canImport || isImporting || (previewData.validRowsCount + previewData.updateRowsCount) === 0
+                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                    : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20'
+                }`}
+              >
+                {isImporting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Executing Safe Import...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    <span>Confirm & Import {previewData.validRowsCount + previewData.updateRowsCount} Students</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
