@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Papa from 'papaparse';
-import { API, API_BASE, fetchWithResilience } from '../../services/api';
+import { API, API_BASE, fetchWithResilience, getValidSessionToken } from '../../services/api';
 import type { UserSession, Student, TeamHead, Subject } from '../../types';
 import { DashboardLayout, type MenuItem } from '../../components/layout/DashboardLayout';
 import { ConfirmDeleteModal } from '../../components/common/ConfirmDeleteModal';
@@ -779,6 +779,23 @@ export const FacultyDashboard: React.FC = () => {
     }
   };
 
+  const handleViewCertificate = (certId: string) => {
+    const token = getValidSessionToken('FACULTY');
+    const url = `${API_BASE}/faculty/certificates/${certId}/view${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleDownloadCertificate = (certId: string, filename?: string) => {
+    const token = getValidSessionToken('FACULTY');
+    const url = `${API_BASE}/faculty/certificates/${certId}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    const link = document.createElement('a');
+    link.href = url;
+    if (filename) link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleOpenPartModal = (part?: any) => {
     if (part) {
       setEditingPart(part);
@@ -889,6 +906,23 @@ export const FacultyDashboard: React.FC = () => {
     } catch (err: any) {
       alert(err.message || 'Failed to delete participation record.');
     }
+  };
+
+  const handleViewParticipation = (partId: string) => {
+    const token = getValidSessionToken('FACULTY');
+    const url = `${API_BASE}/faculty/participation/${partId}/view${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleDownloadParticipation = (partId: string, filename?: string) => {
+    const token = getValidSessionToken('FACULTY');
+    const url = `${API_BASE}/faculty/participation/${partId}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    const link = document.createElement('a');
+    link.href = url;
+    if (filename) link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const fetchAttendanceHistory = React.useCallback(async () => {
@@ -4154,23 +4188,22 @@ export const FacultyDashboard: React.FC = () => {
                             <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
                               {hasFile ? (
                                 <>
-                                  <a
-                                    href={`${API_BASE}/faculty/certificates/${c.id}/view`}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="flex-1 bg-sky-950/80 hover:bg-sky-900 text-sky-300 border border-sky-800/80 px-2.5 py-1.5 rounded-lg text-center font-bold text-[11px] flex items-center justify-center space-x-1 transition-all"
+                                  <button
+                                    type="button"
+                                    onClick={() => handleViewCertificate(c.id)}
+                                    className="flex-1 bg-sky-950/80 hover:bg-sky-900 text-sky-300 border border-sky-800/80 px-2.5 py-1.5 rounded-lg text-center font-bold text-[11px] flex items-center justify-center space-x-1 transition-all cursor-pointer"
                                   >
                                     <ExternalLink className="w-3 h-3 text-sky-400" />
                                     <span>View File</span>
-                                  </a>
-                                  <a
-                                    href={`${API_BASE}/faculty/certificates/${c.id}/download`}
-                                    download
-                                    className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 px-2.5 py-1.5 rounded-lg text-center font-bold text-[11px] flex items-center justify-center space-x-1 transition-all"
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDownloadCertificate(c.id, c.originalFileName || c.original_file_name)}
+                                    className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 px-2.5 py-1.5 rounded-lg text-center font-bold text-[11px] flex items-center justify-center space-x-1 transition-all cursor-pointer"
                                   >
                                     <Download className="w-3 h-3 text-slate-400" />
                                     <span>Download</span>
-                                  </a>
+                                  </button>
                                 </>
                               ) : (
                                 <span className="text-slate-500 text-[10px] italic">No document file attached</span>
@@ -4636,23 +4669,22 @@ export const FacultyDashboard: React.FC = () => {
                               <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
                                 {hasFile ? (
                                   <>
-                                    <a
-                                      href={`/api/faculty/participation/${p.id}/view`}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="flex-1 bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-800/80 px-2.5 py-1.5 rounded-lg text-center font-bold text-[11px] flex items-center justify-center space-x-1 transition-all"
+                                    <button
+                                      type="button"
+                                      onClick={() => handleViewParticipation(p.id)}
+                                      className="flex-1 bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-800/80 px-2.5 py-1.5 rounded-lg text-center font-bold text-[11px] flex items-center justify-center space-x-1 transition-all cursor-pointer"
                                     >
                                       <ExternalLink className="w-3 h-3 text-indigo-400" />
                                       <span>View Proof</span>
-                                    </a>
-                                    <a
-                                      href={`/api/faculty/participation/${p.id}/download`}
-                                      download
-                                      className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 px-2.5 py-1.5 rounded-lg text-center font-bold text-[11px] flex items-center justify-center space-x-1 transition-all"
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDownloadParticipation(p.id, p.originalFileName || p.original_file_name)}
+                                      className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 px-2.5 py-1.5 rounded-lg text-center font-bold text-[11px] flex items-center justify-center space-x-1 transition-all cursor-pointer"
                                     >
                                       <Download className="w-3 h-3 text-slate-400" />
                                       <span>Download</span>
-                                    </a>
+                                    </button>
                                   </>
                                 ) : (
                                   <span className="text-slate-500 text-[10px] italic">No proof document attached</span>
@@ -4827,7 +4859,7 @@ export const FacultyDashboard: React.FC = () => {
                         let uploadedAttId: string | null = null;
                         const newProjId = `proj-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
-                        try {
+                        const saveOperation = async () => {
                           // Step 1: Upload attached documentation/photo FIRST if provided
                           if (projDocFile) {
                             setProjSaveStep('UPLOADING');
@@ -4867,9 +4899,38 @@ export const FacultyDashboard: React.FC = () => {
                           ];
 
                           try {
-                            await API.updateStudent360(selectedStudent.id, {
+                            const saveRes = await API.updateStudent360(selectedStudent.id, {
                               projects: updatedProjects
                             });
+
+                            // Step 3: Success Confirmation & Immediate Local State Update
+                            setProjSaveStep('SUCCESS');
+                            setProjSaveFeedback({
+                              type: 'success',
+                              message: `Project "${projTitle.trim()}" saved successfully ${projDocFile ? 'with documentation attached' : ''}!`
+                            });
+                            setProjTitle('');
+                            setProjCategory('' as any);
+                            setProjLiveUrl('');
+                            setProjUrl('');
+                            setProjDocFile(null);
+
+                            if (saveRes?.profile) {
+                              setStudent360Edit(saveRes.profile);
+                            } else {
+                              setStudent360Edit((prev: any) => ({
+                                ...(prev || {}),
+                                projects: updatedProjects
+                              }));
+                            }
+
+                            // Trigger background roster sync without blocking UI
+                            fetchRoster().catch(() => {});
+
+                            setTimeout(() => {
+                              setProjSaveStep('IDLE');
+                              setProjSaveFeedback(null);
+                            }, 3000);
                           } catch (saveErr: any) {
                             // Rollback uploaded file if metadata persistence fails
                             if (uploadedAttId) {
@@ -4879,23 +4940,14 @@ export const FacultyDashboard: React.FC = () => {
                             }
                             throw saveErr;
                           }
+                        };
 
-                          // Step 3: Success Confirmation & Form Reset
-                          setProjSaveStep('SUCCESS');
-                          setProjSaveFeedback({
-                            type: 'success',
-                            message: `Project "${projTitle.trim()}" saved successfully ${projDocFile ? 'with documentation attached' : ''}!`
-                          });
-                          setProjTitle('');
-                          setProjCategory('' as any);
-                          setProjLiveUrl('');
-                          setProjUrl('');
-                          setProjDocFile(null);
-                          await reloadStudent360();
-                          setTimeout(() => {
-                            setProjSaveStep('IDLE');
-                            setProjSaveFeedback(null);
-                          }, 4000);
+                        const timeoutPromise = new Promise((_, reject) => {
+                          setTimeout(() => reject(new Error('Project save timed out after 20 seconds. Please check your connection and retry.')), 20000);
+                        });
+
+                        try {
+                          await Promise.race([saveOperation(), timeoutPromise]);
                         } catch (err: any) {
                           setProjSaveStep('IDLE');
                           setProjSaveFeedback({

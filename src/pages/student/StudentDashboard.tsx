@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { API, API_BASE } from '../../services/api';
+import { API, API_BASE, getValidSessionToken } from '../../services/api';
 import type { UserSession } from '../../types';
 import { DashboardLayout, type MenuItem } from '../../components/layout/DashboardLayout';
 import { ProofAttachmentControl } from '../../components/common/ProofAttachmentControl';
@@ -115,6 +115,40 @@ export const StudentDashboard: React.FC = () => {
     } finally {
       setIsRefreshingLeetCode(false);
     }
+  };
+
+  const handleViewParticipation = (partId: string) => {
+    const token = getValidSessionToken('STUDENT');
+    const url = `${API_BASE}/faculty/participation/${partId}/view${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleDownloadParticipation = (partId: string, filename?: string) => {
+    const token = getValidSessionToken('STUDENT');
+    const url = `${API_BASE}/faculty/participation/${partId}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    const link = document.createElement('a');
+    link.href = url;
+    if (filename) link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleViewCertificate = (certId: string) => {
+    const token = getValidSessionToken('STUDENT');
+    const url = `${API_BASE}/faculty/certificates/${certId}/view${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleDownloadCertificate = (certId: string, filename?: string) => {
+    const token = getValidSessionToken('STUDENT');
+    const url = `${API_BASE}/faculty/certificates/${certId}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    const link = document.createElement('a');
+    link.href = url;
+    if (filename) link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   if (isLoading) {
@@ -646,6 +680,90 @@ export const StudentDashboard: React.FC = () => {
         </div>
         )}
 
+        {/* CERTIFICATES TAB */}
+        {activeTab === 'certificates' && (
+          <div className="space-y-6">
+            <GeminiCategoryBestPerformerCard
+              categoryKey="certificates"
+              assignedYear={student.year}
+              assignedSection={student.section}
+            />
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 text-xs font-mono">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 className="text-lg font-bold text-white flex items-center space-x-2 font-sans">
+                  <FileText className="w-5 h-5 text-sky-400" />
+                  <span>Technical & Course Certificates</span>
+                </h3>
+                <span className="text-slate-400 text-[11px] font-sans">Read-Only Student Portfolio</span>
+              </div>
+
+              {(_certificates || []).length === 0 ? (
+                <div className="bg-slate-950 border border-slate-800 p-8 rounded-xl text-center text-slate-400 font-sans">
+                  No technical certificates uploaded yet. Your class coordinator can verify and upload certificates for your profile.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {(_certificates || []).map((c: any, idx: number) => {
+                    const hasFile = Boolean(c.filePath || c.file_path || c.proofFilePath || c.proof_file_path || c.originalFileName || c.original_file_name);
+                    return (
+                      <div key={c.id || idx} className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3 flex flex-col justify-between">
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-start gap-2">
+                            <span className="bg-sky-950 text-sky-300 font-bold text-[10px] px-2 py-0.5 rounded border border-sky-800/80">
+                              {c.category || 'Technical Certification'}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-bold">{c.platform}</span>
+                          </div>
+                          <div className="text-white font-bold font-sans text-sm">{c.courseName || c.course_name}</div>
+                          <div className="space-y-1 text-[11px] text-slate-400 border-t border-slate-800/60 pt-2">
+                            {(c.issueDate || c.issue_date) && (
+                              <div>
+                                <span className="text-slate-500">Issued:</span>{' '}
+                                <span className="text-slate-300">{c.issueDate || c.issue_date}</span>
+                              </div>
+                            )}
+                            {(c.certificateId || c.certificate_id) && (
+                              <div>
+                                <span className="text-slate-500">Cert ID:</span>{' '}
+                                <span className="text-slate-300">{c.certificateId || c.certificate_id}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {hasFile ? (
+                          <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleViewCertificate(c.id)}
+                              className="flex-1 bg-sky-950/80 hover:bg-sky-900 text-sky-300 border border-sky-800/80 px-2 py-1 rounded text-center font-bold text-[11px] flex items-center justify-center space-x-1 cursor-pointer"
+                            >
+                              <ExternalLink className="w-3 h-3 text-sky-400" />
+                              <span>View File</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadCertificate(c.id, c.originalFileName || c.original_file_name)}
+                              className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 px-2 py-1 rounded text-center font-bold text-[11px] flex items-center justify-center space-x-1 cursor-pointer"
+                            >
+                              <Download className="w-3 h-3 text-slate-400" />
+                              <span>Download</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="text-slate-500 text-[10px] italic border-t border-slate-800/80 pt-2">
+                            No document file attached
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* PARTICIPATION TAB */}
         {activeTab === 'participation' && (
           <div className="space-y-6">
@@ -717,23 +835,22 @@ export const StudentDashboard: React.FC = () => {
 
                       {hasFile ? (
                         <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
-                          <a
-                            href={`${API_BASE}/faculty/participation/${p.id}/view`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex-1 bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-800/80 px-2 py-1 rounded text-center font-bold text-[11px] flex items-center justify-center space-x-1"
+                          <button
+                            type="button"
+                            onClick={() => handleViewParticipation(p.id)}
+                            className="flex-1 bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-800/80 px-2 py-1 rounded text-center font-bold text-[11px] flex items-center justify-center space-x-1 cursor-pointer"
                           >
                             <ExternalLink className="w-3 h-3 text-indigo-400" />
                             <span>View Proof</span>
-                          </a>
-                          <a
-                            href={`${API_BASE}/faculty/participation/${p.id}/download`}
-                            download
-                            className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 px-2 py-1 rounded text-center font-bold text-[11px] flex items-center justify-center space-x-1"
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadParticipation(p.id, p.originalFileName || p.original_file_name)}
+                            className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 px-2 py-1 rounded text-center font-bold text-[11px] flex items-center justify-center space-x-1 cursor-pointer"
                           >
                             <Download className="w-3 h-3 text-slate-400" />
                             <span>Download</span>
-                          </a>
+                          </button>
                         </div>
                       ) : (
                         <div className="text-slate-500 text-[10px] italic border-t border-slate-800/80 pt-2">

@@ -574,7 +574,11 @@ export async function initDatabaseSchema(): Promise<void> {
         `ALTER TABLE skilledge_records ADD COLUMN IF NOT EXISTS earned_delta INTEGER DEFAULT 0;`,
         `ALTER TABLE skilledge_records ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'VERIFIED';`,
         `ALTER TABLE skilledge_records ADD COLUMN IF NOT EXISTS last_synced_at TEXT;`,
-        `ALTER TABLE attachments ADD COLUMN IF NOT EXISTS file_data TEXT;`,
+        `ALTER TABLE attachments ADD COLUMN IF NOT EXISTS file_data BYTEA;`,
+        `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS file_data BYTEA;`,
+        `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS mime_type TEXT;`,
+        `ALTER TABLE participation_records ADD COLUMN IF NOT EXISTS file_data BYTEA;`,
+        `ALTER TABLE participation_records ADD COLUMN IF NOT EXISTS mime_type TEXT;`,
         `ALTER TABLE students ADD COLUMN IF NOT EXISTS mobile_number TEXT;`,
         `ALTER TABLE students ADD COLUMN IF NOT EXISTS address TEXT;`
       ];
@@ -633,7 +637,11 @@ export async function initDatabaseSchema(): Promise<void> {
       `ALTER TABLE skilledge_records ADD COLUMN earned_delta INTEGER DEFAULT 0;`,
       `ALTER TABLE skilledge_records ADD COLUMN status TEXT DEFAULT 'VERIFIED';`,
       `ALTER TABLE skilledge_records ADD COLUMN last_synced_at TEXT;`,
-      `ALTER TABLE attachments ADD COLUMN file_data TEXT;`
+      `ALTER TABLE attachments ADD COLUMN file_data BLOB;`,
+      `ALTER TABLE certificate_records ADD COLUMN file_data BLOB;`,
+      `ALTER TABLE certificate_records ADD COLUMN mime_type TEXT;`,
+      `ALTER TABLE participation_records ADD COLUMN file_data BLOB;`,
+      `ALTER TABLE participation_records ADD COLUMN mime_type TEXT;`
     ];
     for (const colSql of alterCols) {
       try { sqlite.exec(colSql); } catch {}
@@ -2529,13 +2537,15 @@ export class SQLiteDB {
     issueDate: string;
     filePath?: string;
     originalFileName?: string;
+    fileData?: Buffer | null;
+    mimeType?: string;
   }): Promise<string> {
     const id = `cert-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const now = new Date().toISOString();
     await executeRun(`
-      INSERT INTO certificate_records (id, student_id, course_name, platform, category, issue_date, file_path, original_file_name, uploaded_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [id, rec.studentId, rec.courseName, rec.platform, rec.category, rec.issueDate, rec.filePath || '', rec.originalFileName || '', now]);
+      INSERT INTO certificate_records (id, student_id, course_name, platform, category, issue_date, file_path, original_file_name, uploaded_at, file_data, mime_type)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [id, rec.studentId, rec.courseName, rec.platform, rec.category, rec.issueDate, rec.filePath || '', rec.originalFileName || '', now, rec.fileData || null, rec.mimeType || '']);
     return id;
   }
 
@@ -2549,6 +2559,8 @@ export class SQLiteDB {
       issueDate: string;
       filePath?: string;
       originalFileName?: string;
+      fileData?: Buffer | null;
+      mimeType?: string;
     }
   ): Promise<boolean> {
     const existing = await this.getCertificateById(certId);
@@ -2556,12 +2568,14 @@ export class SQLiteDB {
 
     const filePath = rec.filePath !== undefined ? rec.filePath : existing.file_path;
     const originalFileName = rec.originalFileName !== undefined ? rec.originalFileName : existing.original_file_name;
+    const fileData = rec.fileData !== undefined ? rec.fileData : existing.file_data;
+    const mimeType = rec.mimeType !== undefined ? rec.mimeType : (existing.mime_type || '');
 
     await executeRun(`
       UPDATE certificate_records
-      SET course_name = ?, platform = ?, category = ?, issue_date = ?, file_path = ?, original_file_name = ?
+      SET course_name = ?, platform = ?, category = ?, issue_date = ?, file_path = ?, original_file_name = ?, file_data = ?, mime_type = ?
       WHERE id = ? AND student_id = ?
-    `, [rec.courseName, rec.platform, rec.category, rec.issueDate, filePath, originalFileName, certId, studentId]);
+    `, [rec.courseName, rec.platform, rec.category, rec.issueDate, filePath, originalFileName, fileData || null, mimeType, certId, studentId]);
     return true;
   }
 
@@ -2589,12 +2603,14 @@ export class SQLiteDB {
     description?: string;
     filePath?: string;
     originalFileName?: string;
+    fileData?: Buffer | null;
+    mimeType?: string;
   }): Promise<string> {
     const id = `part-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const now = new Date().toISOString();
     await executeRun(`
-      INSERT INTO participation_records (id, student_id, event_name, event_type, organizer, college_name, date, event_level, achievement, position, description, proof_file_path, original_file_name, uploaded_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO participation_records (id, student_id, event_name, event_type, organizer, college_name, date, event_level, achievement, position, description, proof_file_path, original_file_name, uploaded_at, file_data, mime_type)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       id,
       rec.studentId,
@@ -2609,7 +2625,9 @@ export class SQLiteDB {
       rec.description || '',
       rec.filePath || '',
       rec.originalFileName || '',
-      now
+      now,
+      rec.fileData || null,
+      rec.mimeType || ''
     ]);
     return id;
   }
@@ -2627,6 +2645,8 @@ export class SQLiteDB {
       description?: string;
       filePath?: string;
       originalFileName?: string;
+      fileData?: Buffer | null;
+      mimeType?: string;
     }
   ): Promise<boolean> {
     const existing = await this.getParticipationById(partId);
@@ -2634,10 +2654,12 @@ export class SQLiteDB {
 
     const filePath = rec.filePath !== undefined ? rec.filePath : (existing.proof_file_path || existing.file_path);
     const originalFileName = rec.originalFileName !== undefined ? rec.originalFileName : (existing.original_file_name || existing.originalFileName);
+    const fileData = rec.fileData !== undefined ? rec.fileData : existing.file_data;
+    const mimeType = rec.mimeType !== undefined ? rec.mimeType : (existing.mime_type || '');
 
     await executeRun(`
       UPDATE participation_records
-      SET event_name = ?, event_type = ?, organizer = ?, college_name = ?, date = ?, event_level = ?, achievement = ?, position = ?, description = ?, proof_file_path = ?, original_file_name = ?
+      SET event_name = ?, event_type = ?, organizer = ?, college_name = ?, date = ?, event_level = ?, achievement = ?, position = ?, description = ?, proof_file_path = ?, original_file_name = ?, file_data = ?, mime_type = ?
       WHERE id = ? AND student_id = ?
     `, [
       rec.eventName,
@@ -2651,9 +2673,13 @@ export class SQLiteDB {
       rec.description || '',
       filePath || '',
       originalFileName || '',
+      fileData || null,
+      mimeType,
       partId,
       studentId
     ]);
+    return true;
+  }
     return true;
   }
 
@@ -3612,6 +3638,12 @@ export class SQLiteDB {
     }
 
     await executeRun(`DELETE FROM ${tableName} WHERE id = ? AND student_id = ?`, [recordId, studentId]);
+    try {
+      await executeRun(
+        'UPDATE attachments SET is_deleted = 1, deleted_at = ? WHERE student_id = ? AND record_type = ? AND record_id = ?',
+        [new Date().toISOString(), studentId, category.toLowerCase(), recordId]
+      );
+    } catch {}
   }
 
   public async deleteFinalizedAward(awardId: string): Promise<void> {

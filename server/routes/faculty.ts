@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { db } from '../db.js';
+import { db, normalizeYear, normalizeSection } from '../db.js';
 import { executeRun, queryAll, queryOne, isPostgresActive } from '../postgresAdapter.js';
 import { authenticateToken, requireRole, verifyFacultySectionAccess, AuthRequest } from '../middleware/auth.js';
 import { calculateCategoryScores, computeOverallScore } from '../scoringEngine.js';
@@ -755,8 +755,13 @@ async function checkFacultyStudentFileAccess(req: AuthRequest, student: any): Pr
   const assignedYear = facultyAssignment ? facultyAssignment.year : req.user.assignedYear;
   const assignedSection = facultyAssignment ? facultyAssignment.section : req.user.assignedSection;
 
-  const isYearMatch = !assignedYear || assignedYear === 'ALL' || student.year === assignedYear;
-  const isSectionMatch = !assignedSection || assignedSection === 'ALL' || student.section === assignedSection;
+  const cleanAssignedYear = normalizeYear(assignedYear);
+  const cleanAssignedSec = normalizeSection(assignedSection);
+  const cleanStudentYear = normalizeYear(student.year);
+  const cleanStudentSec = normalizeSection(student.section);
+
+  const isYearMatch = !cleanAssignedYear || cleanAssignedYear === 'ALL' || cleanStudentYear === cleanAssignedYear;
+  const isSectionMatch = !cleanAssignedSec || cleanAssignedSec === 'ALL' || cleanStudentSec === cleanAssignedSec;
 
   return (isYearMatch && isSectionMatch) || isCreatedByStaff || isWorkspaceStaff;
 }
@@ -850,8 +855,28 @@ router.post('/students/:studentId/certificates/upload', verifyFacultySectionAcce
         category: (category || 'Technical Certification').trim(),
         issueDate: issueDate || new Date().toISOString().split('T')[0],
         filePath,
-        originalFileName
+        originalFileName,
+        fileData: req.file ? req.file.buffer : null,
+        mimeType: req.file ? req.file.mimetype : ''
       });
+
+      if (req.file) {
+        await db.createAttachment({
+          id: `att-cert-${certId}`,
+          student_id: studentId,
+          record_type: 'certificates',
+          record_id: certId,
+          original_file_name: req.file.originalname,
+          stored_file_name: filePath,
+          mime_type: req.file.mimetype,
+          file_size: req.file.size,
+          uploaded_by_user_id: req.user!.id,
+          uploaded_by_role: req.user!.role,
+          uploaded_at: new Date().toISOString(),
+          is_deleted: 0,
+          file_data: req.file.buffer
+        });
+      }
 
       const { overallScore: updatedScore, profile: full360 } = await recalculateAffectedStudentScore(studentId);
       await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'UPLOAD_CERTIFICATE', `STUDENT:${studentId}:CERT:${certId}`);
@@ -905,6 +930,22 @@ router.put('/students/:studentId/certificates/:certId', verifyFacultySectionAcce
         filePath = `certificates/${studentId}/cert-${Date.now()}-${Math.random().toString(36).substring(2, 6)}${ext}`;
         await uploadFileToStorage(filePath, req.file.buffer, req.file.mimetype);
         originalFileName = req.file.originalname;
+
+        await db.createAttachment({
+          id: `att-cert-${certId}`,
+          student_id: studentId,
+          record_type: 'certificates',
+          record_id: certId,
+          original_file_name: req.file.originalname,
+          stored_file_name: filePath,
+          mime_type: req.file.mimetype,
+          file_size: req.file.size,
+          uploaded_by_user_id: req.user!.id,
+          uploaded_by_role: req.user!.role,
+          uploaded_at: new Date().toISOString(),
+          is_deleted: 0,
+          file_data: req.file.buffer
+        });
       }
 
       await db.updateCertificateUpload(certId, studentId, {
@@ -913,7 +954,9 @@ router.put('/students/:studentId/certificates/:certId', verifyFacultySectionAcce
         category: (category || 'Technical Certification').trim(),
         issueDate: issueDate || new Date().toISOString().split('T')[0],
         filePath,
-        originalFileName
+        originalFileName,
+        fileData: req.file ? req.file.buffer : undefined,
+        mimeType: req.file ? req.file.mimetype : undefined
       });
 
       const { overallScore: updatedScore, profile: full360 } = await recalculateAffectedStudentScore(studentId);
@@ -966,8 +1009,8 @@ router.get('/certificates/:certId/view', async (req: AuthRequest, res: Response)
   const { certId } = req.params;
   const cert = await db.getCertificateById(certId);
 
-  if (!cert || !cert.file_path) {
-    return res.status(404).json({ error: 'Certificate file document not found.' });
+  if (!cert) {
+    return res.status(404).json({ error: 'Certificate record not found.' });
   }
 
   const student = await db.getStudentById(cert.student_id);
@@ -975,25 +1018,52 @@ router.get('/certificates/:certId/view', async (req: AuthRequest, res: Response)
     return res.status(403).json({ error: 'Forbidden: You do not have permission to view files for this student.' });
   }
 
-  const fileData = await downloadFileFromStorage(cert.file_path);
-  if (!fileData) {
-    return res.status(404).json({ error: 'Certificate file missing on server storage.' });
+  let buffer: Buffer | null = null;
+  let contentType = cert.mime_type || '';
+
+  // 1. Primary: Direct record bytea persistence
+  if (cert.file_data) {
+    buffer = Buffer.isBuffer(cert.file_data) ? cert.file_data : Buffer.from(cert.file_data);
   }
 
-  const ext = path.extname(cert.file_path).toLowerCase();
-  res.setHeader('Content-Type', fileData.contentType || getMimeFromPath(cert.file_path));
-  res.setHeader('Content-Length', fileData.buffer.length.toString());
-  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(cert.original_file_name || 'certificate' + ext)}"`);
+  // 2. Secondary: Attachments table bytea persistence
+  if (!buffer) {
+    const att = await db.getAttachmentForRecord(cert.student_id, 'certificates', certId);
+    if (att && att.file_data) {
+      buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
+      if (!contentType && att.mime_type) contentType = att.mime_type;
+    }
+  }
+
+  // 3. Fallback: Supabase Storage / filesystem
+  const filePath = cert.file_path || cert.proof_file_path;
+  if (!buffer && filePath) {
+    const fileData = await downloadFileFromStorage(filePath);
+    if (fileData) {
+      buffer = fileData.buffer;
+      if (!contentType && fileData.contentType) contentType = fileData.contentType;
+    }
+  }
+
+  if (!buffer) {
+    return res.status(404).json({ error: 'Certificate file content is not available on server storage.' });
+  }
+
+  const ext = path.extname(cert.original_file_name || filePath || '.pdf').toLowerCase();
+  const origName = cert.original_file_name || `${cert.course_name}_Certificate${ext}`;
+  res.setHeader('Content-Type', contentType || getMimeFromPath(origName));
+  res.setHeader('Content-Length', buffer.length.toString());
+  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(origName)}"`);
   res.setHeader('Cache-Control', 'private, max-age=3600');
-  return res.send(fileData.buffer);
+  return res.send(buffer);
 });
 
 router.get('/certificates/:certId/download', async (req: AuthRequest, res: Response) => {
   const { certId } = req.params;
   const cert = await db.getCertificateById(certId);
 
-  if (!cert || !cert.file_path) {
-    return res.status(404).json({ error: 'Certificate file document not found.' });
+  if (!cert) {
+    return res.status(404).json({ error: 'Certificate record not found.' });
   }
 
   const student = await db.getStudentById(cert.student_id);
@@ -1001,16 +1071,43 @@ router.get('/certificates/:certId/download', async (req: AuthRequest, res: Respo
     return res.status(403).json({ error: 'Forbidden: You do not have permission to download files for this student.' });
   }
 
-  const fileData = await downloadFileFromStorage(cert.file_path);
-  if (!fileData) {
-    return res.status(404).json({ error: 'Certificate file missing on server storage.' });
+  let buffer: Buffer | null = null;
+  let contentType = cert.mime_type || '';
+
+  // 1. Primary: Direct record bytea persistence
+  if (cert.file_data) {
+    buffer = Buffer.isBuffer(cert.file_data) ? cert.file_data : Buffer.from(cert.file_data);
   }
 
-  const ext = path.extname(cert.file_path).toLowerCase();
-  res.setHeader('Content-Type', fileData.contentType || getMimeFromPath(cert.file_path));
-  res.setHeader('Content-Length', fileData.buffer.length.toString());
-  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(cert.original_file_name || `${cert.course_name}_Certificate${ext}`)}"`);
-  return res.send(fileData.buffer);
+  // 2. Secondary: Attachments table bytea persistence
+  if (!buffer) {
+    const att = await db.getAttachmentForRecord(cert.student_id, 'certificates', certId);
+    if (att && att.file_data) {
+      buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
+      if (!contentType && att.mime_type) contentType = att.mime_type;
+    }
+  }
+
+  // 3. Fallback: Supabase Storage / filesystem
+  const filePath = cert.file_path || cert.proof_file_path;
+  if (!buffer && filePath) {
+    const fileData = await downloadFileFromStorage(filePath);
+    if (fileData) {
+      buffer = fileData.buffer;
+      if (!contentType && fileData.contentType) contentType = fileData.contentType;
+    }
+  }
+
+  if (!buffer) {
+    return res.status(404).json({ error: 'Certificate file content is not available on server storage.' });
+  }
+
+  const ext = path.extname(cert.original_file_name || filePath || '.pdf').toLowerCase();
+  const origName = cert.original_file_name || `${cert.course_name}_Certificate${ext}`;
+  res.setHeader('Content-Type', contentType || getMimeFromPath(origName));
+  res.setHeader('Content-Length', buffer.length.toString());
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(origName)}"`);
+  return res.send(buffer);
 });
 
 // PARTICIPATION MODULE FILE UPLOAD & MANAGEMENT ENDPOINTS
@@ -1054,8 +1151,28 @@ router.post('/students/:studentId/participation/upload', verifyFacultySectionAcc
         achievement: (achievement || 'Participant').trim(),
         description: (description || '').trim(),
         filePath,
-        originalFileName
+        originalFileName,
+        fileData: req.file ? req.file.buffer : null,
+        mimeType: req.file ? req.file.mimetype : ''
       });
+
+      if (req.file) {
+        await db.createAttachment({
+          id: `att-part-${partId}`,
+          student_id: studentId,
+          record_type: 'participation',
+          record_id: partId,
+          original_file_name: req.file.originalname,
+          stored_file_name: filePath,
+          mime_type: req.file.mimetype,
+          file_size: req.file.size,
+          uploaded_by_user_id: req.user!.id,
+          uploaded_by_role: req.user!.role,
+          uploaded_at: new Date().toISOString(),
+          is_deleted: 0,
+          file_data: req.file.buffer
+        });
+      }
 
       const { overallScore: updatedScore, profile: full360 } = await recalculateAffectedStudentScore(studentId);
 
@@ -1110,6 +1227,22 @@ router.put('/students/:studentId/participation/:partId', verifyFacultySectionAcc
         filePath = `participation/${studentId}/part-${Date.now()}-${Math.random().toString(36).substring(2, 6)}${ext}`;
         await uploadFileToStorage(filePath, req.file.buffer, req.file.mimetype);
         originalFileName = req.file.originalname;
+
+        await db.createAttachment({
+          id: `att-part-${partId}`,
+          student_id: studentId,
+          record_type: 'participation',
+          record_id: partId,
+          original_file_name: req.file.originalname,
+          stored_file_name: filePath,
+          mime_type: req.file.mimetype,
+          file_size: req.file.size,
+          uploaded_by_user_id: req.user!.id,
+          uploaded_by_role: req.user!.role,
+          uploaded_at: new Date().toISOString(),
+          is_deleted: 0,
+          file_data: req.file.buffer
+        });
       }
 
       await db.updateParticipationUpload(partId, studentId, {
@@ -1121,7 +1254,9 @@ router.put('/students/:studentId/participation/:partId', verifyFacultySectionAcc
         achievement: (achievement || 'Participant').trim(),
         description: (description || '').trim(),
         filePath,
-        originalFileName
+        originalFileName,
+        fileData: req.file ? req.file.buffer : undefined,
+        mimeType: req.file ? req.file.mimetype : undefined
       });
 
       const { overallScore: updatedScore, profile: full360 } = await recalculateAffectedStudentScore(studentId);
@@ -1177,9 +1312,8 @@ router.get('/participation/:partId/view', async (req: AuthRequest, res: Response
   const { partId } = req.params;
   const part = await db.getParticipationById(partId);
 
-  const proofFile = part?.proof_file_path || part?.file_path;
-  if (!part || !proofFile) {
-    return res.status(404).json({ error: 'Participation proof file not found.' });
+  if (!part) {
+    return res.status(404).json({ error: 'Participation record not found.' });
   }
 
   const student = await db.getStudentById(part.student_id);
@@ -1187,27 +1321,52 @@ router.get('/participation/:partId/view', async (req: AuthRequest, res: Response
     return res.status(403).json({ error: 'Forbidden: You do not have permission to view files for this student.' });
   }
 
-  const fileData = await downloadFileFromStorage(proofFile);
-  if (!fileData) {
-    return res.status(404).json({ error: 'Proof file missing on server storage.' });
+  let buffer: Buffer | null = null;
+  let contentType = part.mime_type || '';
+
+  // 1. Primary: Direct record bytea persistence
+  if (part.file_data) {
+    buffer = Buffer.isBuffer(part.file_data) ? part.file_data : Buffer.from(part.file_data);
   }
 
-  const ext = path.extname(proofFile).toLowerCase();
+  // 2. Secondary: Attachments table bytea persistence
+  if (!buffer) {
+    const att = await db.getAttachmentForRecord(part.student_id, 'participation', partId);
+    if (att && att.file_data) {
+      buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
+      if (!contentType && att.mime_type) contentType = att.mime_type;
+    }
+  }
+
+  // 3. Fallback: Supabase Storage / filesystem
+  const proofFile = part.proof_file_path || part.file_path;
+  if (!buffer && proofFile) {
+    const fileData = await downloadFileFromStorage(proofFile);
+    if (fileData) {
+      buffer = fileData.buffer;
+      if (!contentType && fileData.contentType) contentType = fileData.contentType;
+    }
+  }
+
+  if (!buffer) {
+    return res.status(404).json({ error: 'Participation proof file is not available on server storage.' });
+  }
+
+  const ext = path.extname(part.original_file_name || proofFile || '.pdf').toLowerCase();
   const origName = part.original_file_name || part.originalFileName || `${part.event_name}_Proof${ext}`;
-  res.setHeader('Content-Type', fileData.contentType || getMimeFromPath(proofFile));
-  res.setHeader('Content-Length', fileData.buffer.length.toString());
+  res.setHeader('Content-Type', contentType || getMimeFromPath(origName));
+  res.setHeader('Content-Length', buffer.length.toString());
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(origName)}"`);
   res.setHeader('Cache-Control', 'private, max-age=3600');
-  return res.send(fileData.buffer);
+  return res.send(buffer);
 });
 
 router.get('/participation/:partId/download', async (req: AuthRequest, res: Response) => {
   const { partId } = req.params;
   const part = await db.getParticipationById(partId);
 
-  const proofFile = part?.proof_file_path || part?.file_path;
-  if (!part || !proofFile) {
-    return res.status(404).json({ error: 'Participation proof file not found.' });
+  if (!part) {
+    return res.status(404).json({ error: 'Participation record not found.' });
   }
 
   const student = await db.getStudentById(part.student_id);
@@ -1215,17 +1374,43 @@ router.get('/participation/:partId/download', async (req: AuthRequest, res: Resp
     return res.status(403).json({ error: 'Forbidden: You do not have permission to download files for this student.' });
   }
 
-  const fileData = await downloadFileFromStorage(proofFile);
-  if (!fileData) {
-    return res.status(404).json({ error: 'Proof file missing on server storage.' });
+  let buffer: Buffer | null = null;
+  let contentType = part.mime_type || '';
+
+  // 1. Primary: Direct record bytea persistence
+  if (part.file_data) {
+    buffer = Buffer.isBuffer(part.file_data) ? part.file_data : Buffer.from(part.file_data);
   }
 
-  const ext = path.extname(proofFile).toLowerCase();
+  // 2. Secondary: Attachments table bytea persistence
+  if (!buffer) {
+    const att = await db.getAttachmentForRecord(part.student_id, 'participation', partId);
+    if (att && att.file_data) {
+      buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
+      if (!contentType && att.mime_type) contentType = att.mime_type;
+    }
+  }
+
+  // 3. Fallback: Supabase Storage / filesystem
+  const proofFile = part.proof_file_path || part.file_path;
+  if (!buffer && proofFile) {
+    const fileData = await downloadFileFromStorage(proofFile);
+    if (fileData) {
+      buffer = fileData.buffer;
+      if (!contentType && fileData.contentType) contentType = fileData.contentType;
+    }
+  }
+
+  if (!buffer) {
+    return res.status(404).json({ error: 'Participation proof file is not available on server storage.' });
+  }
+
+  const ext = path.extname(part.original_file_name || proofFile || '.pdf').toLowerCase();
   const origName = part.original_file_name || part.originalFileName || `${part.event_name}_Proof${ext}`;
-  res.setHeader('Content-Type', fileData.contentType || getMimeFromPath(proofFile));
-  res.setHeader('Content-Length', fileData.buffer.length.toString());
+  res.setHeader('Content-Type', contentType || getMimeFromPath(origName));
+  res.setHeader('Content-Length', buffer.length.toString());
   res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(origName)}"`);
-  return res.send(fileData.buffer);
+  return res.send(buffer);
 });
 
 // ATTENDANCE MODULE ENDPOINTS
