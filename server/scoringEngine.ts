@@ -29,14 +29,17 @@ export function calculateCategoryScores(
   participationList: ParticipationRecord[] = []
 ) {
   // Academic Score (0-100)
-  const hasCgpa = student?.cgpa !== null && student?.cgpa !== undefined && !isNaN(Number(student?.cgpa));
-  let academicScore = 70;
-  if (hasCgpa) {
-    academicScore = (Number(student.cgpa) / 10) * 100;
-  } else if (academics && academics.length > 0) {
-    const avgSgpa = academics.reduce((acc, a) => acc + (a.sgpa || a.cgpa || 0), 0) / academics.length;
-    if (avgSgpa > 0) academicScore = (avgSgpa / 10) * 100;
-  }
+  const currentCgpa = student?.cgpa;
+  const hasCgpa = currentCgpa !== null && currentCgpa !== undefined && Number.isFinite(Number(currentCgpa));
+  const academicValues = (academics || [])
+    .map((record) => record.sgpa ?? record.cgpa)
+    .filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value)))
+    .map(Number);
+  let academicScore = hasCgpa
+    ? (Number(currentCgpa) / 10) * 100
+    : academicValues.length > 0
+      ? (academicValues.reduce((sum, value) => sum + value, 0) / academicValues.length / 10) * 100
+      : 0;
   const pendingArrears = (arrears || []).filter((a) => a.status === 'PENDING').length;
   const clearedArrears = (arrears || []).filter((a) => a.status === 'CLEARED').length;
   academicScore = Math.max(0, Math.min(100, academicScore - pendingArrears * 8 + clearedArrears * 2));
@@ -154,8 +157,9 @@ export const computeEliteStudentScore = computeEliteScore;
 export function computeLeetCodeAwardScore(leetcode: any): number {
   if (!leetcode) return 0;
   const totalSolved = leetcode.totalSolved || ((leetcode.easySolved || 0) + (leetcode.mediumSolved || 0) + (leetcode.hardSolved || 0));
-  const rating = leetcode.contestRating || 1200;
-  return Math.min(100, Math.round((totalSolved * 0.2 + (rating / 3000) * 80) * 10) / 10);
+  const rating = Number(leetcode.contestRating);
+  const ratingPoints = Number.isFinite(rating) ? (rating / 3000) * 80 : 0;
+  return Math.min(100, Math.round((totalSolved * 0.2 + ratingPoints) * 10) / 10);
 }
 
 export async function computeTeamHeadScore(student: StudentRecord, projects: ProjectRecord[]): Promise<number> {
@@ -163,14 +167,14 @@ export async function computeTeamHeadScore(student: StudentRecord, projects: Pro
   const teams = allTeams.filter((t) => t.team_head_student_id === student.id);
   const teamProjects = projects.filter((p) => p.isTeam && (p.studentRole || '').toLowerCase().includes('lead'));
   const totalHeadProjects = teams.length + teamProjects.length;
-  const cgpaVal = (student.cgpa !== null && student.cgpa !== undefined && !isNaN(Number(student.cgpa))) ? Number(student.cgpa) : 7.0;
+  const cgpaVal = (student.cgpa !== null && student.cgpa !== undefined && Number.isFinite(Number(student.cgpa))) ? Number(student.cgpa) : 0;
   let score = totalHeadProjects * 35 + (cgpaVal / 10) * 30 + (student.overall_score || 0) * 0.35;
   return Math.min(100, Math.round(score * 10) / 10);
 }
 
 export async function computeRepresentativeScore(student: StudentRecord, attendanceScore: number): Promise<number> {
   const repEval = await db.getRepresentativeEvaluation(student.id);
-  const cgpaVal = (student.cgpa !== null && student.cgpa !== undefined && !isNaN(Number(student.cgpa))) ? Number(student.cgpa) : 7.0;
+  const cgpaVal = (student.cgpa !== null && student.cgpa !== undefined && Number.isFinite(Number(student.cgpa))) ? Number(student.cgpa) : 0;
   if (repEval) {
     const avgScore = (
       repEval.communication_score +
@@ -190,7 +194,8 @@ export async function computeRepresentativeScore(student: StudentRecord, attenda
   }
 
   if (!student.is_representative && !(student as any).isRepresentative) return 0;
-  const score = 50 + (cgpaVal / 10) * 30 + attendanceScore * 0.2;
+  if (!repEval) return 0;
+  const score = (cgpaVal / 10) * 30 + attendanceScore * 0.2;
   return Math.min(100, Math.round(score * 10) / 10);
 }
 

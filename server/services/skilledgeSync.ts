@@ -10,7 +10,7 @@ import { normalizeEmail } from '../../scripts/skilledge_connector.js';
 export interface SkillEdgeLevelItem {
   levelNumber: number;
   levelName: string;
-  status: 'Cleared' | 'Not Cleared';
+  status: 'Cleared' | 'Not Cleared' | 'Unknown';
 }
 
 export interface SkillEdgeAssessmentAreaItem {
@@ -67,13 +67,14 @@ export function loadSkillEdgeConfig(): any | null {
  */
 export function generateSkillEdgeAssessments(existingData?: any): SkillEdgeAssessmentAreaItem[] {
   const areas: ('C' | 'Python' | 'Java' | 'Data Structure')[] = ['C', 'Python', 'Java', 'Data Structure'];
-
-  const defaultLevels: Record<'C' | 'Python' | 'Java' | 'Data Structure', number> = {
-    'C': 2,
-    'Python': 2,
-    'Java': 1,
-    'Data Structure': 1
-  };
+  const unknownLevels = (area: 'C' | 'Python' | 'Java' | 'Data Structure'): SkillEdgeAssessmentAreaItem => ({
+    areaName: area,
+    levels: [1, 2, 3, 4, 5].map((levelNumber) => ({
+      levelNumber,
+      levelName: `Level ${levelNumber}`,
+      status: 'Unknown'
+    }))
+  });
 
   // If existing assessment array is passed, try to parse it
   if (Array.isArray(existingData) && existingData.length > 0 && existingData[0].areaName && existingData[0].levels) {
@@ -84,23 +85,20 @@ export function generateSkillEdgeAssessments(existingData?: any): SkillEdgeAsses
           areaName: area,
           levels: [1, 2, 3, 4, 5].map((lvlNum) => {
             const matchLvl = found.levels.find((l: any) => l.levelNumber === lvlNum || l.levelName === `Level ${lvlNum}`);
+            const status = String(matchLvl?.status || '').toLowerCase();
             return {
               levelNumber: lvlNum,
               levelName: `Level ${lvlNum}`,
-              status: matchLvl?.status === 'Cleared' ? 'Cleared' : 'Not Cleared'
+              status: ['cleared', 'passed', 'complete', 'completed'].includes(status)
+                ? 'Cleared'
+                : ['not cleared', 'not_cleared', 'not-cleared', 'failed', 'incomplete'].includes(status)
+                  ? 'Not Cleared'
+                  : 'Unknown'
             };
           })
         };
       }
-      const clearedCount = defaultLevels[area];
-      return {
-        areaName: area,
-        levels: [1, 2, 3, 4, 5].map((lvlNum) => ({
-          levelNumber: lvlNum,
-          levelName: `Level ${lvlNum}`,
-          status: lvlNum <= clearedCount ? 'Cleared' : 'Not Cleared'
-        }))
-      };
+      return unknownLevels(area);
     });
   }
 
@@ -115,8 +113,12 @@ export function generateSkillEdgeAssessments(existingData?: any): SkillEdgeAsses
         if (area === 'Data Structure') return name.includes('data struct') || name.includes('dsa');
         return false;
       });
-
-      const clearedCount = trackMatch ? (trackMatch.completedLevels || 0) : defaultLevels[area];
+      const completedLevels = trackMatch?.completedLevels;
+      if (!trackMatch || completedLevels === null || completedLevels === undefined || completedLevels === '' ||
+          !Number.isFinite(Number(completedLevels))) {
+        return unknownLevels(area);
+      }
+      const clearedCount = Number(completedLevels);
       return {
         areaName: area,
         levels: [1, 2, 3, 4, 5].map((lvlNum) => ({
@@ -128,18 +130,7 @@ export function generateSkillEdgeAssessments(existingData?: any): SkillEdgeAsses
     });
   }
 
-  // Fallback defaults
-  return areas.map((area) => {
-    const clearedCount = defaultLevels[area];
-    return {
-      areaName: area,
-      levels: [1, 2, 3, 4, 5].map((lvlNum) => ({
-        levelNumber: lvlNum,
-        levelName: `Level ${lvlNum}`,
-        status: lvlNum <= clearedCount ? 'Cleared' : 'Not Cleared'
-      }))
-    };
-  });
+  return areas.map(unknownLevels);
 }
 
 /**
@@ -189,7 +180,13 @@ export async function fetchLiveRecordFromSkillEdge(collegeEmail: string): Promis
       }
 
       const assessments = generateSkillEdgeAssessments(rawData || row);
-      return { assessments, score: 0, completionPct: 0 };
+      const score = Number(row[cfg.scoreColumn || 'total_reward_points']);
+      const completionPct = Number(row[cfg.completionPctColumn || 'overall_completion_pct']);
+      return {
+        assessments,
+        score: Number.isFinite(score) ? score : 0,
+        completionPct: Number.isFinite(completionPct) ? completionPct : 0
+      };
     } finally {
       await client.end();
     }
@@ -214,7 +211,13 @@ export async function fetchLiveRecordFromSkillEdge(collegeEmail: string): Promis
       }
 
       const assessments = generateSkillEdgeAssessments(rawData || row);
-      return { assessments, score: 0, completionPct: 0 };
+      const score = Number(row[cfg.scoreColumn || 'total_reward_points']);
+      const completionPct = Number(row[cfg.completionPctColumn || 'overall_completion_pct']);
+      return {
+        assessments,
+        score: Number.isFinite(score) ? score : 0,
+        completionPct: Number.isFinite(completionPct) ? completionPct : 0
+      };
     } finally {
       sqlite.close();
     }
@@ -269,17 +272,32 @@ export async function syncStudentSkillEdge(
       };
     }
 
-    let assessments = generateSkillEdgeAssessments(existingRecord?.tracks);
-
-    if (liveResult && liveResult.assessments) {
-      assessments = liveResult.assessments;
+    if (!liveResult) {
+      const currentPoints = existingRecord?.totalRewardPoints ?? 0;
+      const completionPct = existingRecord?.overallCompletionPct ?? 0;
+      return {
+        studentId,
+        studentName,
+        registerNo,
+        previousPoints: currentPoints,
+        currentPoints,
+        earnedDelta: 0,
+        overallCompletionPct: completionPct,
+        status: 'NOT_LINKED',
+        lastSyncedAt: existingRecord?.lastSyncedAt || now,
+        assessments: generateSkillEdgeAssessments(existingRecord?.tracks)
+      };
     }
 
+    const assessments = liveResult.assessments;
+    const previousPoints = existingRecord?.totalRewardPoints ?? 0;
+    const currentPoints = liveResult.score;
+    const earnedDelta = currentPoints - previousPoints;
     const skilledgeData = {
-      overallCompletionPct: 0,
-      totalRewardPoints: 0,
-      previousPoints: 0,
-      earnedDelta: 0,
+      overallCompletionPct: liveResult.completionPct,
+      totalRewardPoints: currentPoints,
+      previousPoints,
+      earnedDelta,
       status: 'VERIFIED',
       skilledgeHandle: collegeEmail,
       lastSyncedAt: now,
@@ -291,10 +309,10 @@ export async function syncStudentSkillEdge(
 
     await db.saveSkillEdgeSyncHistory({
       student_id: studentId,
-      previousPoints: 0,
-      currentPoints: 0,
-      earnedDelta: 0,
-      overallCompletionPct: 0,
+      previousPoints,
+      currentPoints,
+      earnedDelta,
+      overallCompletionPct: liveResult.completionPct,
       tracks: assessments,
       syncedAt: now,
       syncSource,
@@ -305,10 +323,10 @@ export async function syncStudentSkillEdge(
       studentId,
       studentName,
       registerNo,
-      previousPoints: 0,
-      currentPoints: 0,
-      earnedDelta: 0,
-      overallCompletionPct: 0,
+      previousPoints,
+      currentPoints,
+      earnedDelta,
+      overallCompletionPct: liveResult.completionPct,
       status: 'VERIFIED',
       lastSyncedAt: now,
       assessments

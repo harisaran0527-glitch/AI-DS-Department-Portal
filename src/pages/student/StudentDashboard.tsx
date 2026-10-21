@@ -1184,13 +1184,16 @@ export const StudentDashboard: React.FC = () => {
                         <div className="space-y-1.5 pt-1">
                           {areaObj.levels.map((lvl: any, lIdx: number) => {
                             const isCleared = lvl.status === 'Cleared' || lvl.status === 'CLEARED' || lvl.status === 'Passed';
+                            const isUnknown = !isCleared && ['Unknown', 'UNKNOWN'].includes(lvl.status);
                             return (
                               <div
                                 key={lIdx}
                                 className={`flex justify-between items-center text-xs p-2 rounded-lg border transition-all ${
                                   isCleared
                                     ? 'bg-emerald-950/40 border-emerald-800/80 text-emerald-300'
-                                    : 'bg-slate-950/60 border-slate-800/80 text-slate-500'
+                                    : isUnknown
+                                      ? 'bg-slate-950/60 border-slate-800/80 text-slate-400'
+                                      : 'bg-slate-950/60 border-slate-800/80 text-slate-500'
                                 }`}
                               >
                                 <span className="font-semibold">{lvl.levelName || `Level ${lvl.levelNumber}`}</span>
@@ -1198,10 +1201,12 @@ export const StudentDashboard: React.FC = () => {
                                   className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded ${
                                     isCleared
                                       ? 'bg-emerald-950 text-emerald-300 border border-emerald-700/80'
-                                      : 'bg-slate-900 text-slate-500 border border-slate-800'
+                                      : isUnknown
+                                        ? 'bg-slate-900 text-slate-400 border border-slate-700'
+                                        : 'bg-slate-900 text-slate-500 border border-slate-800'
                                   }`}
                                 >
-                                  {isCleared ? 'Cleared' : 'Not Cleared'}
+                                  {isCleared ? 'Cleared' : isUnknown ? 'Unknown' : 'Not Cleared'}
                                 </span>
                               </div>
                             );
