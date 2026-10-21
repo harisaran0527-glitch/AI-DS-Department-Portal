@@ -267,6 +267,7 @@ CREATE TABLE IF NOT EXISTS subjects (
   id TEXT PRIMARY KEY,
   subject_code TEXT NOT NULL,
   subject_name TEXT NOT NULL,
+  subject_abbreviation TEXT,
   department TEXT NOT NULL DEFAULT 'AI & Data Science',
   academic_year TEXT NOT NULL,
   year TEXT NOT NULL,

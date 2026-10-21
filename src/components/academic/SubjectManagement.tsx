@@ -49,6 +49,18 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
   const [excelValidRows, setExcelValidRows] = useState<any[]>([]);
   const [excelInvalidRows, setExcelInvalidRows] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const rawUploadedRowsRef = useRef<any[] | null>(null);
+
+  // Upload Target Defaults
+  const [uploadTargetYear, setUploadTargetYear] = useState<string>(
+    assignedYear && assignedYear !== 'ALL' ? assignedYear : (yearFilter !== 'ALL' ? yearFilter : '2nd Year')
+  );
+  const [uploadTargetSemester, setUploadTargetSemester] = useState<string>(
+    semesterFilter !== 'ALL' ? semesterFilter : (uploadTargetYear === '1st Year' ? '1' : uploadTargetYear === '3rd Year' ? '5' : uploadTargetYear === '4th Year' ? '7' : '3')
+  );
+  const [uploadTargetSection, setUploadTargetSection] = useState<string>(
+    assignedSection && assignedSection !== 'ALL' ? assignedSection : (sectionFilter !== 'ALL' ? sectionFilter : 'ALL')
+  );
 
   // HOD and STUDENT are strictly view-only
   const isReadOnly = userRole === 'HOD' || userRole === 'STUDENT';
@@ -73,6 +85,28 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
   useEffect(() => {
     fetchSubjects();
   }, []);
+
+  const runPreviewValidation = async (rows: any[], yr: string, sec: string, sem: string) => {
+    if (!rows || rows.length === 0) return;
+    setIsValidatingExcel(true);
+    try {
+      const res = await API.previewSubjectImport(
+        rows,
+        yr && yr !== 'ALL' ? yr : undefined,
+        sec && sec !== 'ALL' ? sec : undefined,
+        sem && sem !== 'ALL' ? sem : undefined
+      );
+
+      setExcelPreviewSummary(res.summary);
+      setExcelValidRows(res.validRows || []);
+      setExcelInvalidRows(res.invalidRows || []);
+    } catch (err: any) {
+      console.error('Error parsing subject file:', err);
+      alert(err.message || 'Failed to parse Subject Master file.');
+    } finally {
+      setIsValidatingExcel(false);
+    }
+  };
 
   // Handle Bulk Excel / CSV Upload for Subject Master
   const handleExcelFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -103,7 +137,6 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
     setExcelPreviewSummary(null);
     setExcelValidRows([]);
     setExcelInvalidRows([]);
-    setIsValidatingExcel(true);
 
     try {
       let rawRows: any[] = [];
@@ -128,20 +161,11 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
         throw new Error('The uploaded file is empty or contains no readable data rows.');
       }
 
-      const res = await API.previewSubjectImport(
-        rawRows,
-        assignedYear && assignedYear !== 'ALL' ? assignedYear : undefined,
-        assignedSection && assignedSection !== 'ALL' ? assignedSection : undefined
-      );
-
-      setExcelPreviewSummary(res.summary);
-      setExcelValidRows(res.validRows || []);
-      setExcelInvalidRows(res.invalidRows || []);
+      rawUploadedRowsRef.current = rawRows;
+      await runPreviewValidation(rawRows, uploadTargetYear, uploadTargetSection, uploadTargetSemester);
     } catch (err: any) {
       console.error('Error parsing subject file:', err);
       alert(err.message || 'Failed to parse Subject Master file.');
-    } finally {
-      setIsValidatingExcel(false);
     }
   };
 
@@ -151,17 +175,23 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
     try {
       const res = await API.confirmSubjectImport(
         excelValidRows,
-        assignedYear && assignedYear !== 'ALL' ? assignedYear : undefined,
-        assignedSection && assignedSection !== 'ALL' ? assignedSection : undefined
+        uploadTargetYear,
+        uploadTargetSection,
+        uploadTargetSemester
       );
-      setSuccessMsg(res.message || `Successfully imported ${res.importedCount || excelValidRows.length} Department Subjects.`);
+      const msg = res.message || `Successfully processed ${res.importedCount || excelValidRows.length} Department Subjects (${res.importedCount || 0} created, ${res.updatedCount || 0} updated, ${res.skippedCount || 0} skipped).`;
+      setSuccessMsg(msg);
+      if (res.failedCount && res.failedCount > 0) {
+        setErrorMsg(`${res.failedCount} subjects failed to import. Reasons: ${res.failedRows?.map((f: any) => `Row #${f.rowNumber}: ${f.reason}`).join('; ')}`);
+      }
       setShowExcelModal(false);
       setExcelFile(null);
+      rawUploadedRowsRef.current = null;
       setExcelPreviewSummary(null);
       setExcelValidRows([]);
       setExcelInvalidRows([]);
       await fetchSubjects();
-      setTimeout(() => setSuccessMsg(''), 5000);
+      setTimeout(() => setSuccessMsg(''), 6000);
     } catch (err: any) {
       alert(err.message || 'Failed to confirm Subject Master import.');
     } finally {
@@ -497,6 +527,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
                 onClick={() => {
                   setShowExcelModal(false);
                   setExcelFile(null);
+                  rawUploadedRowsRef.current = null;
                   setExcelPreviewSummary(null);
                   setExcelValidRows([]);
                   setExcelInvalidRows([]);
@@ -529,6 +560,78 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
                 <p className="text-[11px] text-cyan-400">
                   Supported formats: <strong>.xlsx</strong>, <strong>.xls</strong>, <strong>.csv</strong> | Maximum file size: <strong>10 MB</strong>
                 </p>
+              </div>
+
+              {/* TARGET SCOPE SELECTORS */}
+              <div className="bg-slate-950/90 border border-cyan-500/30 p-4 rounded-xl space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <span className="font-bold text-cyan-300 text-xs">Assign Uploaded Subjects To:</span>
+                  <span className="text-[10px] text-slate-400">Explicit Year/Sem/Sec in file will override these defaults</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">Target Year</label>
+                    <select
+                      value={uploadTargetYear}
+                      onChange={(e) => {
+                        const newYr = e.target.value;
+                        setUploadTargetYear(newYr);
+                        let autoSem = '3';
+                        if (newYr === '1st Year') autoSem = '1';
+                        else if (newYr === '2nd Year') autoSem = '3';
+                        else if (newYr === '3rd Year') autoSem = '5';
+                        else if (newYr === '4th Year') autoSem = '7';
+                        setUploadTargetSemester(autoSem);
+                        if (rawUploadedRowsRef.current) {
+                          runPreviewValidation(rawUploadedRowsRef.current, newYr, uploadTargetSection, autoSem);
+                        }
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-lg text-xs text-cyan-200 font-mono focus:border-cyan-400 focus:outline-none"
+                    >
+                      <option value="1st Year">1st Year</option>
+                      <option value="2nd Year">2nd Year</option>
+                      <option value="3rd Year">3rd Year</option>
+                      <option value="4th Year">4th Year</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">Target Semester</label>
+                    <select
+                      value={uploadTargetSemester}
+                      onChange={(e) => {
+                        const newSem = e.target.value;
+                        setUploadTargetSemester(newSem);
+                        if (rawUploadedRowsRef.current) {
+                          runPreviewValidation(rawUploadedRowsRef.current, uploadTargetYear, uploadTargetSection, newSem);
+                        }
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-lg text-xs text-cyan-200 font-mono focus:border-cyan-400 focus:outline-none"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                        <option key={s} value={String(s)}>Semester {s}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">Target Section</label>
+                    <select
+                      value={uploadTargetSection}
+                      onChange={(e) => {
+                        const newSec = e.target.value;
+                        setUploadTargetSection(newSec);
+                        if (rawUploadedRowsRef.current) {
+                          runPreviewValidation(rawUploadedRowsRef.current, uploadTargetYear, newSec, uploadTargetSemester);
+                        }
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-lg text-xs text-cyan-200 font-mono focus:border-cyan-400 focus:outline-none"
+                    >
+                      <option value="ALL">All Sections (Common)</option>
+                      <option value="A">Section A</option>
+                      <option value="B">Section B</option>
+                      <option value="C">Section C</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 
               {/* FILE UPLOAD INPUT */}
@@ -564,6 +667,9 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
                     <div className="bg-emerald-950/50 p-3 rounded-xl border border-emerald-500/40 text-center">
                       <span className="text-[10px] text-emerald-300 block uppercase">Valid Subjects</span>
                       <span className="text-base font-bold text-emerald-400 font-mono">{excelPreviewSummary.validCount}</span>
+                      <span className="text-[10px] text-emerald-300 block mt-0.5">
+                        ({excelPreviewSummary.newCount ?? excelValidRows.filter(r => r.status === 'NEW_SUBJECT').length} New, {excelPreviewSummary.updateCount ?? excelValidRows.filter(r => r.status !== 'NEW_SUBJECT').length} Update)
+                      </span>
                     </div>
                     <div className="bg-rose-950/50 p-3 rounded-xl border border-rose-500/40 text-center">
                       <span className="text-[10px] text-rose-300 block uppercase">Invalid Rows</span>
@@ -637,6 +743,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
                 onClick={() => {
                   setShowExcelModal(false);
                   setExcelFile(null);
+                  rawUploadedRowsRef.current = null;
                   setExcelPreviewSummary(null);
                   setExcelValidRows([]);
                   setExcelInvalidRows([]);

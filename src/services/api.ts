@@ -1146,21 +1146,29 @@ export const API = {
     });
   },
 
-  previewSubjectImport: async (rows: any[], year?: string, section?: string) => {
+  previewSubjectImport: async (rows: any[], year?: string, section?: string, semester?: number | string) => {
     return request<{
-      summary: { totalRowsProcessed: number; validCount: number; invalidCount: number };
+      summary: { totalRowsProcessed: number; validCount: number; invalidCount: number; newCount?: number; updateCount?: number };
       validRows: any[];
       invalidRows: any[];
     }>('/subjects/import-preview', {
       method: 'POST',
-      body: JSON.stringify({ rows, year, section })
+      body: JSON.stringify({ rows, year, section, semester })
     });
   },
 
-  confirmSubjectImport: async (subjects: any[], year?: string, section?: string) => {
-    return request<{ message: string; importedCount: number; subjects: any[] }>('/subjects/import-confirm', {
+  confirmSubjectImport: async (subjects: any[], year?: string, section?: string, semester?: number | string) => {
+    return request<{
+      message: string;
+      importedCount: number;
+      updatedCount?: number;
+      skippedCount?: number;
+      failedCount?: number;
+      failedRows?: any[];
+      subjects: any[];
+    }>('/subjects/import-confirm', {
       method: 'POST',
-      body: JSON.stringify({ subjects, year, section })
+      body: JSON.stringify({ subjects, year, section, semester })
     });
   },
 

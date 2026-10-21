@@ -31,6 +31,7 @@ export function safeStringifyJson(val: any): string {
 export function normalizeSection(s?: string | null): string {
   if (!s) return '';
   const str = String(s).trim().toUpperCase();
+  if (str === 'ALL' || str === 'COMMON' || str === 'ALL SECTIONS') return 'ALL';
   if (str.startsWith('SECTION ')) return str.replace('SECTION ', '').trim();
   if (str.startsWith('SEC ')) return str.replace('SEC ', '').trim();
   if (str.startsWith('SEC.')) return str.replace('SEC.', '').trim();
@@ -40,11 +41,33 @@ export function normalizeSection(s?: string | null): string {
 export function normalizeYear(y?: string | null): string {
   if (!y) return '';
   const str = String(y).trim();
-  if (str === '1' || str === '1st' || str === 'I') return '1st Year';
-  if (str === '2' || str === '2nd' || str === 'II') return '2nd Year';
-  if (str === '3' || str === '3rd' || str === 'III') return '3rd Year';
-  if (str === '4' || str === '4th' || str === 'IV') return '4th Year';
+  const lower = str.toLowerCase();
+  if (lower === '1' || lower === '1st' || lower === 'i' || lower.includes('first') || lower === 'year 1' || lower === '1st year') return '1st Year';
+  if (lower === '2' || lower === '2nd' || lower === 'ii' || lower.includes('second') || lower === 'year 2' || lower === '2nd year') return '2nd Year';
+  if (lower === '3' || lower === '3rd' || lower === 'iii' || lower.includes('third') || lower === 'year 3' || lower === '3rd year') return '3rd Year';
+  if (lower === '4' || lower === '4th' || lower === 'iv' || lower.includes('fourth') || lower.includes('final') || lower === 'year 4' || lower === '4th year') return '4th Year';
   return str;
+}
+
+export function normalizeSemester(sem?: any, yr?: string | null, fallbackSem?: any): number {
+  if (sem !== undefined && sem !== null && String(sem).trim() !== '') {
+    const parsed = parseInt(String(sem).replace(/[^0-9]/g, ''), 10);
+    if (!isNaN(parsed) && parsed >= 1 && parsed <= 8) {
+      return parsed;
+    }
+  }
+  if (fallbackSem !== undefined && fallbackSem !== null && String(fallbackSem).trim() !== '') {
+    const parsed = parseInt(String(fallbackSem).replace(/[^0-9]/g, ''), 10);
+    if (!isNaN(parsed) && parsed >= 1 && parsed <= 8) {
+      return parsed;
+    }
+  }
+  const cleanYr = normalizeYear(yr);
+  if (cleanYr === '1st Year') return 1;
+  if (cleanYr === '2nd Year') return 3;
+  if (cleanYr === '3rd Year') return 5;
+  if (cleanYr === '4th Year') return 7;
+  return 3;
 }
 
 export async function initDatabaseSchema(): Promise<void> {
@@ -4248,8 +4271,8 @@ export class SQLiteDB {
     const cleanAbbr = String(abbr).trim();
     const cleanDept = String(dept).trim();
     const cleanAcadYear = String(acadYear).trim();
-    const cleanYear = String(yr).trim();
-    const cleanSec = String(sec).trim();
+    const cleanYear = normalizeYear(yr) || '2nd Year';
+    const cleanSec = normalizeSection(sec) || 'ALL';
     const cleanType = String(type).trim();
     const cleanHandler = String(handler).trim();
 
@@ -4266,10 +4289,37 @@ export class SQLiteDB {
     const id = `sub-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const now = new Date().toISOString();
 
-    await executeRun(`
-      INSERT INTO subjects (id, subject_code, subject_name, subject_abbreviation, department, academic_year, year, semester, section, subject_type, credits, faculty_handler, created_by_user_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [id, cleanCode, cleanName, cleanAbbr, cleanDept, cleanAcadYear, cleanYear, sem, cleanSec, cleanType, creditsNum, cleanHandler, userId, now]);
+    try {
+      await executeRun(`
+        INSERT INTO subjects (id, subject_code, subject_name, subject_abbreviation, department, academic_year, year, semester, section, subject_type, credits, faculty_handler, created_by_user_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [id, cleanCode, cleanName, cleanAbbr, cleanDept, cleanAcadYear, cleanYear, sem, cleanSec, cleanType, creditsNum, cleanHandler, userId, now]);
+    } catch (insertErr: any) {
+      const msg = String(insertErr?.message || insertErr);
+      if (msg.includes('subject_abbreviation') || insertErr?.code === '42703') {
+        // Attempt immediate self-healing migration
+        try {
+          if (isPostgresActive()) {
+            const { pgPool } = await import('./postgresAdapter.js');
+            if (pgPool) {
+              await pgPool.query(`ALTER TABLE subjects ADD COLUMN IF NOT EXISTS subject_abbreviation TEXT;`);
+            }
+          }
+          await executeRun(`
+            INSERT INTO subjects (id, subject_code, subject_name, subject_abbreviation, department, academic_year, year, semester, section, subject_type, credits, faculty_handler, created_by_user_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [id, cleanCode, cleanName, cleanAbbr, cleanDept, cleanAcadYear, cleanYear, sem, cleanSec, cleanType, creditsNum, cleanHandler, userId, now]);
+        } catch (_retryErr) {
+          // Fallback to inserting without subject_abbreviation if column cannot be added
+          await executeRun(`
+            INSERT INTO subjects (id, subject_code, subject_name, department, academic_year, year, semester, section, subject_type, credits, faculty_handler, created_by_user_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [id, cleanCode, cleanName, cleanDept, cleanAcadYear, cleanYear, sem, cleanSec, cleanType, creditsNum, cleanHandler, userId, now]);
+        }
+      } else {
+        throw insertErr;
+      }
+    }
 
     SQLiteDB.invalidateSubjectsCache();
     return (await this.getSubjectById(id))!;
@@ -4296,9 +4346,9 @@ export class SQLiteDB {
     const cleanAbbr = abbrInput !== undefined ? String(abbrInput).trim() : (existing.subjectAbbreviation || (existing as any).subject_abbreviation || '');
     const cleanDept = deptInput ? String(deptInput).trim() : existing.department;
     const cleanAcadYear = acadYearInput ? String(acadYearInput).trim() : existing.academicYear;
-    const cleanYear = yrInput ? String(yrInput).trim() : existing.year;
+    const cleanYear = yrInput ? (normalizeYear(yrInput) || existing.year) : existing.year;
     const sem = sub.semester !== undefined ? Number(sub.semester) : existing.semester;
-    const cleanSec = secInput ? String(secInput).trim().toUpperCase() : existing.section;
+    const cleanSec = secInput ? (normalizeSection(secInput) || existing.section) : existing.section;
     const cleanType = typeInput ? String(typeInput).trim() as any : existing.subjectType;
     const creditsNum = sub.credits !== undefined ? Number(sub.credits) : existing.credits;
     const cleanHandler = handlerInput ? String(handlerInput).trim() : existing.facultyHandler;
@@ -4315,11 +4365,38 @@ export class SQLiteDB {
       }
     }
 
-    await executeRun(`
-      UPDATE subjects
-      SET subject_code = ?, subject_name = ?, subject_abbreviation = ?, department = ?, academic_year = ?, year = ?, semester = ?, section = ?, subject_type = ?, credits = ?, faculty_handler = ?
-      WHERE id = ?
-    `, [cleanCode, cleanName, cleanAbbr, cleanDept, cleanAcadYear, cleanYear, sem, cleanSec, cleanType, creditsNum, cleanHandler, id]);
+    try {
+      await executeRun(`
+        UPDATE subjects
+        SET subject_code = ?, subject_name = ?, subject_abbreviation = ?, department = ?, academic_year = ?, year = ?, semester = ?, section = ?, subject_type = ?, credits = ?, faculty_handler = ?
+        WHERE id = ?
+      `, [cleanCode, cleanName, cleanAbbr, cleanDept, cleanAcadYear, cleanYear, sem, cleanSec, cleanType, creditsNum, cleanHandler, id]);
+    } catch (updateErr: any) {
+      const msg = String(updateErr?.message || updateErr);
+      if (msg.includes('subject_abbreviation') || updateErr?.code === '42703') {
+        try {
+          if (isPostgresActive()) {
+            const { pgPool } = await import('./postgresAdapter.js');
+            if (pgPool) {
+              await pgPool.query(`ALTER TABLE subjects ADD COLUMN IF NOT EXISTS subject_abbreviation TEXT;`);
+            }
+          }
+          await executeRun(`
+            UPDATE subjects
+            SET subject_code = ?, subject_name = ?, subject_abbreviation = ?, department = ?, academic_year = ?, year = ?, semester = ?, section = ?, subject_type = ?, credits = ?, faculty_handler = ?
+            WHERE id = ?
+          `, [cleanCode, cleanName, cleanAbbr, cleanDept, cleanAcadYear, cleanYear, sem, cleanSec, cleanType, creditsNum, cleanHandler, id]);
+        } catch (_retryErr) {
+          await executeRun(`
+            UPDATE subjects
+            SET subject_code = ?, subject_name = ?, department = ?, academic_year = ?, year = ?, semester = ?, section = ?, subject_type = ?, credits = ?, faculty_handler = ?
+            WHERE id = ?
+          `, [cleanCode, cleanName, cleanDept, cleanAcadYear, cleanYear, sem, cleanSec, cleanType, creditsNum, cleanHandler, id]);
+        }
+      } else {
+        throw updateErr;
+      }
+    }
 
     SQLiteDB.invalidateSubjectsCache();
     return (await this.getSubjectById(id))!;
@@ -4427,6 +4504,53 @@ export class SQLiteDB {
       facultyHandler: row.faculty_handler || row.facultyHandler,
       created_by_user_id: row.created_by_user_id || row.createdByUserId,
       created_at: row.created_at || row.createdAt
+    };
+  }
+
+  public async findSubjectByScope(
+    code: string,
+    year: string,
+    semester: number,
+    section: string = 'ALL'
+  ): Promise<SubjectRecord | null> {
+    const cleanCode = String(code).trim().toUpperCase();
+    const cleanYear = normalizeYear(year) || '2nd Year';
+    const sem = Number(semester);
+    const cleanSec = normalizeSection(section) || 'ALL';
+
+    const row = await queryOne<any>(`
+      SELECT * FROM subjects
+      WHERE UPPER(subject_code) = ?
+        AND year = ?
+        AND semester = ?
+        AND (section = ? OR section = 'ALL' OR ? = 'ALL')
+      LIMIT 1
+    `, [cleanCode, cleanYear, sem, cleanSec, cleanSec]);
+
+    if (!row) return null;
+    return {
+      id: row.id,
+      subject_code: row.subject_code || row.subjectCode,
+      subjectCode: row.subject_code || row.subjectCode,
+      subject_name: row.subject_name || row.subjectName || row.name,
+      subjectName: row.subject_name || row.subjectName || row.name,
+      subject_abbreviation: row.subject_abbreviation || row.subjectAbbreviation || '',
+      subjectAbbreviation: row.subject_abbreviation || row.subjectAbbreviation || '',
+      department: row.department || 'AI & Data Science',
+      academicYear: row.academic_year ?? row.academicYear ?? '',
+      academic_year: row.academic_year ?? row.academicYear ?? '',
+      year: row.year,
+      semester: row.semester,
+      section: row.section,
+      subject_type: row.subject_type || row.subjectType || 'Theory',
+      subjectType: row.subject_type || row.subjectType || 'Theory',
+      credits: row.credits || 3,
+      faculty_handler: row.faculty_handler || row.facultyHandler || 'TBD',
+      facultyHandler: row.faculty_handler || row.facultyHandler || 'TBD',
+      created_by_user_id: row.created_by_user_id || row.createdByUserId || 'SYSTEM',
+      createdByUserId: row.created_by_user_id || row.createdByUserId || 'SYSTEM',
+      created_at: row.created_at || row.createdAt,
+      createdAt: row.created_at || row.createdAt
     };
   }
 
@@ -4599,5 +4723,17 @@ export class SQLiteDB {
 
 export const db = new SQLiteDB();
 
-export const databaseReady: Promise<void> = process.env.VERCEL ? Promise.resolve() : SQLiteDB.initSystemAccounts();
+async function initVercelSchema(): Promise<void> {
+  if (isPostgresActive()) {
+    try {
+      const { pgPool } = await import('./postgresAdapter.js');
+      if (pgPool) {
+        await pgPool.query(`ALTER TABLE subjects ADD COLUMN IF NOT EXISTS subject_abbreviation TEXT;`).catch(() => {});
+        await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_subjects_code_ctx ON subjects(subject_code, year, semester, section);`).catch(() => {});
+      }
+    } catch (_err) {}
+  }
+}
+
+export const databaseReady: Promise<void> = process.env.VERCEL ? initVercelSchema() : SQLiteDB.initSystemAccounts();
 databaseReady.catch((err) => console.error('Error initializing database schema:', err));

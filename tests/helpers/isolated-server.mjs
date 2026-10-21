@@ -33,8 +33,41 @@ export function isolateServer(database, modules = {}, { loadRealDatabase = false
       }
       if (url === dbUrl && !loadRealDatabase) return { format: 'module', shortCircuit: true, source: `
         export const db = globalThis.__isolatedServerDatabase;
-        export const normalizeYear = value => ({I:'1st Year',II:'2nd Year',III:'3rd Year',IV:'4th Year'}[value] || value || '');
-        export const normalizeSection = value => String(value || '').trim().toUpperCase();
+        export const normalizeYear = y => {
+          if (!y) return '';
+          const str = String(y).trim();
+          const lower = str.toLowerCase();
+          if (lower === '1' || lower === '1st' || lower === 'i' || lower.includes('first') || lower === 'year 1' || lower === '1st year') return '1st Year';
+          if (lower === '2' || lower === '2nd' || lower === 'ii' || lower.includes('second') || lower === 'year 2' || lower === '2nd year') return '2nd Year';
+          if (lower === '3' || lower === '3rd' || lower === 'iii' || lower.includes('third') || lower === 'year 3' || lower === '3rd year') return '3rd Year';
+          if (lower === '4' || lower === '4th' || lower === 'iv' || lower.includes('fourth') || lower.includes('final') || lower === 'year 4' || lower === '4th year') return '4th Year';
+          return str;
+        };
+        export const normalizeSection = s => {
+          if (!s) return '';
+          const str = String(s).trim().toUpperCase();
+          if (str === 'ALL' || str === 'COMMON' || str === 'ALL SECTIONS') return 'ALL';
+          if (str.startsWith('SECTION ')) return str.replace('SECTION ', '').trim();
+          if (str.startsWith('SEC ')) return str.replace('SEC ', '').trim();
+          if (str.startsWith('SEC.')) return str.replace('SEC.', '').trim();
+          return str;
+        };
+        export const normalizeSemester = (sem, yr, fallbackSem) => {
+          if (sem !== undefined && sem !== null && String(sem).trim() !== '') {
+            const parsed = parseInt(String(sem).replace(/[^0-9]/g, ''), 10);
+            if (!isNaN(parsed) && parsed >= 1 && parsed <= 8) return parsed;
+          }
+          if (fallbackSem !== undefined && fallbackSem !== null && String(fallbackSem).trim() !== '') {
+            const parsed = parseInt(String(fallbackSem).replace(/[^0-9]/g, ''), 10);
+            if (!isNaN(parsed) && parsed >= 1 && parsed <= 8) return parsed;
+          }
+          const cleanYr = normalizeYear(yr);
+          if (cleanYr === '1st Year') return 1;
+          if (cleanYr === '2nd Year') return 3;
+          if (cleanYr === '3rd Year') return 5;
+          if (cleanYr === '4th Year') return 7;
+          return 3;
+        };
         export const normalizeStudentRecord = stu => stu ? ({
           ...stu,
           registerNo: (stu.register_no || stu.registerNo || '').trim(),
