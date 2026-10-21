@@ -1825,7 +1825,7 @@ export const FacultyDashboard: React.FC = () => {
             {selectedStudent.cgpa !== undefined && (
               <div>
                 <span className="text-slate-400 text-[11px]">CGPA: </span>
-                <span className="text-amber-300 font-bold">{(selectedStudent.cgpa !== null && selectedStudent.cgpa !== undefined && selectedStudent.cgpa !== '') ? Number(selectedStudent.cgpa).toFixed(2) : 'Not Available'}</span>
+                <span className="text-amber-300 font-bold">{(selectedStudent.cgpa !== null && selectedStudent.cgpa !== undefined && String(selectedStudent.cgpa) !== '') ? Number(selectedStudent.cgpa).toFixed(2) : 'Not Available'}</span>
               </div>
             )}
           </div>
@@ -5151,7 +5151,7 @@ export const FacultyDashboard: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1">
                     <div className="text-[10px] text-slate-400">OVERALL CGPA</div>
-                    <div className="text-3xl font-black text-amber-400">{(selectedStudent.cgpa !== null && selectedStudent.cgpa !== undefined && selectedStudent.cgpa !== '') ? Number(selectedStudent.cgpa).toFixed(2) : 'Not Available'}</div>
+                    <div className="text-3xl font-black text-amber-400">{(selectedStudent.cgpa !== null && selectedStudent.cgpa !== undefined && String(selectedStudent.cgpa) !== '') ? Number(selectedStudent.cgpa).toFixed(2) : 'Not Available'}</div>
                   </div>
                   <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1">
                     <div className="text-[10px] text-emerald-400">ARREAR STATUS</div>
@@ -6588,7 +6588,7 @@ export const FacultyDashboard: React.FC = () => {
               <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">College Mail ID:</span> <strong className="text-emerald-400">{viewingStudent.collegeEmail || viewingStudent.email}</strong></div>
               <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">Personal Mail ID:</span> <strong>{viewingStudent.personalEmail || (viewingStudent as any).personal_email || 'N/A'}</strong></div>
               <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">Address:</span> <strong>{viewingStudent.address || 'N/A'}</strong></div>
-              <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">CGPA:</span> <strong className="text-amber-400 font-bold">{(viewingStudent.cgpa !== null && viewingStudent.cgpa !== undefined && viewingStudent.cgpa !== '') ? Number(viewingStudent.cgpa).toFixed(2) : 'Not Available'}</strong></div>
+              <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">CGPA:</span> <strong className="text-amber-400 font-bold">{(viewingStudent.cgpa !== null && viewingStudent.cgpa !== undefined && String(viewingStudent.cgpa) !== '') ? Number(viewingStudent.cgpa).toFixed(2) : 'Not Available'}</strong></div>
               <div className="flex justify-between pb-1.5"><span className="text-slate-500">Assigned Year / Sec:</span> <strong>{viewingStudent.year || assignedYear} / {viewingStudent.section || assignedSection}</strong></div>
             </div>
 

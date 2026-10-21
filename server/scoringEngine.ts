@@ -266,13 +266,14 @@ export function generateFinalCandidateRecommendation(shortlisted: any[]) {
 
 export function generateAIExplanation(awardKey: string, student: StudentRecord, breakdown: any, score: number, leetcode?: LeetCodeRecord) {
   let explanation = '';
+  const cgpaDisplay = student.cgpa == null ? 'Not Available' : student.cgpa.toFixed(2);
 
   if (awardKey === 'BEST_STUDENT') {
-    explanation = `Recommended because ${student.name} (${student.register_no || student.registerNo}) ranks top in overall department metrics with score ${score.toFixed(1)}/100, CGPA: ${student.cgpa.toFixed(2)}, SkillEdge: ${breakdown.skillEdge}%, and Attendance: ${breakdown.attendance}%. [Data-Driven Analysis]`;
+    explanation = `Recommended because ${student.name} (${student.register_no || student.registerNo}) ranks top in overall department metrics with score ${score.toFixed(1)}/100, CGPA: ${cgpaDisplay}, SkillEdge: ${breakdown.skillEdge}%, and Attendance: ${breakdown.attendance}%. [Data-Driven Analysis]`;
   } else if (awardKey === 'BEST_LEETCODE') {
     explanation = `Recommended because ${student.name} (${student.register_no || student.registerNo}) demonstrates top algorithmic problem-solving: ${leetcode?.totalSolved || 0} Total Solved (Easy: ${leetcode?.easySolved || 0}, Med: ${leetcode?.mediumSolved || 0}, Hard: ${leetcode?.hardSolved || 0}) with Contest Rating of ${leetcode?.contestRating || 1200}. [Data-Driven Analysis]`;
   } else if (awardKey === 'ELITE_STUDENT') {
-    explanation = `Recommended because ${student.name} (${student.register_no || student.registerNo}) exhibits balanced excellence across Academics (${student.cgpa.toFixed(2)} CGPA), LeetCode (${breakdown.leetCode}), SkillEdge (${breakdown.skillEdge}%), and Projects (${breakdown.projects}). [Data-Driven Analysis]`;
+    explanation = `Recommended because ${student.name} (${student.register_no || student.registerNo}) exhibits balanced excellence across Academics (${cgpaDisplay} CGPA), LeetCode (${breakdown.leetCode}), SkillEdge (${breakdown.skillEdge}%), and Projects (${breakdown.projects}). [Data-Driven Analysis]`;
   } else {
     explanation = `Recommended because ${student.name} (${student.register_no || student.registerNo}) achieves top performance metrics across department evaluation modules. [Data-Driven Analysis]`;
   }

@@ -1,10 +1,11 @@
-import { Router, Request, Response } from 'express';
+﻿import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { db } from '../db.js';
-import { authenticateToken, AuthRequest, JWT_SECRET } from '../middleware/auth.js';
+import { authenticateToken, AuthRequest, JWT_SECRET, isJwtConfiguredForRuntime } from '../middleware/auth.js';
 import { recordBcrypt } from '../metrics.js';
+import { withPrimaryDatabase } from '../databasePolicy.js';
 
 const router = Router();
 
@@ -12,126 +13,136 @@ const router = Router();
 const failedAttempts: Record<string, { count: number; lockedUntil?: number }> = {};
 const ipAttempts: Record<string, { count: number; lockedUntil?: number }> = {};
 
-router.post('/login', async (req, res) => {
-  const { identifier, password, role } = req.body;
-
-  if (!identifier || !password || !role) {
-    return res.status(400).json({ error: 'Invalid credentials. Identifier, password, and role are required.' });
-  }
-
-  const cleanId = identifier.trim().toLowerCase();
-  const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip || req.socket.remoteAddress || 'unknown-ip';
-
-  // 1. IP-level rate limiting check: 15 failed attempts locks IP for 15 minutes
-  const ipRecord = ipAttempts[clientIp];
-  if (ipRecord && ipRecord.lockedUntil) {
-    if (Date.now() < ipRecord.lockedUntil) {
-      const remainingSecs = Math.ceil((ipRecord.lockedUntil - Date.now()) / 1000);
-      return res.status(429).json({ error: `Too many failed login requests from this IP address (${clientIp}). Please try again in ${remainingSecs} seconds.` });
-    } else {
-      delete ipAttempts[clientIp];
+router.post('/login', (_req, _res, next) => withPrimaryDatabase(next), async (req, res) => {
+  try {
+    if (!isJwtConfiguredForRuntime()) {
+      return res.status(503).json({ error: 'Authentication is not configured. Please contact the portal administrator.' });
     }
-  }
+    const { identifier, password, role } = req.body || {};
 
-  // 2. Identifier-level rate limiting check: 5 failed attempts locks account for 5 minutes
-  const attemptRecord = failedAttempts[cleanId];
-  if (attemptRecord && attemptRecord.lockedUntil) {
-    if (Date.now() < attemptRecord.lockedUntil) {
-      const remainingSecs = Math.ceil((attemptRecord.lockedUntil - Date.now()) / 1000);
-      return res.status(429).json({ error: `Account temporarily locked due to repeated failed login attempts. Please try again in ${remainingSecs} seconds.` });
-    } else {
-      delete failedAttempts[cleanId];
+    if (typeof identifier !== 'string' || !identifier.trim() ||
+        typeof password !== 'string' || !password || typeof role !== 'string' ||
+        !['STUDENT', 'FACULTY', 'HOD', 'ADMIN'].includes(role.trim().toUpperCase())) {
+      return res.status(400).json({ error: 'Invalid credentials. Identifier, password, and role are required.' });
     }
-  }
 
-  const recordFailedAttempt = () => {
-    const currId = failedAttempts[cleanId] || { count: 0 };
-    currId.count += 1;
-    if (currId.count >= 5) currId.lockedUntil = Date.now() + 5 * 60 * 1000;
-    failedAttempts[cleanId] = currId;
+    const cleanId = identifier.trim().toLowerCase();
+    const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip || req.socket.remoteAddress || 'unknown-ip';
 
-    const currIp = ipAttempts[clientIp] || { count: 0 };
-    currIp.count += 1;
-    if (currIp.count >= 15) currIp.lockedUntil = Date.now() + 15 * 60 * 1000;
-    ipAttempts[clientIp] = currIp;
-  };
+    // 1. IP-level rate limiting check: 15 failed attempts locks IP for 15 minutes
+    const ipRecord = ipAttempts[clientIp];
+    if (ipRecord && ipRecord.lockedUntil) {
+      if (Date.now() < ipRecord.lockedUntil) {
+        const remainingSecs = Math.ceil((ipRecord.lockedUntil - Date.now()) / 1000);
+        return res.status(429).json({ error: `Too many failed login requests from this IP address (${clientIp}). Please try again in ${remainingSecs} seconds.` });
+      } else {
+        delete ipAttempts[clientIp];
+      }
+    }
 
-  const cleanRole = String(role || '').trim().toUpperCase();
-  let match = await db.findUserByIdentifier(cleanId, cleanRole);
+    // 2. Identifier-level rate limiting check: 5 failed attempts locks account for 5 minutes
+    const attemptRecord = failedAttempts[cleanId];
+    if (attemptRecord && attemptRecord.lockedUntil) {
+      if (Date.now() < attemptRecord.lockedUntil) {
+        const remainingSecs = Math.ceil((attemptRecord.lockedUntil - Date.now()) / 1000);
+        return res.status(429).json({ error: `Account temporarily locked due to repeated failed login attempts. Please try again in ${remainingSecs} seconds.` });
+      } else {
+        delete failedAttempts[cleanId];
+      }
+    }
 
-  if (!match) {
-    recordFailedAttempt();
-    return res.status(401).json({
-      error: 'Invalid credentials. Please check your identifier or portal password.',
-      message: 'Invalid credentials'
+    const recordFailedAttempt = () => {
+      const currId = failedAttempts[cleanId] || { count: 0 };
+      currId.count += 1;
+      if (currId.count >= 5) currId.lockedUntil = Date.now() + 5 * 60 * 1000;
+      failedAttempts[cleanId] = currId;
+
+      const currIp = ipAttempts[clientIp] || { count: 0 };
+      currIp.count += 1;
+      if (currIp.count >= 15) currIp.lockedUntil = Date.now() + 15 * 60 * 1000;
+      ipAttempts[clientIp] = currIp;
+    };
+
+    const cleanRole = String(role || '').trim().toUpperCase();
+    let match = await db.findUserByIdentifier(cleanId, cleanRole);
+
+    if (!match) {
+      recordFailedAttempt();
+      return res.status(401).json({
+        error: 'Invalid credentials. Please check your identifier or portal password.',
+        message: 'Invalid credentials'
+      });
+    }
+
+    if (!match.is_active) {
+      return res.status(401).json({
+        error: 'Account is currently deactivated. Please contact your department administrator.',
+        message: 'Account is currently deactivated'
+      });
+    }
+
+    const tBcrypt0 = performance.now();
+    let isPasswordValid = await bcrypt.compare(password, match.password_hash);
+    if (!isPasswordValid && password.trim() !== password) {
+      isPasswordValid = await bcrypt.compare(password.trim(), match.password_hash);
+    }
+    recordBcrypt(performance.now() - tBcrypt0);
+
+    if (!isPasswordValid) {
+      recordFailedAttempt();
+      return res.status(401).json({
+        error: 'Invalid credentials. Please check your identifier or portal password.',
+        message: 'Invalid credentials'
+      });
+    }
+
+    delete failedAttempts[cleanId];
+    if (ipAttempts[clientIp]) delete ipAttempts[clientIp];
+
+    const normalizedRole = match.role.trim().toUpperCase() as 'STUDENT' | 'FACULTY' | 'HOD' | 'ADMIN';
+
+    const isInitialPassword = normalizedRole === 'STUDENT' && Boolean(match.identifier && password.trim() === match.identifier.trim());
+
+    // Token payload contains ONLY necessary identity claim â€” ZERO password hash exposed!
+    const tokenPayload = {
+      id: match.id,
+      email: match.email,
+      name: match.name,
+      role: normalizedRole,
+      assignedYear: match.year,
+      assignedSection: match.section,
+      registerNo: normalizedRole === 'STUDENT' ? match.identifier : undefined,
+      studentId: normalizedRole === 'STUDENT' ? match.id : undefined,
+      requiresPasswordChange: isInitialPassword
+    };
+
+    const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '8h' });
+
+    // BUG-02: Dynamic Secure Cookie Configuration
+    const isSecure = process.env.NODE_ENV === 'production' || Boolean(req.secure) || req.headers['x-forwarded-proto'] === 'https';
+
+    const roleLower = normalizedRole.toLowerCase();
+    const cookieOptions = {
+      httpOnly: true,
+      secure: Boolean(isSecure),
+      sameSite: (isSecure ? 'none' : 'lax') as 'none' | 'lax',
+      maxAge: 8 * 3600 * 1000
+    };
+
+    await db.logAudit(match.id, match.email, normalizedRole, 'LOGIN_SUCCESS', 'AUTH_PORTAL');
+
+    // Issue the session only after the required login audit has persisted.
+    res.cookie(`aids_${roleLower}_token`, token, cookieOptions);
+
+    return res.json({
+      message: 'Login successful',
+      token,
+      user: tokenPayload
     });
+  } catch (error) {
+    console.error('[Auth] Login failed', error);
+    return res.status(503).json({ error: 'Authentication is temporarily unavailable. Please try again.' });
   }
-
-  if (!match.is_active) {
-    return res.status(401).json({
-      error: 'Account is currently deactivated. Please contact your department administrator.',
-      message: 'Account is currently deactivated'
-    });
-  }
-
-  const tBcrypt0 = performance.now();
-  let isPasswordValid = await bcrypt.compare(password, match.password_hash);
-  if (!isPasswordValid && password.trim() !== password) {
-    isPasswordValid = await bcrypt.compare(password.trim(), match.password_hash);
-  }
-  recordBcrypt(performance.now() - tBcrypt0);
-
-  if (!isPasswordValid) {
-    recordFailedAttempt();
-    return res.status(401).json({
-      error: 'Invalid credentials. Please check your identifier or portal password.',
-      message: 'Invalid credentials'
-    });
-  }
-
-  delete failedAttempts[cleanId];
-  if (ipAttempts[clientIp]) delete ipAttempts[clientIp];
-
-  const normalizedRole = match.role.trim().toUpperCase() as 'STUDENT' | 'FACULTY' | 'HOD' | 'ADMIN';
-
-  const isInitialPassword = normalizedRole === 'STUDENT' && Boolean(match.identifier && password.trim() === match.identifier.trim());
-
-  // Token payload contains ONLY necessary identity claim — ZERO password hash exposed!
-  const tokenPayload = {
-    id: match.id,
-    email: match.email,
-    name: match.name,
-    role: normalizedRole,
-    assignedYear: match.year,
-    assignedSection: match.section,
-    registerNo: normalizedRole === 'STUDENT' ? match.identifier : undefined,
-    studentId: normalizedRole === 'STUDENT' ? match.id : undefined,
-    requiresPasswordChange: isInitialPassword
-  };
-
-  const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '8h' });
-
-  // BUG-02: Dynamic Secure Cookie Configuration
-  const isSecure = process.env.NODE_ENV === 'production' || Boolean(req.secure) || req.headers['x-forwarded-proto'] === 'https';
-
-  const roleLower = normalizedRole.toLowerCase();
-  const cookieOptions = {
-    httpOnly: true,
-    secure: Boolean(isSecure),
-    sameSite: (isSecure ? 'none' : 'lax') as 'none' | 'lax',
-    maxAge: 8 * 3600 * 1000
-  };
-
-  // Set role-specific cookie so simultaneous portal logins do not overwrite each other
-  res.cookie(`aids_${roleLower}_token`, token, cookieOptions);
-
-  await db.logAudit(match.id, match.email, normalizedRole, 'LOGIN_SUCCESS', 'AUTH_PORTAL');
-
-  return res.json({
-    message: 'Login successful',
-    token,
-    user: tokenPayload
-  });
 });
 
 router.post('/logout', async (req: AuthRequest, res: Response) => {

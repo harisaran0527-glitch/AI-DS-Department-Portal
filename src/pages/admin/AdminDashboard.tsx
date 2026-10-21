@@ -208,10 +208,10 @@ export const AdminDashboard: React.FC = () => {
 
       setCsvPreviewRows(mappedPreview);
       setCsvStats({
-        total: previewData.totalRows,
-        valid: previewData.validRowsCount,
-        duplicates: previewData.updateRowsCount,
-        invalid: previewData.errorRowsCount
+        total: mappedPreview.length,
+        valid: mappedPreview.filter(row => row.status === 'valid').length,
+        duplicates: mappedPreview.filter(row => row.status === 'duplicate').length,
+        invalid: mappedPreview.filter(row => row.status === 'invalid').length
       });
     } catch (err: any) {
       alert(err.message || 'Failed to validate Excel import preview.');
