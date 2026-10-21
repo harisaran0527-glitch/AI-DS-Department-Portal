@@ -5516,29 +5516,29 @@ export const FacultyDashboard: React.FC = () => {
                 </div>
                 <div>
                   <label className="text-slate-300 font-bold block mb-1">Student Name *</label>
-                  <input type="text" required placeholder="e.g. Aravind Kumar" value={addName} onChange={(e) => setAddName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white font-sans font-bold" />
+                  <input type="text" required placeholder="Enter student name" value={addName} onChange={(e) => setAddName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white font-sans font-bold" />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-slate-300 font-bold block mb-1">College Mail ID *</label>
-                  <input type="email" required placeholder="aravind.aids@avsec.edu.in" value={addCollegeMail} onChange={(e) => setAddCollegeMail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                  <input type="email" required placeholder="Enter official email" value={addCollegeMail} onChange={(e) => setAddCollegeMail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
                 </div>
                 <div>
                   <label className="text-slate-300 font-bold block mb-1">Mobile Number</label>
-                  <input type="text" placeholder="e.g. 9876543210" value={addMobileNumber} onChange={(e) => setAddMobileNumber(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                  <input type="text" placeholder="Enter mobile number" value={addMobileNumber} onChange={(e) => setAddMobileNumber(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-slate-300 font-bold block mb-1">Personal Mail ID</label>
-                  <input type="email" placeholder="aravind@gmail.com" value={addPersonalMail} onChange={(e) => setAddPersonalMail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                  <input type="email" placeholder="Enter personal email" value={addPersonalMail} onChange={(e) => setAddPersonalMail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
                 </div>
                 <div>
                   <label className="text-slate-300 font-bold block mb-1">Address / City</label>
-                  <input type="text" placeholder="e.g. Salem, Tamil Nadu" value={addAddress} onChange={(e) => setAddAddress(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                  <input type="text" placeholder="Enter address / city" value={addAddress} onChange={(e) => setAddAddress(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
                 </div>
               </div>
 

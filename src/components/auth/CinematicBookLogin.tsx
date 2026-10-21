@@ -40,13 +40,19 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [authenticatedName, setAuthenticatedName] = useState('');
 
-  // Clean up any stale remembered emails on mount and enforce fixed dark theme
+  // Clean up any stale remembered emails on mount, reset states, and enforce fixed dark theme
   useEffect(() => {
     setIdentifier('');
     setPassword('');
     setShowPassword(false);
+    setErrorMessage('');
+    setAuthStatus('idle');
     setRememberMe(false);
     localStorage.removeItem(`remembered_email_${portalRole.toLowerCase()}`);
+    localStorage.removeItem('remembered_email_student');
+    localStorage.removeItem('remembered_email_faculty');
+    localStorage.removeItem('remembered_email_hod');
+    localStorage.removeItem('remembered_email_admin');
     document.documentElement.classList.remove('light');
     document.documentElement.classList.add('dark');
     document.documentElement.setAttribute('data-theme', 'dark');
@@ -210,6 +216,7 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
                         <input
                           type="text"
                           required
+                          id={`${portalRole.toLowerCase()}-identifier`}
                           placeholder={placeholderIdentifier}
                           value={identifier}
                           name={`${portalRole.toLowerCase()}-identifier`}
@@ -230,6 +237,7 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
                         <input
                           type={showPassword ? 'text' : 'password'}
                           required
+                          id={`${portalRole.toLowerCase()}-password`}
                           placeholder="Enter password"
                           value={password}
                           name={`${portalRole.toLowerCase()}-password`}

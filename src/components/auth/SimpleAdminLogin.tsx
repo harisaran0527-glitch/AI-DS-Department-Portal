@@ -17,9 +17,18 @@ export const SimpleAdminLogin: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [authenticatedName, setAuthenticatedName] = useState('');
 
-  // Clean up any stale remembered emails on mount and enforce fixed dark theme
+  // Clean up any stale remembered emails on mount, reset states, and enforce fixed dark theme
   useEffect(() => {
+    setIdentifier('');
+    setPassword('');
+    setShowPassword(false);
+    setErrorMessage('');
+    setAuthStatus('idle');
+    setRememberMe(false);
     localStorage.removeItem('remembered_email_admin');
+    localStorage.removeItem('remembered_email_student');
+    localStorage.removeItem('remembered_email_faculty');
+    localStorage.removeItem('remembered_email_hod');
     document.documentElement.classList.remove('light');
     document.documentElement.classList.add('dark');
     document.documentElement.setAttribute('data-theme', 'dark');
@@ -124,6 +133,7 @@ export const SimpleAdminLogin: React.FC = () => {
                   type="text"
                   required
                   disabled={authStatus === 'loading'}
+                  id="admin-identifier"
                   placeholder="Enter admin email or ID"
                   value={identifier}
                   name="admin-identifier"
@@ -146,6 +156,7 @@ export const SimpleAdminLogin: React.FC = () => {
                   type={showPassword ? 'text' : 'password'}
                   required
                   disabled={authStatus === 'loading'}
+                  id="admin-password"
                   placeholder="Enter admin password"
                   value={password}
                   name="admin-password"

@@ -66,13 +66,20 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
   const [errorMessage, setErrorMessage] = useState('');
   const [authenticatedName, setAuthenticatedName] = useState('');
 
-  // Clean up any stale remembered emails on mount and enforce fixed dark theme
+  // Clean up any stale remembered emails on mount, reset input states, and enforce fixed dark theme
   useEffect(() => {
     setIdentifier('');
     setPassword('');
     setShowPassword(false);
+    setErrorMessage('');
+    setAuthStatus('idle');
+    setFocusedField(null);
     setRememberMe(false);
     localStorage.removeItem(`remembered_email_${portalRole.toLowerCase()}`);
+    localStorage.removeItem('remembered_email_student');
+    localStorage.removeItem('remembered_email_faculty');
+    localStorage.removeItem('remembered_email_hod');
+    localStorage.removeItem('remembered_email_admin');
     document.documentElement.classList.remove('light');
     document.documentElement.classList.add('dark');
     document.documentElement.setAttribute('data-theme', 'dark');
@@ -302,6 +309,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                       onChange={(e) => setIdentifier(e.target.value)}
                       onFocus={() => setFocusedField('identifier')}
                       onBlur={() => setFocusedField(null)}
+                      id={`${portalRole.toLowerCase()}-identifier`}
                       placeholder={placeholderIdentifier || "Enter your college email or ID"}
                       name={`${portalRole.toLowerCase()}-identifier`}
                       aria-label={placeholderIdentifier}
@@ -333,6 +341,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                       onChange={(e) => setPassword(e.target.value)}
                       onFocus={() => setFocusedField('password')}
                       onBlur={() => setFocusedField(null)}
+                      id={`${portalRole.toLowerCase()}-password`}
                       placeholder="Enter your password"
                       name={`${portalRole.toLowerCase()}-password`}
                       aria-label="Portal password"

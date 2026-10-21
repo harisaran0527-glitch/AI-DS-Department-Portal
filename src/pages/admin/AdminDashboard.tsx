@@ -1851,7 +1851,7 @@ export const AdminDashboard: React.FC = () => {
                 <label className="text-xs font-bold text-slate-300">Or Paste CSV Text Input</label>
                 <textarea
                   rows={4}
-                  placeholder={`7376222AD101, Student One, student1@aids.edu, 2nd Year, A, 2023-2027, 8.75\n7376222AD102, Student Two, student2@aids.edu, 2nd Year, A, 2023-2027, 9.10`}
+                  placeholder="RegisterNumber, Student Name, College Email, Year, Section, Batch, CGPA"
                   value={csvText}
                   onChange={(e) => setCsvText(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white font-mono placeholder-slate-600 focus:border-cyan-500 focus:outline-none"
@@ -2002,7 +2002,7 @@ export const AdminDashboard: React.FC = () => {
                   <input
                     type="email"
                     required
-                    placeholder="hod@aids.edu"
+                    placeholder="Enter official email"
                     value={hodEmailInput}
                     onChange={(e) => setHodEmailInput(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-base sm:text-xs text-white font-mono min-h-[44px]"
@@ -2230,7 +2230,7 @@ export const AdminDashboard: React.FC = () => {
                 <input
                   type="email"
                   required
-                  placeholder="faculty@aids.edu"
+                  placeholder="Enter official email"
                   value={formEmail}
                   onChange={(e) => setFormEmail(e.target.value)}
                   disabled={Boolean(editingFaculty)}
