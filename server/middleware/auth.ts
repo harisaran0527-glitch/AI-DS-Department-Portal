@@ -7,6 +7,11 @@ dotenv.config();
 
 export const JWT_SECRET = process.env.JWT_SECRET || 'aids_system_secure_jwt_secret_token_key_2026';
 
+export function isJwtConfiguredForRuntime(): boolean {
+  return Boolean(process.env.JWT_SECRET?.trim()) ||
+    (process.env.NODE_ENV !== 'production' && !process.env.VERCEL);
+}
+
 export interface AuthRequest extends Request {
   user?: {
     id: string;
@@ -21,6 +26,9 @@ export interface AuthRequest extends Request {
 }
 
 export function authenticateToken(req: AuthRequest, res: Response, next: NextFunction) {
+  if (!isJwtConfiguredForRuntime()) {
+    return res.status(503).json({ error: 'Authentication is not configured. Please contact the portal administrator.' });
+  }
   let authHeader = req.headers.authorization;
   if (!authHeader && req.headers.Authorization && typeof req.headers.Authorization === 'string') {
     authHeader = req.headers.Authorization;
@@ -43,10 +51,7 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
 
   let targetRole: string | undefined = portalRole || undefined;
   if (!targetRole) {
-    if (path.includes('/admin')) targetRole = 'admin';
-    else if (path.includes('/hod')) targetRole = 'hod';
-    else if (path.includes('/faculty')) targetRole = 'faculty';
-    else if (path.includes('/student')) targetRole = 'student';
+    targetRole = path.match(/^\/(?:api\/)?(admin|hod|faculty|student)(?:\/|$)/)?.[1];
   }
 
   // Check role-specific cookie ONLY if Bearer header was not provided

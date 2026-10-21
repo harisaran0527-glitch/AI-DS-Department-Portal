@@ -1,7 +1,7 @@
 {
   "version": 2,
   "framework": "vite",
-  "buildCommand": "vite build",
+  "buildCommand": "npm run check:server && npm run build",
   "outputDirectory": "dist",
   "regions": ["syd1"],
   "functions": {

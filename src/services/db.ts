@@ -95,26 +95,9 @@ export class DBService {
       this.setItem(KEYS.FINALIZED_AWARDS, []);
     }
 
-    // Default hashed password setup for Admin and HOD system accounts
-    if (!localStorage.getItem(KEYS.ADMIN_ACCOUNT)) {
-      const adminHash = await hashPassword('admin123');
-      this.setItem(KEYS.ADMIN_ACCOUNT, {
-        id: 'sys-admin-1',
-        name: 'System Administrator',
-        email: 'admin@aids.edu',
-        passwordHash: adminHash
-      });
-    }
-
-    if (!localStorage.getItem(KEYS.HOD_ACCOUNT)) {
-      const hodHash = await hashPassword('hod123');
-      this.setItem(KEYS.HOD_ACCOUNT, {
-        id: 'sys-hod-1',
-        name: 'Head of Department',
-        email: 'hod@aids.edu',
-        passwordHash: hodHash
-      });
-    }
+    // System accounts must be explicitly managed through PostgreSQL database, zero hardcoded credentials
+    localStorage.removeItem(KEYS.ADMIN_ACCOUNT);
+    localStorage.removeItem(KEYS.HOD_ACCOUNT);
   }
 
   // --- Rate Limiting & Account Enumeration Defense ---

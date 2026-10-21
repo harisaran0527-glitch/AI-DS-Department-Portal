@@ -66,9 +66,21 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
   const [errorMessage, setErrorMessage] = useState('');
   const [authenticatedName, setAuthenticatedName] = useState('');
 
-  // Clean up any stale remembered emails on mount and enforce fixed dark theme
+  // Clean up any stale remembered emails on mount, reset input states, and enforce fixed dark theme
   useEffect(() => {
+    setIdentifier('');
+    setPassword('');
+    setShowPassword(false);
+    setErrorMessage('');
+    setAuthStatus('idle');
+    setFocusedField(null);
+
     localStorage.removeItem(`remembered_email_${portalRole.toLowerCase()}`);
+    localStorage.removeItem('remembered_email_student');
+    localStorage.removeItem('remembered_email_faculty');
+    localStorage.removeItem('remembered_email_hod');
+    localStorage.removeItem('remembered_email_admin');
+
     document.documentElement.classList.remove('light');
     document.documentElement.classList.add('dark');
     document.documentElement.setAttribute('data-theme', 'dark');
@@ -88,11 +100,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
     setErrorMessage('');
     setAuthStatus('loading');
 
-    if (rememberMe) {
-      localStorage.setItem(`remembered_email_${portalRole.toLowerCase()}`, identifier);
-    } else {
-      localStorage.removeItem(`remembered_email_${portalRole.toLowerCase()}`);
-    }
+    localStorage.removeItem(`remembered_email_${portalRole.toLowerCase()}`);
 
     try {
       const res = await API.login(identifier, password, portalRole);
@@ -296,6 +304,8 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                       <User className="w-[18px] h-[18px]" />
                     </div>
                     <input
+                      id={`${portalRole.toLowerCase()}-identifier`}
+                      name={`${portalRole.toLowerCase()}_identifier`}
                       type="text"
                       required
                       disabled={authStatus === 'loading'}
@@ -325,6 +335,8 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                       <Lock className="w-[18px] h-[18px]" />
                     </div>
                     <input
+                      id={`${portalRole.toLowerCase()}-password`}
+                      name={`${portalRole.toLowerCase()}_password`}
                       type={showPassword ? 'text' : 'password'}
                       required
                       disabled={authStatus === 'loading'}

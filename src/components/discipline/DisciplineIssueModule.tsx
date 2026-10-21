@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { API } from '../../services/api';
 import {
   ShieldAlert,
@@ -70,6 +70,9 @@ interface DisciplineIssueModuleProps {
 }
 
 export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ userRole = 'FACULTY', onBack }) => {
+  const recordRequest = useRef(0);
+  const lookupRequest = useRef(0);
+  const suggestionRequest = useRef(0);
   // Main Data States
   const [records, setRecords] = useState<DisciplineRecordItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -141,6 +144,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
 
   // Fetch All Discipline Records
   const fetchRecords = useCallback(async () => {
+    const requestId = ++recordRequest.current;
     setIsLoading(true);
     setError('');
     try {
@@ -150,20 +154,32 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
         section: sectionFilter,
         issue: issueFilter
       });
-      setRecords(res.records || []);
+      if (requestId === recordRequest.current) setRecords(res.records || []);
     } catch (err: any) {
-      setError(err.message || 'Failed to fetch discipline records.');
+      if (requestId === recordRequest.current) setError(err.message || 'Failed to fetch discipline records.');
     } finally {
-      setIsLoading(false);
+      if (requestId === recordRequest.current) setIsLoading(false);
     }
   }, [searchQuery, yearFilter, sectionFilter, issueFilter]);
 
   useEffect(() => {
-    fetchRecords();
+    const timeout = window.setTimeout(fetchRecords, 250);
+    const refreshOnFocus = () => { void fetchRecords(); };
+    window.addEventListener('focus', refreshOnFocus);
+    return () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener('focus', refreshOnFocus);
+      recordRequest.current++;
+    };
   }, [fetchRecords]);
 
   // Open Form Modal & Set Timestamps
   const handleOpenForm = () => {
+    lookupRequest.current++;
+    suggestionRequest.current++;
+    setSuggestions([]);
+    setShowSuggestions(false);
+    setIsLookingUp(false);
     updateCurrentDateTime();
     setRegNoInput('');
     setStudentMatch(null);
@@ -180,6 +196,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
 
   // Live Register Number Lookup
   const handleLookupRegNo = useCallback(async (val: string) => {
+    const requestId = ++lookupRequest.current;
     const trimmed = val.trim();
     if (!trimmed) {
       setStudentMatch(null);
@@ -191,6 +208,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
     setLookupError('');
     try {
       const res = await API.lookupDisciplineStudent(trimmed);
+      if (requestId !== lookupRequest.current) return;
       if (res.found && res.student) {
         setStudentMatch(res.student);
         setLookupError('');
@@ -199,25 +217,29 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
         setLookupError(`Register Number "${trimmed}" does not match any student record in database.`);
       }
     } catch (err: any) {
+      if (requestId !== lookupRequest.current) return;
       setStudentMatch(null);
       setLookupError(`Register Number "${trimmed}" not found in database.`);
     } finally {
-      setIsLookingUp(false);
+      if (requestId === lookupRequest.current) setIsLookingUp(false);
     }
   }, []);
 
   // Handle Autocomplete Input Change
   const handleRegNoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
+    const requestId = ++suggestionRequest.current;
     setRegNoInput(val);
+    setStudentMatch(null);
 
     if (val.trim().length >= 2) {
       API.searchDisciplineStudents(val.trim())
         .then((res) => {
+          if (requestId !== suggestionRequest.current) return;
           setSuggestions(res.students || []);
           setShowSuggestions(true);
         })
-        .catch(() => setSuggestions([]));
+        .catch(() => { if (requestId === suggestionRequest.current) setSuggestions([]); });
     } else {
       setSuggestions([]);
       setShowSuggestions(false);
@@ -227,6 +249,9 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
   };
 
   const selectSuggestion = (s: any) => {
+    lookupRequest.current++;
+    suggestionRequest.current++;
+    setIsLookingUp(false);
     setRegNoInput(s.registerNo);
     setShowSuggestions(false);
     setStudentMatch(s);
@@ -486,7 +511,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
               <div>
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-[10px] font-mono font-bold tracking-wider px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800/60 uppercase">
-                    ALL-STUDENT ACCESSIBLE MODULE
+                    AUTHORIZED DISCIPLINE WORKSPACE
                   </span>
                   <span className="text-[10px] font-mono text-slate-400">| Department of AI & DS</span>
                 </div>
@@ -496,7 +521,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
               </div>
             </div>
             <p className="text-xs text-slate-300 max-w-2xl">
-              Log, track, and manage student discipline violations across all department years and sections without restriction.
+              Log, track, and manage discipline records within your authorized workspace.
             </p>
           </div>
 
@@ -571,7 +596,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
             </div>
             <div>
               <span className="text-[10px] text-slate-400 block font-mono">MODULE ACCESS</span>
-              <span className="text-xs font-bold text-emerald-400 uppercase">ALL STUDENTS</span>
+              <span className="text-xs font-bold text-emerald-400 uppercase">{userRole === 'FACULTY' ? 'ASSIGNED WORKSPACE' : 'DEPARTMENT'}</span>
             </div>
           </div>
         </div>

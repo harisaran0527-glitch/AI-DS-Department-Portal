@@ -4,6 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "check:server": "node scripts/check-server-syntax.mjs",
+    "test:discipline": "node --test tests/discipline-*.test.mjs",
+    "test:auth": "node --test tests/authentication.test.mjs",
     "dev": "node ./node_modules/vite/bin/vite.js",
     "server": "node --import tsx/esm server/index.ts",
     "build": "node ./node_modules/vite/bin/vite.js build",

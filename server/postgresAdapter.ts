@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
 import { recordDbQuery, recordDbConn } from './metrics.js';
+import { requiresPrimaryDatabase } from './databasePolicy.js';
 
 dotenv.config();
 
@@ -113,7 +114,7 @@ async function runPgWithRetry<T>(queryFn: () => Promise<T>, fallbackFn?: () => T
     return res;
   } catch (err: any) {
     console.warn('⚠️ PostgreSQL query error, retrying on fresh pool connection:', err.message);
-    if (fallbackFn && sqliteDb) {
+    if (fallbackFn && sqliteDb && !requiresPrimaryDatabase()) {
       try {
         return fallbackFn();
       } catch (_e) {}
@@ -124,7 +125,7 @@ async function runPgWithRetry<T>(queryFn: () => Promise<T>, fallbackFn?: () => T
       recordDbQuery(performance.now() - tRetry);
       return res;
     } catch (retryErr: any) {
-      if (fallbackFn && sqliteDb) {
+      if (fallbackFn && sqliteDb && !requiresPrimaryDatabase()) {
         return fallbackFn();
       }
       throw retryErr;
@@ -134,6 +135,7 @@ async function runPgWithRetry<T>(queryFn: () => Promise<T>, fallbackFn?: () => T
 
 // Query All Rows (Supports both Sync & Async)
 export async function queryAll<T = any>(sql: string, params: any[] = []): Promise<T[]> {
+  if (requiresPrimaryDatabase() && process.env.USE_SQLITE !== 'true' && !pgPool) throw new Error('The authoritative database is unavailable.');
   if (pgPool) {
     const pgSql = toPgSql(sql);
     return runPgWithRetry(
@@ -146,11 +148,13 @@ export async function queryAll<T = any>(sql: string, params: any[] = []): Promis
   } else if (sqliteDb) {
     return sqliteDb.prepare(sql).all(...params) as T[];
   }
+  if (requiresPrimaryDatabase()) throw new Error('The authoritative database is unavailable.');
   return [];
 }
 
 // Query Single Row
 export async function queryOne<T = any>(sql: string, params: any[] = []): Promise<T | null> {
+  if (requiresPrimaryDatabase() && process.env.USE_SQLITE !== 'true' && !pgPool) throw new Error('The authoritative database is unavailable.');
   if (pgPool) {
     const pgSql = toPgSql(sql);
     return runPgWithRetry(
@@ -163,13 +167,20 @@ export async function queryOne<T = any>(sql: string, params: any[] = []): Promis
   } else if (sqliteDb) {
     return (sqliteDb.prepare(sql).get(...params) as T) || null;
   }
+  if (requiresPrimaryDatabase()) throw new Error('The authoritative database is unavailable.');
   return null;
 }
 
 // Execute Statement (INSERT / UPDATE / DELETE)
 export async function executeRun(sql: string, params: any[] = []): Promise<{ changes: number }> {
+  if (requiresPrimaryDatabase() && process.env.USE_SQLITE !== 'true' && !pgPool) throw new Error('The authoritative database is unavailable.');
   if (pgPool) {
     const pgSql = toPgSql(sql);
+    if (requiresPrimaryDatabase()) {
+      // A lost response may follow a committed insert. Never replay discipline writes automatically.
+      const result = await pgPool.query(pgSql, params);
+      return { changes: result.rowCount || 0 };
+    }
     return runPgWithRetry(
       async () => {
         const res = await pgPool!.query(pgSql, params);
@@ -181,6 +192,7 @@ export async function executeRun(sql: string, params: any[] = []): Promise<{ cha
     const res = sqliteDb.prepare(sql).run(...params);
     return { changes: res.changes };
   }
+  if (requiresPrimaryDatabase()) throw new Error('The authoritative database is unavailable.');
   return { changes: 0 };
 }
 

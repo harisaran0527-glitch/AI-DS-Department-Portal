@@ -782,7 +782,7 @@ export function normalizeStudentRecord(stu: any): StudentRecord | null {
     batch: stu.batch,
     class_coordinator_name: stu.class_coordinator_name || stu.classCoordinatorName || 'Assigned Faculty',
     classCoordinatorName: stu.class_coordinator_name || stu.classCoordinatorName || 'Assigned Faculty',
-    cgpa: (stu.cgpa !== undefined && stu.cgpa !== null && stu.cgpa !== '' && String(stu.cgpa).trim().toUpperCase() !== 'N/A' && String(stu.cgpa).trim().toUpperCase() !== 'NULL' && !isNaN(Number(stu.cgpa))) ? Number(stu.cgpa) : null,
+    cgpa: (stu.cgpa !== undefined && stu.cgpa !== null && String(stu.cgpa) !== '' && String(stu.cgpa).trim().toUpperCase() !== 'N/A' && String(stu.cgpa).trim().toUpperCase() !== 'NULL' && !isNaN(Number(stu.cgpa))) ? Number(stu.cgpa) : null,
     overall_score: stu.overall_score !== undefined ? stu.overall_score : (stu.overallScore || 0),
     overallScore: stu.overall_score !== undefined ? stu.overall_score : (stu.overallScore || 0),
     current_rank: stu.current_rank !== undefined ? stu.current_rank : (stu.currentRank || 99),
@@ -853,6 +853,7 @@ export interface AttendanceRecord {
   mlDays: number;
   percentage: number;
   lastUpdated: string;
+  historyLogs?: { date: string; status: string }[];
 }
 
 export interface DisciplineRecord {
@@ -1272,16 +1273,16 @@ export class SQLiteDB {
     registerNo: string;
     name: string;
     email: string;
-    mobileNumber?: string;
-    personalEmail?: string;
-    address?: string;
+    mobileNumber?: string | null;
+    personalEmail?: string | null;
+    address?: string | null;
     cgpa?: number | null;
     year?: string;
     section?: string;
     batch?: string;
-    createdByFacultyId?: string;
-    facultyWorkspaceId?: string;
-    classCoordinatorName?: string;
+    createdByFacultyId?: string | null;
+    facultyWorkspaceId?: string | null;
+    classCoordinatorName?: string | null;
   }): Promise<StudentRecord> {
     const cleanRegNo = stu.registerNo.trim();
     const cleanEmail = stu.email.trim().toLowerCase();
@@ -1289,7 +1290,7 @@ export class SQLiteDB {
     const cleanMobile = stu.mobileNumber ? stu.mobileNumber.trim() : null;
     const cleanPersonalEmail = stu.personalEmail ? stu.personalEmail.trim().toLowerCase() : null;
     const cleanAddress = stu.address ? stu.address.trim() : null;
-    const cleanCgpa = (stu.cgpa !== undefined && stu.cgpa !== null && stu.cgpa !== '' && String(stu.cgpa).trim().toUpperCase() !== 'N/A' && String(stu.cgpa).trim().toUpperCase() !== 'NULL' && !isNaN(Number(stu.cgpa))) ? Math.max(0, Math.min(10, Number(stu.cgpa))) : null;
+    const cleanCgpa = (stu.cgpa !== undefined && stu.cgpa !== null && String(stu.cgpa) !== '' && String(stu.cgpa).trim().toUpperCase() !== 'N/A' && String(stu.cgpa).trim().toUpperCase() !== 'NULL' && !isNaN(Number(stu.cgpa))) ? Math.max(0, Math.min(10, Number(stu.cgpa))) : null;
     const yearToUse = stu.year || '1st Year';
     const sectionToUse = stu.section || 'A';
     const batchToUse = stu.batch || '2024-2028';
@@ -1394,7 +1395,7 @@ export class SQLiteDB {
         const cleanMobile = s.mobileNumber ? s.mobileNumber.trim() : null;
         const cleanPersonalEmail = s.personalEmail ? s.personalEmail.trim().toLowerCase() : null;
         const cleanAddress = s.address ? s.address.trim() : null;
-        const cleanCgpa = (s.cgpa !== undefined && s.cgpa !== null && s.cgpa !== '' && String(s.cgpa).trim().toUpperCase() !== 'N/A' && String(s.cgpa).trim().toUpperCase() !== 'NA' && String(s.cgpa).trim().toUpperCase() !== 'NULL' && String(s.cgpa).trim().toUpperCase() !== 'NONE' && !isNaN(Number(s.cgpa))) ? Math.max(0, Math.min(10, Number(s.cgpa))) : null;
+        const cleanCgpa = (s.cgpa !== undefined && s.cgpa !== null && String(s.cgpa) !== '' && String(s.cgpa).trim().toUpperCase() !== 'N/A' && String(s.cgpa).trim().toUpperCase() !== 'NA' && String(s.cgpa).trim().toUpperCase() !== 'NULL' && String(s.cgpa).trim().toUpperCase() !== 'NONE' && !isNaN(Number(s.cgpa))) ? Math.max(0, Math.min(10, Number(s.cgpa))) : null;
         const studentId = `stu-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
         return {
@@ -1525,7 +1526,7 @@ export class SQLiteDB {
     createdByFacultyId?: string;
     facultyWorkspaceId?: string;
   }): Promise<void> {
-    const parsedCgpa = (stu.cgpa !== undefined && stu.cgpa !== null && stu.cgpa !== '' && String(stu.cgpa).trim().toUpperCase() !== 'N/A' && String(stu.cgpa).trim().toUpperCase() !== 'NULL' && !isNaN(Number(stu.cgpa))) ? Math.max(0, Math.min(10, Number(stu.cgpa))) : null;
+    const parsedCgpa = (stu.cgpa !== undefined && stu.cgpa !== null && String(stu.cgpa) !== '' && String(stu.cgpa).trim().toUpperCase() !== 'N/A' && String(stu.cgpa).trim().toUpperCase() !== 'NULL' && !isNaN(Number(stu.cgpa))) ? Math.max(0, Math.min(10, Number(stu.cgpa))) : null;
     await executeRun(`
       INSERT INTO students (id, register_no, name, email, personal_email, department, year, section, batch, class_coordinator_name, cgpa, overall_score, current_rank, created_by_faculty_id, faculty_workspace_id)
       VALUES (?, ?, ?, ?, ?, 'AI & DS', ?, ?, ?, ?, ?, ?, 99, ?, ?)
@@ -1547,7 +1548,7 @@ export class SQLiteDB {
   }
 
   public async updateStudentCGPA(studentId: string, cgpa: number | null): Promise<void> {
-    const parsedCgpa = (cgpa !== undefined && cgpa !== null && cgpa !== '' && String(cgpa).trim().toUpperCase() !== 'N/A' && String(cgpa).trim().toUpperCase() !== 'NULL' && !isNaN(Number(cgpa))) ? Math.max(0, Math.min(10, Number(cgpa))) : null;
+    const parsedCgpa = (cgpa !== undefined && cgpa !== null && String(cgpa) !== '' && String(cgpa).trim().toUpperCase() !== 'N/A' && String(cgpa).trim().toUpperCase() !== 'NULL' && !isNaN(Number(cgpa))) ? Math.max(0, Math.min(10, Number(cgpa))) : null;
     await executeRun('UPDATE students SET cgpa = ? WHERE id = ?', [parsedCgpa, studentId]);
   }
 
@@ -1559,7 +1560,7 @@ export class SQLiteDB {
   public async getStudent360(studentId: string) {
     if (!studentId) return null;
 
-    let student: Student | null = null;
+    let student: StudentRecord | null | undefined = null;
     let academicsRaw: any[] = [];
     let arrears: ArrearRecord[] = [];
     let skillRaw: any = null;
@@ -2386,9 +2387,13 @@ export class SQLiteDB {
         d.assigned_faculty_id = ?
         OR s.created_by_faculty_id = ?
         OR s.faculty_workspace_id = ?
-        OR (LOWER(TRIM(s.year)) = LOWER(TRIM(?)) AND UPPER(TRIM(s.section)) = UPPER(TRIM(?)))
-      )`;
-      params.push(filters.facultyId, filters.facultyId, filters.facultyId, assignedYear, assignedSection);
+      `;
+      params.push(filters.facultyId, filters.facultyId, filters.facultyId);
+      if (assignment?.is_active && assignedYear && assignedSection && assignedYear !== 'ALL' && assignedSection !== 'ALL') {
+        sql += ` OR (LOWER(TRIM(s.year)) = LOWER(TRIM(?)) AND UPPER(TRIM(s.section)) = UPPER(TRIM(?)))`;
+        params.push(assignedYear, assignedSection);
+      }
+      sql += `)`;
     }
 
     if (filters?.search && filters.search.trim() !== '') {
@@ -4291,6 +4296,8 @@ export class SQLiteDB {
       subject_abbreviation: row.subject_abbreviation || row.subjectAbbreviation || '',
       subjectAbbreviation: row.subject_abbreviation || row.subjectAbbreviation || '',
       department: row.department,
+      academicYear: row.academic_year ?? row.academicYear ?? '',
+      academic_year: row.academic_year ?? row.academicYear ?? '',
       year: row.year,
       semester: row.semester,
       section: row.section,

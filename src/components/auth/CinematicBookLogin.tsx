@@ -40,9 +40,20 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [authenticatedName, setAuthenticatedName] = useState('');
 
-  // Clean up any stale remembered emails on mount and enforce fixed dark theme
+  // Clean up any stale remembered emails on mount, reset states, and enforce fixed dark theme
   useEffect(() => {
+    setIdentifier('');
+    setPassword('');
+    setShowPassword(false);
+    setErrorMessage('');
+    setAuthStatus('idle');
+
     localStorage.removeItem(`remembered_email_${portalRole.toLowerCase()}`);
+    localStorage.removeItem('remembered_email_student');
+    localStorage.removeItem('remembered_email_faculty');
+    localStorage.removeItem('remembered_email_hod');
+    localStorage.removeItem('remembered_email_admin');
+
     document.documentElement.classList.remove('light');
     document.documentElement.classList.add('dark');
     document.documentElement.setAttribute('data-theme', 'dark');
@@ -69,11 +80,7 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
     setErrorMessage('');
     setAuthStatus('loading');
 
-    if (rememberMe) {
-      localStorage.setItem(`remembered_email_${portalRole.toLowerCase()}`, identifier);
-    } else {
-      localStorage.removeItem(`remembered_email_${portalRole.toLowerCase()}`);
-    }
+    localStorage.removeItem(`remembered_email_${portalRole.toLowerCase()}`);
 
     try {
       const res = await API.login(identifier, password, portalRole);

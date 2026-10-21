@@ -17,9 +17,19 @@ export const SimpleAdminLogin: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [authenticatedName, setAuthenticatedName] = useState('');
 
-  // Clean up any stale remembered emails on mount and enforce fixed dark theme
+  // Clean up any stale remembered emails on mount, reset states, and enforce fixed dark theme
   useEffect(() => {
+    setIdentifier('');
+    setPassword('');
+    setShowPassword(false);
+    setErrorMessage('');
+    setAuthStatus('idle');
+
     localStorage.removeItem('remembered_email_admin');
+    localStorage.removeItem('remembered_email_student');
+    localStorage.removeItem('remembered_email_faculty');
+    localStorage.removeItem('remembered_email_hod');
+
     document.documentElement.classList.remove('light');
     document.documentElement.classList.add('dark');
     document.documentElement.setAttribute('data-theme', 'dark');
@@ -33,11 +43,7 @@ export const SimpleAdminLogin: React.FC = () => {
     setErrorMessage('');
     setAuthStatus('loading');
 
-    if (rememberMe) {
-      localStorage.setItem('remembered_email_admin', identifier);
-    } else {
-      localStorage.removeItem('remembered_email_admin');
-    }
+    localStorage.removeItem('remembered_email_admin');
 
     try {
       const res = await API.login(identifier, password, 'ADMIN');
@@ -127,12 +133,15 @@ export const SimpleAdminLogin: React.FC = () => {
               <div className="relative group">
                 <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-cyan-400 group-focus-within:text-cyan-200 transition-colors pointer-events-none" />
                 <input
+                  id="admin-identifier"
+                  name="admin_identifier"
                   type="text"
                   required
                   disabled={authStatus === 'loading'}
                   placeholder="Enter admin email or ID"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
+                  autoComplete="username"
                   className="w-full bg-slate-900/90 border border-cyan-500/50 rounded-xl py-2.5 pl-12 pr-4 min-h-[44px] text-base sm:text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all disabled:opacity-75 disabled:cursor-not-allowed"
                 />
               </div>
@@ -146,12 +155,15 @@ export const SimpleAdminLogin: React.FC = () => {
               <div className="relative group">
                 <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-cyan-400 group-focus-within:text-cyan-200 transition-colors pointer-events-none" />
                 <input
+                  id="admin-password"
+                  name="admin_password"
                   type={showPassword ? 'text' : 'password'}
                   required
                   disabled={authStatus === 'loading'}
                   placeholder="Enter admin password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
                   className="w-full bg-slate-900/90 border border-cyan-500/50 rounded-xl py-2.5 pl-12 pr-12 min-h-[44px] text-base sm:text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all disabled:opacity-75 disabled:cursor-not-allowed"
                 />
                 <button

@@ -1825,7 +1825,7 @@ export const FacultyDashboard: React.FC = () => {
             {selectedStudent.cgpa !== undefined && (
               <div>
                 <span className="text-slate-400 text-[11px]">CGPA: </span>
-                <span className="text-amber-300 font-bold">{(selectedStudent.cgpa !== null && selectedStudent.cgpa !== undefined && selectedStudent.cgpa !== '') ? Number(selectedStudent.cgpa).toFixed(2) : 'Not Available'}</span>
+                <span className="text-amber-300 font-bold">{(selectedStudent.cgpa !== null && selectedStudent.cgpa !== undefined && String(selectedStudent.cgpa) !== '') ? Number(selectedStudent.cgpa).toFixed(2) : 'Not Available'}</span>
               </div>
             )}
           </div>
@@ -5151,7 +5151,7 @@ export const FacultyDashboard: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1">
                     <div className="text-[10px] text-slate-400">OVERALL CGPA</div>
-                    <div className="text-3xl font-black text-amber-400">{(selectedStudent.cgpa !== null && selectedStudent.cgpa !== undefined && selectedStudent.cgpa !== '') ? Number(selectedStudent.cgpa).toFixed(2) : 'Not Available'}</div>
+                    <div className="text-3xl font-black text-amber-400">{(selectedStudent.cgpa !== null && selectedStudent.cgpa !== undefined && String(selectedStudent.cgpa) !== '') ? Number(selectedStudent.cgpa).toFixed(2) : 'Not Available'}</div>
                   </div>
                   <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1">
                     <div className="text-[10px] text-emerald-400">ARREAR STATUS</div>
@@ -5661,18 +5661,18 @@ export const FacultyDashboard: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-slate-300 font-bold block mb-1">College Mail ID *</label>
-                  <input type="email" required placeholder="aravind.aids@avsec.edu.in" value={addCollegeMail} onChange={(e) => setAddCollegeMail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                  <input type="email" required placeholder="Enter college mail ID" value={addCollegeMail} onChange={(e) => setAddCollegeMail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
                 </div>
                 <div>
                   <label className="text-slate-300 font-bold block mb-1">Mobile Number</label>
-                  <input type="text" placeholder="e.g. 9876543210" value={addMobileNumber} onChange={(e) => setAddMobileNumber(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                  <input type="text" placeholder="Enter mobile number" value={addMobileNumber} onChange={(e) => setAddMobileNumber(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-slate-300 font-bold block mb-1">Personal Mail ID</label>
-                  <input type="email" placeholder="aravind@gmail.com" value={addPersonalMail} onChange={(e) => setAddPersonalMail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                  <input type="email" placeholder="Enter personal mail ID" value={addPersonalMail} onChange={(e) => setAddPersonalMail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
                 </div>
                 <div>
                   <label className="text-slate-300 font-bold block mb-1">Address / City</label>
@@ -5698,7 +5698,7 @@ export const FacultyDashboard: React.FC = () => {
               <div>
                 <label className="text-slate-300 font-bold block mb-1">Portal Password (Optional)</label>
                 <div className="relative">
-                  <input type={showAddPassword ? 'text' : 'password'} placeholder="Defaults to Register Number if blank" value={addPassword} onChange={(e) => setAddPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 pr-9 rounded-xl text-white" />
+                  <input type={showAddPassword ? 'text' : 'password'} placeholder="Enter portal password" value={addPassword} onChange={(e) => setAddPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 pr-9 rounded-xl text-white" />
                   <button type="button" onClick={() => setShowAddPassword(!showAddPassword)} className="absolute right-2.5 top-3 text-slate-400 cursor-pointer">{showAddPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}</button>
                 </div>
                 <span className="text-[10px] text-slate-500 block mt-0.5">Student can log in using College Email and their Register Number</span>
@@ -6588,7 +6588,7 @@ export const FacultyDashboard: React.FC = () => {
               <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">College Mail ID:</span> <strong className="text-emerald-400">{viewingStudent.collegeEmail || viewingStudent.email}</strong></div>
               <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">Personal Mail ID:</span> <strong>{viewingStudent.personalEmail || (viewingStudent as any).personal_email || 'N/A'}</strong></div>
               <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">Address:</span> <strong>{viewingStudent.address || 'N/A'}</strong></div>
-              <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">CGPA:</span> <strong className="text-amber-400 font-bold">{(viewingStudent.cgpa !== null && viewingStudent.cgpa !== undefined && viewingStudent.cgpa !== '') ? Number(viewingStudent.cgpa).toFixed(2) : 'Not Available'}</strong></div>
+              <div className="flex justify-between border-b border-slate-800/60 pb-1.5"><span className="text-slate-500">CGPA:</span> <strong className="text-amber-400 font-bold">{(viewingStudent.cgpa !== null && viewingStudent.cgpa !== undefined && String(viewingStudent.cgpa) !== '') ? Number(viewingStudent.cgpa).toFixed(2) : 'Not Available'}</strong></div>
               <div className="flex justify-between pb-1.5"><span className="text-slate-500">Assigned Year / Sec:</span> <strong>{viewingStudent.year || assignedYear} / {viewingStudent.section || assignedSection}</strong></div>
             </div>
 

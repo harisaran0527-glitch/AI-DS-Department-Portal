@@ -9,6 +9,7 @@ import {
   BarChart3,
   Key,
   BookOpen,
+  ShieldAlert,
   CheckCircle,
   AlertCircle,
   RefreshCw
@@ -16,6 +17,7 @@ import {
 
 import { ForgotPasswordModal } from '../../components/common/ForgotPasswordModal';
 import { SubjectManagement } from '../../components/academic/SubjectManagement';
+import { DisciplineIssueModule } from '../../components/discipline/DisciplineIssueModule';
 import { HodFacultyWorkspaceView } from '../../components/hod/HodFacultyWorkspaceView';
 import { HodAwardCandidatesView } from '../../components/ranking/HodAwardCandidatesView';
 import { ProofAttachmentControl } from '../../components/common/ProofAttachmentControl';
@@ -183,7 +185,8 @@ export const HODDashboard: React.FC = () => {
   const hodMenuItems: MenuItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'faculty', label: 'Faculty Roster', icon: Users },
-    { id: 'subjects', label: 'Department Subjects', icon: BookOpen }
+    { id: 'subjects', label: 'Department Subjects', icon: BookOpen },
+    { id: 'discipline', label: 'Discipline', icon: ShieldAlert }
   ];
 
   return (
@@ -247,6 +250,8 @@ export const HODDashboard: React.FC = () => {
             selectedSectionFilter={selectedSection}
           />
         )}
+
+        {activeTab === 'discipline' && <DisciplineIssueModule userRole="HOD" />}
 
         {/* 2. DEPARTMENT SUBJECTS MANAGEMENT */}
         {activeTab === 'subjects' && (

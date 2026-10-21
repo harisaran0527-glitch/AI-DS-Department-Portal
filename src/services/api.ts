@@ -132,7 +132,8 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
 
   const isLoginRequest = url.includes('/auth/login');
   // Never automatically retry password submissions per security requirements
-  const maxAttempts = isLoginRequest ? 1 : 3;
+  const isDisciplineMutation = /\/discipline\/records(?:\/|$)/.test(endpoint) && !isGetOrIdempotent;
+  const maxAttempts = isLoginRequest || isDisciplineMutation ? 1 : 3;
   let lastError: any = null;
 
   // Resolve target role: explicit option header > endpoint URL path > current active portal role

@@ -4,6 +4,7 @@ import { StudentLogin } from './pages/logins/StudentLogin';
 import { FacultyLogin } from './pages/logins/FacultyLogin';
 import { HODLogin } from './pages/logins/HODLogin';
 import { AdminLogin } from './pages/logins/AdminLogin';
+import { DisciplineLogin } from './pages/logins/DisciplineLogin';
 
 import { StudentDashboard } from './pages/student/StudentDashboard';
 import { FacultyDashboard } from './pages/faculty/FacultyDashboard';
@@ -25,7 +26,9 @@ const PwaManifestSyncer: React.FC = () => {
     let manifest = '/manifest.webmanifest';
     let title = 'AVSEC Salem — AI & Data Science Department Portal';
 
-    if (path.startsWith('/student')) {
+    if (path.startsWith('/discipline')) {
+      title = 'AVS Engineering College — Discipline Monitoring System';
+    } else if (path.startsWith('/student')) {
       manifest = '/manifest-student.webmanifest';
       title = 'AVSEC Salem — Student Portal';
     } else if (path.startsWith('/faculty')) {
@@ -57,7 +60,8 @@ export const App: React.FC = () => {
         <ErrorBoundary fallbackTitle="Department Portal Application Error">
           <Routes>
             {/* Default root route redirects to Student Login */}
-            <Route path="/" element={<Navigate to="/student" replace />} />
+            <Route path="/" element={<Navigate to={import.meta.env.VITE_DISCIPLINE_PORTAL === 'true' ? '/discipline/login' : '/student'} replace />} />
+            <Route path="/discipline/login" element={<DisciplineLogin />} />
 
             {/* Four Completely Separate Portal Login Routes */}
             <Route path="/student" element={<LoginRoute role="STUDENT"><StudentLogin /></LoginRoute>} />
@@ -111,7 +115,7 @@ export const App: React.FC = () => {
             />
 
             {/* Fallback for Unknown Paths */}
-            <Route path="*" element={<Navigate to="/student" replace />} />
+            <Route path="*" element={<Navigate to={import.meta.env.VITE_DISCIPLINE_PORTAL === 'true' ? '/discipline/login' : '/student'} replace />} />
           </Routes>
         </ErrorBoundary>
       </BrowserRouter>
