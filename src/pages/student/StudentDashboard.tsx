@@ -253,12 +253,7 @@ export const StudentDashboard: React.FC = () => {
     );
   }
 
-  const { student, academics: _academics, arrears: _arrears, skillEdge: _skillEdge, nptel: _nptel, attendance: _attendance, discipline: _discipline, certificates: _certificates, participation: _participation, leetcode, projects: _projects, achievements: _achievements, finalizedAwards } = student360;
-  const scoreValue = student360.breakdown?.overallScore;
-  const scoreIsVerified = typeof scoreValue === 'number' && Number.isFinite(scoreValue);
-  const scoreLabel = scoreIsVerified ? scoreValue.toFixed(1) : 'N/A';
-  const rankValue = Number(student.currentRank);
-  const rankLabel = scoreIsVerified && Number.isInteger(rankValue) && rankValue > 0 && rankValue !== 99 ? `#${rankValue}` : 'N/A';
+  const { student, academics: _academics, arrears: _arrears, skillEdge: _skillEdge, nptel: _nptel, attendance: _attendance, discipline: _discipline, certificates: _certificates, participation: _participation, leetcode, projects: _projects, achievements: _achievements, finalizedAwards } = student360;
 
   const registerNoDisplay = student.registerNo || student.register_no || (_session as any)?.identifier || (_session as any)?.registerNo || 'N/A';
   const coordinatorDisplay = student.classCoordinatorName || (student as any).class_coordinator_name || 'Assigned Faculty';

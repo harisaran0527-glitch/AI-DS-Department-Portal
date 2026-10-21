@@ -136,8 +136,7 @@ setErrorMessage('');
                   required
                   disabled={authStatus === 'loading'}
                   placeholder="Enter admin email or ID"
-                  value={identifier}
-name="admin-identifier"
+                  value={identifier}
                   aria-label="Admin email or ID"
                   autoComplete="off"
                   onChange={(e) => setIdentifier(e.target.value)}
@@ -160,8 +159,7 @@ name="admin-identifier"
                   required
                   disabled={authStatus === 'loading'}
                   placeholder="Enter admin password"
-                  value={password}
-name="admin-password"
+                  value={password}
                   aria-label="Admin portal password"
                   autoComplete="new-password"
                   onChange={(e) => setPassword(e.target.value)}

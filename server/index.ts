@@ -46,7 +46,7 @@ app.use(
       if (allowedOrigins.includes(origin) || (process.env.NODE_ENV !== 'production' && /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(origin))) {
         return callback(null, true);
       }
-      return callback(new Error(Origin  not allowed by CORS));
+      return callback(new Error(`Origin ${origin} not allowed by CORS`));
     },
     credentials: true
   })

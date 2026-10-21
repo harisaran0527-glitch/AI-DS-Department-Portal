@@ -290,8 +290,7 @@ setErrorMessage('');
                       onChange={(e) => setIdentifier(e.target.value)}
                       onFocus={() => setFocusedField('identifier')}
                       onBlur={() => setFocusedField(null)}
-                      placeholder={placeholderIdentifier || "Enter your college email or ID"}
-name={`${portalRole.toLowerCase()}-identifier`}
+                      placeholder={placeholderIdentifier || "Enter your college email or ID"}
                       aria-label={placeholderIdentifier}
                       autoComplete="off"
                     />
@@ -323,8 +322,7 @@ name={`${portalRole.toLowerCase()}-identifier`}
                       onChange={(e) => setPassword(e.target.value)}
                       onFocus={() => setFocusedField('password')}
                       onBlur={() => setFocusedField(null)}
-                      placeholder="Enter your password"
-name={`${portalRole.toLowerCase()}-password`}
+                      placeholder="Enter your password"
                       aria-label="Portal password"
                       autoComplete="new-password"
                     />
