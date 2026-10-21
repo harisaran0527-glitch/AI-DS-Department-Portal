@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { API, API_BASE, getValidSessionToken } from '../../services/api';
+import { API, openAuthenticatedFile } from '../../services/api';
 import type { UserSession } from '../../types';
 import { DashboardLayout, type MenuItem } from '../../components/layout/DashboardLayout';
 import { ProofAttachmentControl } from '../../components/common/ProofAttachmentControl';
@@ -27,6 +27,7 @@ import {
   Crown,
   Download,
   XCircle,
+  ShieldAlert,
 } from 'lucide-react';
 
 import { ForgotPasswordModal } from '../../components/common/ForgotPasswordModal';
@@ -36,6 +37,7 @@ import { GeminiTopRecognitionView } from '../../components/ranking/GeminiTopReco
 import { GeminiCategoryBestPerformerCard } from '../../components/ranking/GeminiCategoryBestPerformerCard';
 import { GeminiFullLeetCodeDashboard } from '../../components/ranking/GeminiFullLeetCodeDashboard';
 import { StudentAiRewardCard } from '../../components/ranking/StudentAiRewardCard';
+import { StudentDisciplineView } from '../../components/discipline/StudentDisciplineView';
 import { getNptelUrlForStudent } from '../../services/nptelUrlHelper';
 
 export const StudentDashboard: React.FC = () => {
@@ -98,7 +100,10 @@ export const StudentDashboard: React.FC = () => {
   const handleLogout = async () => {
     try {
       await API.logout('STUDENT');
-    } catch {}
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Sign out could not be completed. Please try again.');
+      return;
+    }
     navigate('/student');
   };
 
@@ -118,37 +123,23 @@ export const StudentDashboard: React.FC = () => {
   };
 
   const handleViewParticipation = (partId: string) => {
-    const token = getValidSessionToken('STUDENT');
-    const url = `${API_BASE}/faculty/participation/${partId}/view${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    void openAuthenticatedFile(`/faculty/participation/${encodeURIComponent(partId)}/view`, 'STUDENT')
+      .catch(error => alert(error instanceof Error ? error.message : 'Attachment could not be loaded.'));
   };
 
   const handleDownloadParticipation = (partId: string, filename?: string) => {
-    const token = getValidSessionToken('STUDENT');
-    const url = `${API_BASE}/faculty/participation/${partId}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-    const link = document.createElement('a');
-    link.href = url;
-    if (filename) link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    void openAuthenticatedFile(`/faculty/participation/${encodeURIComponent(partId)}/download`, 'STUDENT', { download: true, filename })
+      .catch(error => alert(error instanceof Error ? error.message : 'Attachment could not be loaded.'));
   };
 
   const handleViewCertificate = (certId: string) => {
-    const token = getValidSessionToken('STUDENT');
-    const url = `${API_BASE}/faculty/certificates/${certId}/view${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    void openAuthenticatedFile(`/faculty/certificates/${encodeURIComponent(certId)}/view`, 'STUDENT')
+      .catch(error => alert(error instanceof Error ? error.message : 'Attachment could not be loaded.'));
   };
 
   const handleDownloadCertificate = (certId: string, filename?: string) => {
-    const token = getValidSessionToken('STUDENT');
-    const url = `${API_BASE}/faculty/certificates/${certId}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-    const link = document.createElement('a');
-    link.href = url;
-    if (filename) link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    void openAuthenticatedFile(`/faculty/certificates/${encodeURIComponent(certId)}/download`, 'STUDENT', { download: true, filename })
+      .catch(error => alert(error instanceof Error ? error.message : 'Attachment could not be loaded.'));
   };
 
   if (isLoading) {
@@ -190,6 +181,7 @@ export const StudentDashboard: React.FC = () => {
     { id: 'skilledge', label: 'SkillEdge', icon: Code },
     { id: 'nptel', label: 'NPTEL', icon: FileCheck },
     { id: 'attendance', label: 'Attendance', icon: Calendar },
+    { id: 'discipline', label: 'Discipline', icon: ShieldAlert },
     { id: 'certificates', label: 'Certificates', icon: FileText },
     { id: 'participation', label: 'Participation', icon: Users },
     { id: 'leetcode', label: 'LeetCode', icon: Code },
@@ -265,6 +257,8 @@ export const StudentDashboard: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {activeTab === 'discipline' && <StudentDisciplineView records={_discipline} />}
 
         {(activeTab === 'dashboard' || activeTab === 'awards') && (
           <StudentAiRewardCard studentId={student.id} />
@@ -1468,9 +1462,9 @@ export const StudentDashboard: React.FC = () => {
                   setIsChangingPass(true);
                   try {
                     await API.changePassword(changeCurrPass, changeNewPass);
-                    setChangePassSuccess('Password updated successfully! Welcome to AI & DS Student Portal.');
+                    setChangePassSuccess('Password updated successfully. Please sign in again.');
                     setTimeout(() => {
-                      setShowFirstLoginChangeModal(false);
+                      navigate('/student', { replace: true });
                     }, 1800);
                   } catch (err: any) {
                     setChangePassError(err.message || 'Failed to update password.');
@@ -1481,7 +1475,7 @@ export const StudentDashboard: React.FC = () => {
                 className="space-y-3 font-mono text-xs"
               >
                 <div>
-                  <label className="text-slate-400 block mb-1">Current Initial Password (Register No)</label>
+                  <label className="text-slate-400 block mb-1">Current Portal Password</label>
                   <input
                     type="password"
                     value={changeCurrPass}

@@ -110,3 +110,7 @@ The source contains sample students and faculty fallback arrays. They are **demo
 No incident editing, deletion, status transitions, separate history collection, or discipline attachment upload was found in the inspected client. That does not prove they are absent from private tooling. Do not invent them or claim that their migration is complete.
 
 Unknown: actual collection sizes, document variants, historical records, foreign references, deleted records, auth claim mappings, Firestore indexes/rules, Cloud Functions, Storage files/metadata/ACLs, hidden routes, private administrative workflows, and actual responsive browser screenshots.
+
+## Public browser recheck — 21 October 2026
+
+The reference URL is reachable and displays the same public Discipline Portal email/password sign-in screen. No authenticated dashboard, records, reports, or filters could be reached without an authorized session. The main portal URL redirects to its student sign-in screen; no authenticated student data was accessed. These observations do not validate the private Firebase permissions or any protected workflow.

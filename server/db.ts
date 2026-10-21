@@ -174,6 +174,7 @@ export async function initDatabaseSchema(): Promise<void> {
       remark TEXT NOT NULL,
       warning_action TEXT NOT NULL,
       recorded_by TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'OPEN',
       FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
     );
 
@@ -543,6 +544,7 @@ export async function initDatabaseSchema(): Promise<void> {
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS assigned_faculty_id TEXT;`,
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS assigned_staff_name TEXT;`,
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS created_at TEXT;`,
+        `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'OPEN';`,
         `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS company_name TEXT;`,
         `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS proof_file_path TEXT;`,
         `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS created_at TEXT;`,
@@ -606,6 +608,7 @@ export async function initDatabaseSchema(): Promise<void> {
       `ALTER TABLE discipline_records ADD COLUMN action_taken TEXT;`,
       `ALTER TABLE discipline_records ADD COLUMN rule_violated TEXT;`,
       `ALTER TABLE discipline_records ADD COLUMN fine_details TEXT;`,
+      `ALTER TABLE discipline_records ADD COLUMN status TEXT NOT NULL DEFAULT 'OPEN';`,
       `ALTER TABLE certificate_records ADD COLUMN company_name TEXT;`,
       `ALTER TABLE certificate_records ADD COLUMN proof_file_path TEXT;`,
       `ALTER TABLE certificate_records ADD COLUMN created_at TEXT;`,
@@ -1076,10 +1079,10 @@ export class SQLiteDB {
     }
   }
 
-  public async getFacultyAssignment(facultyId: string): Promise<FacultyAssignmentRecord | undefined> {
+  public async getFacultyAssignment(facultyId: string, { fresh = false } = {}): Promise<FacultyAssignmentRecord | undefined> {
     const now = Date.now();
     const cached = SQLiteDB.facultyAssignmentCache.get(facultyId);
-    if (cached && cached.expiry > now) {
+    if (!fresh && cached && cached.expiry > now) {
       return cached.data;
     }
     const result = (await queryOne<FacultyAssignmentRecord>('SELECT * FROM faculty_assignments WHERE faculty_id = ? AND is_active = 1', [facultyId])) || undefined;
@@ -2269,6 +2272,7 @@ export class SQLiteDB {
     fineAmount: number;
     fineDetails?: string;
     remark: string;
+    status?: 'OPEN' | 'UNDER_REVIEW' | 'RESOLVED';
     recordedBy: string;
     assignedFacultyId?: string | null;
     assignedStaffName?: string;
@@ -2281,9 +2285,9 @@ export class SQLiteDB {
 
     await executeRun(`
       INSERT INTO discipline_records (
-        id, student_id, date, time, category, rule_violated, remark, warning_action, action_taken, fine_amount, fine_details, recorded_by, assigned_faculty_id, assigned_staff_name, created_at
+        id, student_id, date, time, category, rule_violated, remark, warning_action, action_taken, fine_amount, fine_details, recorded_by, assigned_faculty_id, assigned_staff_name, created_at, status
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       id,
       data.studentId,
@@ -2299,7 +2303,8 @@ export class SQLiteDB {
       data.recordedBy || data.assignedStaffName || 'Faculty',
       data.assignedFacultyId || null,
       data.assignedStaffName || 'No Staff Assigned',
-      createdAt
+      createdAt,
+      data.status || 'OPEN'
     ]);
 
     return {
@@ -2313,6 +2318,7 @@ export class SQLiteDB {
       action_taken: data.actionTaken,
       fine_amount: fine,
       fine_details: data.fineDetails,
+      status: data.status || 'OPEN',
       recorded_by: data.recordedBy,
       assigned_faculty_id: data.assignedFacultyId || null,
       assigned_staff_name: data.assignedStaffName || 'No Staff Assigned',
@@ -2329,6 +2335,7 @@ export class SQLiteDB {
     facultyId?: string;
     role?: string;
   }): Promise<any[]> {
+    if (!filters?.facultyId || !['FACULTY', 'HOD', 'ADMIN'].includes(filters.role || '')) return [];
     let sql = `
       SELECT 
         d.id,
@@ -2346,6 +2353,7 @@ export class SQLiteDB {
         d.assigned_faculty_id,
         d.assigned_staff_name,
         d.created_at,
+        d.status,
         s.register_no,
         s.name as student_name,
         s.email as college_email,
@@ -2379,7 +2387,7 @@ export class SQLiteDB {
     }
 
     if (filters?.facultyId && filters.role === 'FACULTY') {
-      const assignment = await this.getFacultyAssignment(filters.facultyId);
+      const assignment = await this.getFacultyAssignment(filters.facultyId, { fresh: true });
       const assignedYear = assignment ? normalizeYear(assignment.year) : '';
       const assignedSection = assignment ? normalizeSection(assignment.section) : '';
 
@@ -2424,14 +2432,73 @@ export class SQLiteDB {
       fineDetails: r.fine_details || '',
       remarks: r.remark || '',
       recordedBy: r.recorded_by,
+      status: r.status || 'OPEN',
       assignedFacultyId: r.assigned_faculty_id || null,
       assignedStaffName: r.assigned_staff_name || 'No Staff Assigned',
       createdAt: r.created_at || r.date
     }));
   }
 
-  public async deleteDisciplineIssue(id: string): Promise<boolean> {
-    const res = await executeRun('DELETE FROM discipline_records WHERE id = ?', [id]);
+  public async updateDisciplineIssue(id: string, data: {
+    date: string;
+    time: string;
+    category: string;
+    ruleViolated: string;
+    actionTaken: string;
+    fineAmount: number;
+    fineDetails: string;
+    remark: string;
+    status: 'OPEN' | 'UNDER_REVIEW' | 'RESOLVED';
+  }, scope?: { facultyId: string; role: string }): Promise<boolean> {
+    if (!scope?.facultyId || !['FACULTY', 'HOD', 'ADMIN'].includes(scope.role)) return false;
+    let sql = `UPDATE discipline_records SET date = ?, time = ?, category = ?, rule_violated = ?,
+      remark = ?, warning_action = ?, action_taken = ?, fine_amount = ?, fine_details = ?, status = ?
+      WHERE id = ?`;
+    const params: (string | number)[] = [data.date, data.time, data.category, data.ruleViolated,
+      data.remark, data.actionTaken, data.actionTaken, data.fineAmount, data.fineDetails, data.status, id];
+    if (scope.role === 'FACULTY') {
+      sql += ` AND id IN (
+        SELECT d.id FROM discipline_records d JOIN students s ON s.id = d.student_id
+        WHERE d.id = discipline_records.id AND (
+          d.assigned_faculty_id = ? OR s.created_by_faculty_id = ? OR s.faculty_workspace_id = ?
+          OR EXISTS (SELECT 1 FROM faculty_assignments a WHERE a.faculty_id = ? AND a.is_active = 1
+            AND TRIM(a.year) <> '' AND UPPER(TRIM(a.year)) <> 'ALL'
+            AND TRIM(a.section) <> '' AND UPPER(TRIM(a.section)) <> 'ALL'
+            AND LOWER(TRIM(s.year)) = LOWER(TRIM(CASE TRIM(a.year)
+              WHEN 'I' THEN '1st Year' WHEN '1' THEN '1st Year' WHEN '1st' THEN '1st Year'
+              WHEN 'II' THEN '2nd Year' WHEN '2' THEN '2nd Year' WHEN '2nd' THEN '2nd Year'
+              WHEN 'III' THEN '3rd Year' WHEN '3' THEN '3rd Year' WHEN '3rd' THEN '3rd Year'
+              WHEN 'IV' THEN '4th Year' WHEN '4' THEN '4th Year' WHEN '4th' THEN '4th Year' ELSE a.year END))
+            AND UPPER(TRIM(s.section)) = UPPER(TRIM(REPLACE(REPLACE(REPLACE(UPPER(a.section), 'SECTION ', ''), 'SEC ', ''), 'SEC.', ''))))
+        )
+      )`;
+      params.push(scope.facultyId, scope.facultyId, scope.facultyId, scope.facultyId);
+    }
+    return (await executeRun(sql, params)).changes > 0;
+  }
+
+  public async deleteDisciplineIssue(id: string, scope?: { facultyId: string; role: string }): Promise<boolean> {
+    if (!scope?.facultyId || !['FACULTY', 'HOD', 'ADMIN'].includes(scope.role)) return false;
+    let sql = 'DELETE FROM discipline_records WHERE id = ?';
+    const params: any[] = [id];
+    if (scope.role === 'FACULTY') {
+      // Check ownership in the DELETE itself, rather than trusting an earlier list result.
+      sql += ` AND id IN (
+        SELECT d.id FROM discipline_records d JOIN students s ON s.id = d.student_id
+        WHERE d.assigned_faculty_id = ? OR s.created_by_faculty_id = ? OR s.faculty_workspace_id = ?
+          OR EXISTS (SELECT 1 FROM faculty_assignments a WHERE a.faculty_id = ? AND a.is_active = 1
+            AND TRIM(a.year) <> '' AND UPPER(TRIM(a.year)) <> 'ALL'
+            AND TRIM(a.section) <> '' AND UPPER(TRIM(a.section)) <> 'ALL'
+            AND LOWER(TRIM(s.year)) = LOWER(TRIM(CASE TRIM(a.year)
+              WHEN 'I' THEN '1st Year' WHEN '1' THEN '1st Year' WHEN '1st' THEN '1st Year'
+              WHEN 'II' THEN '2nd Year' WHEN '2' THEN '2nd Year' WHEN '2nd' THEN '2nd Year'
+              WHEN 'III' THEN '3rd Year' WHEN '3' THEN '3rd Year' WHEN '3rd' THEN '3rd Year'
+              WHEN 'IV' THEN '4th Year' WHEN '4' THEN '4th Year' WHEN '4th' THEN '4th Year' ELSE a.year END))
+            AND UPPER(TRIM(s.section)) = UPPER(TRIM(REPLACE(REPLACE(REPLACE(UPPER(a.section), 'SECTION ', ''), 'SEC ', ''), 'SEC.', ''))))
+      )`;
+      params.push(scope.facultyId, scope.facultyId, scope.facultyId, scope.facultyId);
+    }
+    const res = await executeRun(sql, params);
     return res.changes > 0;
   }
 

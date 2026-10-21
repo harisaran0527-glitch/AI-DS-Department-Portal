@@ -5,7 +5,7 @@ import type { AuthRequest } from '../middleware/auth.js';
 
 type DisciplineDatabase = Pick<SQLiteDB, 'getUserById' | 'getFacultyAssignment' | 'getAllFacultyAssignments' |
   'getAllStudents' | 'getStudentByRegisterNo' | 'getAllDisciplineIssues' | 'addDisciplineIssue' |
-  'deleteDisciplineIssue' | 'logAudit'>;
+  'updateDisciplineIssue' | 'deleteDisciplineIssue' | 'logAudit'>;
 
 interface Dependencies {
   db: DisciplineDatabase;
@@ -17,6 +17,7 @@ interface Dependencies {
 }
 
 const text = (value: unknown): string => typeof value === 'string' ? value.trim() : '';
+const validStatuses = ['OPEN', 'UNDER_REVIEW', 'RESOLVED'] as const;
 
 /** No database/bootstrap imports at runtime: tests supply an isolated repository. */
 export function createDisciplineRouter({ db, authenticateToken, requireRole, normalizeYear, normalizeSection, primaryDatabaseOnly }: Dependencies) {
@@ -27,7 +28,7 @@ export function createDisciplineRouter({ db, authenticateToken, requireRole, nor
     if (!text(req.user?.id)) return res.status(401).json({ error: 'A valid staff session is required.' });
     try {
       const user = await db.getUserById(req.user!.id);
-      if (!user || !user.is_active || text(user.role).toUpperCase() !== req.user!.role) {
+      if (!user || Number(user.is_active) !== 1 || text(user.role).toUpperCase() !== req.user!.role) {
         return res.status(403).json({ error: 'This staff session is no longer authorized.' });
       }
       // Use current authoritative identity for audit attribution, not stale token display fields.
@@ -45,8 +46,8 @@ export function createDisciplineRouter({ db, authenticateToken, requireRole, nor
     const facultyId = req.user?.id;
     if (!facultyId || req.user?.role !== 'FACULTY') return false;
     if (student.created_by_faculty_id === facultyId || student.faculty_workspace_id === facultyId) return true;
-    const assignment = await db.getFacultyAssignment(facultyId);
-    if (!assignment?.is_active) return false;
+    const assignment = await db.getFacultyAssignment(facultyId, { fresh: true });
+    if (!assignment || Number(assignment.is_active) !== 1) return false;
     const year = normalizeYear(assignment.year);
     const section = normalizeSection(assignment.section);
     // Missing or wildcard assignments must not turn into unrestricted access.
@@ -142,7 +143,8 @@ export function createDisciplineRouter({ db, authenticateToken, requireRole, nor
       return res.status(400).json({ error: 'Register Number and Discipline Issue category are required.' });
     }
     const stringFields = ['registerNo', 'issue', 'ruleViolated', 'actionTaken', 'fineDetails', 'remarks', 'date', 'time'];
-    if (stringFields.some(key => body[key] !== undefined && (typeof body[key] !== 'string' || body[key].length > 5000))) {
+    if (stringFields.some(key => body[key] !== undefined && (typeof body[key] !== 'string' || body[key].length > 5000)) ||
+        (body.status !== undefined && !validStatuses.includes(body.status))) {
       return res.status(400).json({ error: 'Text fields must contain valid text of at most 5000 characters.' });
     }
     const fine = body.fineAmount === undefined ? 0 : Number(body.fineAmount);
@@ -167,6 +169,7 @@ export function createDisciplineRouter({ db, authenticateToken, requireRole, nor
         studentId: student.id, date, time, category: text(body.issue),
         ruleViolated: text(body.ruleViolated), actionTaken: text(body.actionTaken),
         fineAmount: fine, fineDetails: text(body.fineDetails), remark: text(body.remarks),
+        status: body.status || 'OPEN',
         recordedBy: `${req.user!.name} (${req.user!.email})`, ...assignment
       });
       // An audit outage must not make a committed insert appear to have failed.
@@ -185,6 +188,46 @@ export function createDisciplineRouter({ db, authenticateToken, requireRole, nor
     }
   });
 
+  router.put('/records/:id', async (req: AuthRequest, res) => {
+    const body = req.body || {};
+    const stringFields = ['date', 'time', 'issue', 'ruleViolated', 'actionTaken', 'fineDetails', 'remarks'];
+    if (stringFields.some(key => typeof body[key] !== 'string' || body[key].length > 5000) ||
+        !text(body.issue) || !validStatuses.includes(body.status)) {
+      return res.status(400).json({ error: 'Provide valid incident details and status.' });
+    }
+    const fine = body.fineAmount === undefined ? 0 : Number(body.fineAmount);
+    if (!Number.isFinite(fine) || fine < 0 ||
+        (body.fineAmount !== undefined && typeof body.fineAmount !== 'number' && typeof body.fineAmount !== 'string')) {
+      return res.status(400).json({ error: 'Fine amount must be a finite, non-negative number.' });
+    }
+    const date = text(body.date);
+    const time = text(body.time);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) ||
+        new Date(date).toISOString().slice(0, 10) !== date || !/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(time)) {
+      return res.status(400).json({ error: 'Provide a valid incident date and time.' });
+    }
+    try {
+      const id = text(req.params.id);
+      const visibleRecords = await db.getAllDisciplineIssues({ facultyId: req.user!.id, role: req.user!.role });
+      if (!visibleRecords.some(record => record.id === id)) {
+        return res.status(404).json({ error: 'Discipline record not found in your authorized workspace.' });
+      }
+      const updated = await db.updateDisciplineIssue(id, {
+        date, time, category: text(body.issue), ruleViolated: text(body.ruleViolated),
+        actionTaken: text(body.actionTaken), fineAmount: fine, fineDetails: text(body.fineDetails),
+        remark: text(body.remarks), status: body.status
+      }, { facultyId: req.user!.id, role: req.user!.role });
+      if (!updated) return res.status(404).json({ error: 'Discipline record not found in your authorized workspace.' });
+      try {
+        await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'UPDATE_DISCIPLINE_RECORD', `RECORD:${id}`);
+      } catch (error) { console.error('[Discipline] Audit write failed after update', error); }
+      return res.json({ message: 'Discipline record updated successfully.' });
+    } catch (error) {
+      console.error('[Discipline] Record update failed', error);
+      return res.status(503).json({ error: 'The discipline record could not be updated. Please try again.' });
+    }
+  });
+
   router.delete('/records/:id', async (req: AuthRequest, res) => {
     try {
       const id = text(req.params.id);
@@ -192,7 +235,7 @@ export function createDisciplineRouter({ db, authenticateToken, requireRole, nor
       if (!visibleRecords.some(record => record.id === id)) {
         return res.status(404).json({ error: 'Discipline record not found in your authorized workspace.' });
       }
-      if (!await db.deleteDisciplineIssue(id)) return res.status(404).json({ error: 'Discipline record not found.' });
+      if (!await db.deleteDisciplineIssue(id, { facultyId: req.user!.id, role: req.user!.role })) return res.status(404).json({ error: 'Discipline record not found.' });
       try {
         await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'DELETE_DISCIPLINE_RECORD', `RECORD:${id}`);
       } catch (error) { console.error('[Discipline] Audit write failed after deletion', error); }
