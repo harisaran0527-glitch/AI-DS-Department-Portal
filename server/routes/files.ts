@@ -67,17 +67,17 @@ async function checkFilePermission(req: AuthRequest, student: any): Promise<bool
       return true;
     }
 
-    const assignment = await db.getFacultyAssignment(req.user.id);
-    const assignedYear = assignment ? assignment.year : req.user.assignedYear;
-    const assignedSection = assignment ? assignment.section : req.user.assignedSection;
+    const assignment = await db.getFacultyAssignment(req.user.id, { fresh: true });
+    const assignedYear = assignment?.is_active ? assignment.year : undefined;
+    const assignedSection = assignment?.is_active ? assignment.section : undefined;
 
     const cleanAssignedYear = normalizeYear(assignedYear);
     const cleanAssignedSec = normalizeSection(assignedSection);
     const cleanStudentYear = normalizeYear(student.year);
     const cleanStudentSec = normalizeSection(student.section);
 
-    const isYearMatch = !cleanAssignedYear || cleanAssignedYear === 'ALL' || cleanStudentYear === cleanAssignedYear;
-    const isSectionMatch = !cleanAssignedSec || cleanAssignedSec === 'ALL' || cleanStudentSec === cleanAssignedSec;
+    const isYearMatch = Boolean(cleanAssignedYear && cleanAssignedYear !== 'ALL' && cleanStudentYear === cleanAssignedYear);
+    const isSectionMatch = Boolean(cleanAssignedSec && cleanAssignedSec !== 'ALL' && cleanStudentSec === cleanAssignedSec);
 
     return isYearMatch && isSectionMatch;
   }
@@ -262,7 +262,7 @@ router.get('/:fileId', authenticateToken, async (req: AuthRequest, res: Response
   res.setHeader('Content-Type', contentType || 'application/octet-stream');
   res.setHeader('Content-Length', buffer.length.toString());
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(att.original_file_name)}"`);
-  res.setHeader('Cache-Control', 'private, max-age=3600');
+  res.setHeader('Cache-Control', 'private, no-store');
   return res.send(buffer);
 });
 

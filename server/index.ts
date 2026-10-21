@@ -36,20 +36,20 @@ if (process.env.FRONTEND_URL) {
   }
 }
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) {
-        return callback(null, true);
-      }
-      if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
-        return callback(null, true);
-      }
-      return callback(new Error(`Origin ${origin} not allowed by CORS`));
-    },
-    credentials: true
-  })
-);
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        if (!origin) {
+          return callback(null, true);
+        }
+        if (allowedOrigins.includes(origin) || (process.env.NODE_ENV !== 'production' && /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(origin))) {
+          return callback(null, true);
+        }
+        return callback(new Error(`Origin ${origin} not allowed by CORS`));
+      },
+      credentials: true
+    })
+  );
 
 // Performance & APM Timing Middleware
 app.use((req, res, next) => {
@@ -98,27 +98,29 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
-// API Routes (Mounted on both /api and direct root for Vercel Serverless Function compatibility)
+// Production & Preview Static Serving if client dist exists (SPA client routing)
+const DIST_PATH = path.resolve(process.cwd(), 'dist');
+if (!process.env.VERCEL && fs.existsSync(DIST_PATH)) {
+  app.use(express.static(DIST_PATH));
+  app.use((req, res, next) => {
+    if (req.method === 'GET' && !req.path.startsWith('/api')) {
+      return res.sendFile(path.join(DIST_PATH, 'index.html'));
+    }
+    next();
+  });
+}
+
+// API Routes (Mounted under /api)
 app.use('/api/auth', authRoutes);
-app.use('/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/admin', adminRoutes);
 app.use('/api/faculty', facultyRoutes);
-app.use('/faculty', facultyRoutes);
 app.use('/api/hod', hodRoutes);
-app.use('/hod', hodRoutes);
 app.use('/api/student', studentRoutes);
-app.use('/student', studentRoutes);
 app.use('/api/files', filesRoutes);
-app.use('/files', filesRoutes);
 app.use('/api/subjects', subjectsRoutes);
-app.use('/subjects', subjectsRoutes);
 app.use('/api/rankings', rankingsRoutes);
-app.use('/rankings', rankingsRoutes);
 app.use('/api/skilledge', skilledgeRoutes);
-app.use('/skilledge', skilledgeRoutes);
 app.use('/api/discipline', disciplineRoutes);
-app.use('/discipline', disciplineRoutes);
 
 // Health check endpoint (Responds to /api/health, /health, and root /api)
 app.get(['/api/health', '/health', '/api', '/'], (req, res) => {
@@ -134,27 +136,17 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   const status = typeof err.status === 'number' && err.status >= 400 && err.status <= 599 ? err.status : 500;
   return res.status(status).json({
     success: false,
-    error: err.message || 'An internal server error occurred.',
+    error: status >= 500 ? 'An internal server error occurred. Please try again.' : (err.message || 'The request could not be processed.'),
     timestamp: new Date().toISOString()
   });
 });
 
-// Production & Preview Static Serving if client dist exists
-const DIST_PATH = path.resolve(process.cwd(), 'dist');
-if (!process.env.VERCEL && fs.existsSync(DIST_PATH)) {
-  app.use(express.static(DIST_PATH));
-  app.use((req, res, next) => {
-    if (req.method === 'GET' && !req.path.startsWith('/api')) {
-      return res.sendFile(path.join(DIST_PATH, 'index.html'));
-    }
-    next();
-  });
-}
-
 import { initSkillEdgeScheduler } from './services/skilledgeSync.js';
 import { pgPool } from './postgresAdapter.js';
+import { databaseReady } from './db.js';
 
-if (!process.env.VERCEL) {
+async function startLocalServer() {
+  await databaseReady;
   const server = app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`🚀 AI & DS Department Server listening on 0.0.0.0:${PORT}`);
     initSkillEdgeScheduler();
@@ -184,6 +176,13 @@ if (!process.env.VERCEL) {
 
   process.on('SIGTERM', () => handleShutdown('SIGTERM'));
   process.on('SIGINT', () => handleShutdown('SIGINT'));
+}
+
+if (!process.env.VERCEL) {
+  startLocalServer().catch((error) => {
+    console.error('[Startup] Database initialization failed; HTTP listener and schedulers were not started.', error);
+    process.exitCode = 1;
+  });
 }
 
 export default app;

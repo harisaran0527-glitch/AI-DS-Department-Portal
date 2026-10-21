@@ -1,17 +1,36 @@
 ﻿import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { db } from '../db.js';
-import { authenticateToken, AuthRequest, JWT_SECRET, isJwtConfiguredForRuntime } from '../middleware/auth.js';
+import { authenticateToken, AuthRequest, isJwtConfiguredForRuntime, requireRole, verifyFacultySectionAccess } from '../middleware/auth.js';
 import { recordBcrypt } from '../metrics.js';
 import { withPrimaryDatabase } from '../databasePolicy.js';
+import { getJwtSecret, isSessionRole, signSessionToken, SESSION_DURATION_SECONDS } from '../services/sessionTokens.js';
 
 const router = Router();
+router.use((_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
+
+const sessionCookieOptions = (req: Request) => ({
+  httpOnly: true, secure: process.env.NODE_ENV === 'production' || req.secure,
+  sameSite: 'lax' as const, path: '/'
+});
 
 // Rate limiting memory maps for failed logins (per identifier and per IP)
-const failedAttempts: Record<string, { count: number; lockedUntil?: number }> = {};
-const ipAttempts: Record<string, { count: number; lockedUntil?: number }> = {};
+type Attempt = { count: number; lockedUntil?: number; expiresAt: number };
+const failedAttempts = new Map<string, Attempt>();
+const ipAttempts = new Map<string, Attempt>();
+function recentAttempt(attempts: Map<string, Attempt>, key: string): Attempt | undefined {
+  const attempt = attempts.get(key);
+  if (attempt && attempt.expiresAt <= Date.now()) { attempts.delete(key); return undefined; }
+  return attempt;
+}
+function recordAttempt(attempts: Map<string, Attempt>, key: string, limit: number, duration: number) {
+  if (attempts.size >= 10000 && !attempts.has(key)) attempts.delete(attempts.keys().next().value!);
+  const current = recentAttempt(attempts, key) || { count: 0, expiresAt: Date.now() + duration };
+  current.count++;
+  if (current.count >= limit) current.lockedUntil = current.expiresAt;
+  attempts.set(key, current);
+}
 
 router.post('/login', (_req, _res, next) => withPrimaryDatabase(next), async (req, res) => {
   try {
@@ -20,51 +39,46 @@ router.post('/login', (_req, _res, next) => withPrimaryDatabase(next), async (re
     }
     const { identifier, password, role } = req.body || {};
 
-    if (typeof identifier !== 'string' || !identifier.trim() ||
-        typeof password !== 'string' || !password || typeof role !== 'string' ||
+    if (typeof identifier !== 'string' || !identifier.trim() || identifier.length > 256 ||
+        typeof password !== 'string' || !password || password.length > 1024 || typeof role !== 'string' ||
         !['STUDENT', 'FACULTY', 'HOD', 'ADMIN'].includes(role.trim().toUpperCase())) {
       return res.status(400).json({ error: 'Invalid credentials. Identifier, password, and role are required.' });
     }
 
     const cleanId = identifier.trim().toLowerCase();
-    const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip || req.socket.remoteAddress || 'unknown-ip';
+    const cleanRole = role.trim().toUpperCase();
+    const accountKey = `${cleanRole}:${cleanId}`;
+    // Only Express's configured proxy policy may determine the client IP.
+    const clientIp = req.ip || req.socket.remoteAddress || 'unknown-ip';
 
     // 1. IP-level rate limiting check: 15 failed attempts locks IP for 15 minutes
-    const ipRecord = ipAttempts[clientIp];
+    const ipRecord = recentAttempt(ipAttempts, clientIp);
     if (ipRecord && ipRecord.lockedUntil) {
       if (Date.now() < ipRecord.lockedUntil) {
         const remainingSecs = Math.ceil((ipRecord.lockedUntil - Date.now()) / 1000);
         return res.status(429).json({ error: `Too many failed login requests from this IP address (${clientIp}). Please try again in ${remainingSecs} seconds.` });
       } else {
-        delete ipAttempts[clientIp];
+        ipAttempts.delete(clientIp);
       }
     }
 
     // 2. Identifier-level rate limiting check: 5 failed attempts locks account for 5 minutes
-    const attemptRecord = failedAttempts[cleanId];
+    const attemptRecord = recentAttempt(failedAttempts, accountKey);
     if (attemptRecord && attemptRecord.lockedUntil) {
       if (Date.now() < attemptRecord.lockedUntil) {
         const remainingSecs = Math.ceil((attemptRecord.lockedUntil - Date.now()) / 1000);
         return res.status(429).json({ error: `Account temporarily locked due to repeated failed login attempts. Please try again in ${remainingSecs} seconds.` });
       } else {
-        delete failedAttempts[cleanId];
+        failedAttempts.delete(accountKey);
       }
     }
 
     const recordFailedAttempt = () => {
-      const currId = failedAttempts[cleanId] || { count: 0 };
-      currId.count += 1;
-      if (currId.count >= 5) currId.lockedUntil = Date.now() + 5 * 60 * 1000;
-      failedAttempts[cleanId] = currId;
-
-      const currIp = ipAttempts[clientIp] || { count: 0 };
-      currIp.count += 1;
-      if (currIp.count >= 15) currIp.lockedUntil = Date.now() + 15 * 60 * 1000;
-      ipAttempts[clientIp] = currIp;
+      recordAttempt(failedAttempts, accountKey, 5, 5 * 60 * 1000);
+      recordAttempt(ipAttempts, clientIp, 15, 15 * 60 * 1000);
     };
 
-    const cleanRole = String(role || '').trim().toUpperCase();
-    let match = await db.findUserByIdentifier(cleanId, cleanRole);
+    const match = await db.findUserByIdentifier(cleanId, cleanRole);
 
     if (!match) {
       recordFailedAttempt();
@@ -74,7 +88,7 @@ router.post('/login', (_req, _res, next) => withPrimaryDatabase(next), async (re
       });
     }
 
-    if (!match.is_active) {
+    if (Number(match.is_active) !== 1 || match.role.trim().toUpperCase() !== cleanRole) {
       return res.status(401).json({
         error: 'Account is currently deactivated. Please contact your department administrator.',
         message: 'Account is currently deactivated'
@@ -96,10 +110,11 @@ router.post('/login', (_req, _res, next) => withPrimaryDatabase(next), async (re
       });
     }
 
-    delete failedAttempts[cleanId];
-    if (ipAttempts[clientIp]) delete ipAttempts[clientIp];
+    failedAttempts.delete(accountKey);
+    ipAttempts.delete(clientIp);
 
-    const normalizedRole = match.role.trim().toUpperCase() as 'STUDENT' | 'FACULTY' | 'HOD' | 'ADMIN';
+    const normalizedRole = match.role.trim().toUpperCase();
+    if (!isSessionRole(normalizedRole)) return res.status(401).json({ error: 'Invalid portal account.' });
 
     const isInitialPassword = normalizedRole === 'STUDENT' && Boolean(match.identifier && password.trim() === match.identifier.trim());
 
@@ -116,17 +131,11 @@ router.post('/login', (_req, _res, next) => withPrimaryDatabase(next), async (re
       requiresPasswordChange: isInitialPassword
     };
 
-    const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '8h' });
-
-    // BUG-02: Dynamic Secure Cookie Configuration
-    const isSecure = process.env.NODE_ENV === 'production' || Boolean(req.secure) || req.headers['x-forwarded-proto'] === 'https';
-
+    const token = signSessionToken({ ...match, role: normalizedRole }, isInitialPassword);
     const roleLower = normalizedRole.toLowerCase();
     const cookieOptions = {
-      httpOnly: true,
-      secure: Boolean(isSecure),
-      sameSite: (isSecure ? 'none' : 'lax') as 'none' | 'lax',
-      maxAge: 8 * 3600 * 1000
+      ...sessionCookieOptions(req),
+      maxAge: SESSION_DURATION_SECONDS * 1000
     };
 
     await db.logAudit(match.id, match.email, normalizedRole, 'LOGIN_SUCCESS', 'AUTH_PORTAL');
@@ -145,42 +154,16 @@ router.post('/login', (_req, _res, next) => withPrimaryDatabase(next), async (re
   }
 });
 
-router.post('/logout', async (req: AuthRequest, res: Response) => {
+router.post('/logout', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    let authHeader = req.headers.authorization || req.headers.Authorization;
-    let token: string | undefined;
-    if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
-      token = authHeader.split(' ')[1]?.trim();
-    }
-    if (!token) {
-      token = req.cookies?.aids_session_token;
-    }
-    if (token && token !== 'null' && token !== 'undefined' && token !== '""') {
-      try {
-        const decoded = jwt.verify(token, JWT_SECRET) as any;
-        if (decoded && decoded.id) {
-          await db.logAudit(decoded.id, decoded.email, decoded.role, 'LOGOUT', 'AUTH_PORTAL');
-        }
-      } catch {}
-    }
-  } catch {}
-
-  const isSecure = process.env.NODE_ENV === 'production' || Boolean(req.secure) || req.headers['x-forwarded-proto'] === 'https';
-  const clearOptions = {
-    httpOnly: true,
-    secure: Boolean(isSecure),
-    sameSite: (isSecure ? 'none' : 'lax') as 'none' | 'lax'
-  };
-
-  const portalRole = (req.headers['x-portal-role'] as string || '').toLowerCase();
-  if (portalRole) {
-    res.clearCookie(`aids_${portalRole}_token`, clearOptions);
-  } else {
-    ['admin', 'hod', 'faculty', 'student'].forEach((r) => {
-      res.clearCookie(`aids_${r}_token`, clearOptions);
-    });
-    res.clearCookie('aids_session_token', clearOptions);
+    await db.revokeSessionToken(req.session!.tokenDigest, req.user!.id);
+  } catch (error) {
+    console.error('[Auth] Session revocation unavailable', error);
+    return res.status(503).json({ error: 'Sign out could not be completed. Please try again.' });
   }
+  res.clearCookie(`aids_${req.user!.role.toLowerCase()}_token`, sessionCookieOptions(req));
+  try { await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'LOGOUT', 'AUTH_PORTAL'); }
+  catch (error) { console.error('[Auth] Audit unavailable after session revocation', error); }
   return res.json({ message: 'Logout successful' });
 });
 
@@ -189,14 +172,14 @@ router.get('/me', authenticateToken, (req: AuthRequest, res: Response) => {
 });
 
 router.post('/change-password', authenticateToken, async (req: AuthRequest, res: Response) => {
-  const { currentPassword, newPassword } = req.body;
+  const { currentPassword, newPassword } = req.body || {};
 
-  if (!currentPassword || !newPassword) {
+  if (typeof currentPassword !== 'string' || !currentPassword || currentPassword.length > 1024 || !newPassword) {
     return res.status(400).json({ error: 'Both current password and new password are required.' });
   }
 
-  if (typeof newPassword !== 'string' || newPassword.length < 6) {
-    return res.status(400).json({ error: 'New password must be at least 6 characters long.' });
+  if (typeof newPassword !== 'string' || newPassword.length < 6 || Buffer.byteLength(newPassword) > 72) {
+    return res.status(400).json({ error: 'New password must be at least 6 characters and at most 72 bytes long.' });
   }
 
   const user = await db.getUserById(req.user!.id);
@@ -213,9 +196,11 @@ router.post('/change-password', authenticateToken, async (req: AuthRequest, res:
 
   const newHash = await bcrypt.hash(newPassword, 10);
   await db.updateUserPassword(req.user!.id, newHash);
-  await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'CHANGE_PASSWORD', `USER:${req.user!.email}`);
+  res.clearCookie(`aids_${req.user!.role.toLowerCase()}_token`, sessionCookieOptions(req));
+  try { await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'CHANGE_PASSWORD', `USER:${req.user!.email}`); }
+  catch (error) { console.error('[Auth] Audit unavailable after password update', error); }
 
-  return res.json({ message: 'Password changed successfully.' });
+  return res.json({ message: 'Password changed successfully. Please sign in again.' });
 });
 
 function getFrontendUrl(req: Request): string {
@@ -235,7 +220,7 @@ function getFrontendUrl(req: Request): string {
 function generateOAuthState(data: { studentId: string; purpose: string; emailType: string; expectedEmail: string }): string {
   const timestamp = Date.now();
   const payload = JSON.stringify({ ...data, timestamp });
-  const sig = crypto.createHmac('sha256', JWT_SECRET).update(payload).digest('hex');
+  const sig = crypto.createHmac('sha256', getJwtSecret()).update(payload).digest('hex');
   const fullState = JSON.stringify({ payload, sig });
   return Buffer.from(fullState).toString('base64url');
 }
@@ -246,7 +231,7 @@ function verifyAndDecodeOAuthState(stateStr: string): { studentId: string; purpo
     const parsed = JSON.parse(raw);
     if (!parsed.payload || !parsed.sig) return null;
 
-    const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(parsed.payload).digest('hex');
+    const expectedSig = crypto.createHmac('sha256', getJwtSecret()).update(parsed.payload).digest('hex');
     if (!crypto.timingSafeEqual(Buffer.from(parsed.sig), Buffer.from(expectedSig))) {
       return null; // Tampered state!
     }
@@ -264,7 +249,7 @@ function verifyAndDecodeOAuthState(stateStr: string): { studentId: string; purpo
 }
 
 // --- REAL GOOGLE OAUTH AUTHORIZATION FLOW (PASSWORDLESS FOR LARGE SCALE) ---
-router.get('/google/start', async (req: Request, res: Response) => {
+router.get('/google/start', authenticateToken, requireRole('FACULTY', 'HOD', 'ADMIN'), verifyFacultySectionAccess, async (req: Request, res: Response) => {
   const studentId = (req.query.studentId as string) || '';
   const purpose = (req.query.purpose as string) || 'NPTEL';
   const emailType = ((req.query.emailType as string) || 'COLLEGE').toUpperCase();

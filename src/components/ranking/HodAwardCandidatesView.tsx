@@ -2,13 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { API } from '../../services/api';
 import {
   Trophy,
-  Award,
   Sparkles,
   CheckCircle2,
   XCircle,
   AlertCircle,
   Search,
-  Eye,
   RefreshCw,
   Loader2,
   Check,
@@ -68,15 +66,6 @@ export const HodAwardCandidatesView: React.FC<{
     }
   };
 
-  const filteredCandidates = candidates.filter((c) => {
-    const q = searchQuery.toLowerCase();
-    return (
-      (c.studentName || '').toLowerCase().includes(q) ||
-      (c.registerNo || '').toLowerCase().includes(q) ||
-      (c.recommendedAward || '').toLowerCase().includes(q) ||
-      (c.awardCategory || '').toLowerCase().includes(q)
-    );
-  });
 
   return (
     <div className="space-y-6">

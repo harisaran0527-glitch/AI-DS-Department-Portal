@@ -12,8 +12,7 @@ import {
   Calendar,
   Layers,
   RefreshCw,
-  Download,
-  Info
+  Download
 } from 'lucide-react';
 
 interface FacultyOption {

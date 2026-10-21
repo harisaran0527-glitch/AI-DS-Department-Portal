@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Papa from 'papaparse';
-import { API } from '../../services/api';
+import { API, clearSessionAuth } from '../../services/api';
 import type { UserSession, AcademicYear, Section } from '../../types';
 import { DashboardLayout, type MenuItem } from '../../components/layout/DashboardLayout';
 import { ConfirmDeleteModal } from '../../components/common/ConfirmDeleteModal';
@@ -87,10 +87,10 @@ export const AdminDashboard: React.FC = () => {
   const [isSavingHOD, setIsSavingHOD] = useState(false);
   const [isResettingPass, setIsResettingPass] = useState(false);
   const [isChangingAdminPass, setIsChangingAdminPass] = useState(false);
-  const [updatingHodId, setUpdatingHodId] = useState<string | null>(null);
-  const [updatingFacultyId, setUpdatingFacultyId] = useState<string | null>(null);
+  const [, setUpdatingHodId] = useState<string | null>(null);
+  const [, setUpdatingFacultyId] = useState<string | null>(null);
   const [isImportingCsv, setIsImportingCsv] = useState(false);
-  const [isExportingCsv, setIsExportingCsv] = useState(false);
+
   const [importError, setImportError] = useState('');
 
   const [formFacultyId, setFormFacultyId] = useState('');
@@ -143,7 +143,7 @@ export const AdminDashboard: React.FC = () => {
   });
 
   const [csvText, setCsvText] = useState('');
-  const [defaultStudentPassword, setDefaultStudentPassword] = useState('student123');
+  const [defaultStudentPassword, setDefaultStudentPassword] = useState('');
   const [showDefaultStudentPassword, setShowDefaultStudentPassword] = useState(false);
   const [importResult, setImportResult] = useState<any | null>(null);
 
@@ -190,7 +190,7 @@ export const AdminDashboard: React.FC = () => {
   const parseAndBuildCsvPreview = async (rows: any[]) => {
     try {
       const previewData = await API.previewStudentExcelImport(rows);
-      
+
       const mappedPreview = previewData.preview.map((p) => ({
         rowIndex: p.rowNumber,
         registerNo: p.parsedData.registerNo,
@@ -643,8 +643,12 @@ export const AdminDashboard: React.FC = () => {
   const handleLogout = async () => {
     try {
       await API.logout('ADMIN');
-    } catch {}
-    navigate('/admin');
+    } catch (error) {
+      console.warn('Backend logout unavailable, clearing local session:', error);
+    } finally {
+      clearSessionAuth('ADMIN');
+      navigate('/admin', { replace: true });
+    }
   };
 
   const filteredFaculty = useMemo(() => {

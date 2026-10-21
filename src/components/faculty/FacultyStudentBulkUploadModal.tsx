@@ -8,14 +8,10 @@ import {
   CheckCircle,
   AlertTriangle,
   XCircle,
-  Users2,
-  Calendar,
-  Layers,
   RefreshCw,
   Download,
   X,
-  ShieldCheck,
-  FileText
+  ShieldCheck
 } from 'lucide-react';
 
 interface FacultyStudentBulkUploadModalProps {

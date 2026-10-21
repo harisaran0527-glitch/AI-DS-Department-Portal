@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { API, API_BASE, fetchWithResilience } from '../../services/api';
+import { API, API_BASE, fetchWithResilience, clearSessionAuth } from '../../services/api';
 import type { UserSession, Student, AcademicYear, Section } from '../../types';
 import { DashboardLayout, type MenuItem } from '../../components/layout/DashboardLayout';
 import {
@@ -44,8 +44,12 @@ export const HODDashboard: React.FC = () => {
   const handleLogout = async () => {
     try {
       await API.logout('HOD');
-    } catch {}
-    navigate('/hod');
+    } catch (error) {
+      console.warn('Backend logout unavailable, clearing local session:', error);
+    } finally {
+      clearSessionAuth('HOD');
+      navigate('/hod', { replace: true });
+    }
   };
 
 

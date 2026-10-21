@@ -57,7 +57,27 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 function isValidToken(val: string | null | undefined): boolean {
   if (!val) return false;
   const trimmed = val.trim();
-  return Boolean(trimmed && trimmed !== 'null' && trimmed !== 'undefined' && trimmed !== '""' && trimmed !== "''");
+  if (!trimmed || trimmed === 'null' || trimmed === 'undefined' || trimmed === '""' || trimmed === "''") {
+    return false;
+  }
+  // Inspect JWT expiration if token has standard 3 segments
+  const parts = trimmed.split('.');
+  if (parts.length === 3) {
+    try {
+      const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const json = typeof atob === 'function' ? atob(b64) : Buffer.from(b64, 'base64').toString('utf8');
+      const payload = JSON.parse(json);
+      if (typeof payload.exp === 'number') {
+        // Expired if current epoch is past expiration timestamp (with 5 second grace)
+        if (payload.exp * 1000 <= Date.now() - 5000) {
+          return false;
+        }
+      }
+    } catch {
+      // Fall through if base64 decoding fails; defer to backend
+    }
+  }
+  return true;
 }
 
 export function getActivePortalRole(): Role | null {
@@ -91,13 +111,19 @@ export function getValidSessionToken(roleHint?: Role): string | null {
   // 1. Check tab-scoped sessionStorage for role-specific token
   if (typeof sessionStorage !== 'undefined') {
     const tabToken = sessionStorage.getItem(roleKey);
-    if (isValidToken(tabToken)) return tabToken!.trim();
+    if (tabToken) {
+      if (isValidToken(tabToken)) return tabToken.trim();
+      sessionStorage.removeItem(roleKey);
+    }
   }
 
   // 2. Check persistent role-scoped localStorage (keeps installed PWAs isolated across restarts)
   if (typeof localStorage !== 'undefined') {
     const roleToken = localStorage.getItem(roleKey);
-    if (isValidToken(roleToken)) return roleToken!.trim();
+    if (roleToken) {
+      if (isValidToken(roleToken)) return roleToken.trim();
+      localStorage.removeItem(roleKey);
+    }
   }
 
   // Strict isolation: Never fall back to generic aids_session_token or other roles' tokens!
@@ -197,7 +223,7 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   const runRequest = async (): Promise<T> => {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       const controller = new AbortController();
-    const timeoutMs = 60000;
+    const timeoutMs = (options as any)?.timeoutMs || 15000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -301,15 +327,15 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
 
       lastError = err;
 
-      if (!isLoginRequest && attempt < maxAttempts) {
-        const logMsg = isAbort ? 'Request timed out waiting for backend response' : (err.message || 'Network failure');
+      if (!isLoginRequest && !isAbort && attempt < maxAttempts) {
+        const logMsg = err.message || 'Network failure';
         console.warn(`⚠️ [API Resilience] ${logMsg} on ${method} ${url}. Retrying attempt ${attempt}/${maxAttempts}...`);
         await delay(Math.pow(2, attempt - 1) * 800);
         continue;
       }
 
       if (isAbort) {
-        throw new Error('Request timed out waiting for server response. Please try again.');
+        throw new Error('Request timed out waiting for backend server response. Please retry.');
       }
 
       if (isBrowserFetchDrop) {
@@ -730,8 +756,8 @@ export const API = {
   },
 
   // Student (Strictly View-Only)
-  getStudentSelfProfile: async () => {
-    return request<any>('/student/me');
+  getStudentSelfProfile: async (options?: { timeoutMs?: number; signal?: AbortSignal }) => {
+    return request<any>('/student/me', options as any);
   },
 
   // Proof & Project File Management
