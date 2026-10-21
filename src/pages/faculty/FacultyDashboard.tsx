@@ -11,7 +11,6 @@ import { BestEliteStudentsView } from '../../components/elite/BestEliteStudentsV
 import { GeminiTopRecognitionView } from '../../components/ranking/GeminiTopRecognitionView';
 import { GeminiCategoryBestPerformerCard } from '../../components/ranking/GeminiCategoryBestPerformerCard';
 import { GeminiFullLeetCodeDashboard } from '../../components/ranking/GeminiFullLeetCodeDashboard';
-import { DisciplineIssueModule } from '../../components/discipline/DisciplineIssueModule';
 import { ProofAttachmentControl } from '../../components/common/ProofAttachmentControl';
 import { getNptelUrlForStudent } from '../../services/nptelUrlHelper';
 import {
@@ -56,7 +55,6 @@ import {
   ChevronLeft,
   ChevronRight,
   BarChart3,
-  ShieldAlert
 } from 'lucide-react';
 
 function formatDate(d?: string): string {
@@ -1468,7 +1466,6 @@ export const FacultyDashboard: React.FC = () => {
     { id: 'skilledge', label: 'SkillEdge', icon: Code },
     { id: 'nptel', label: 'NPTEL', icon: FileCheck },
     { id: 'attendance', label: 'Attendance', icon: Calendar },
-    { id: 'discipline', label: 'Discipline', icon: ShieldAlert },
     { id: 'certificate', label: 'Certificate', icon: FileText },
     { id: 'leetcode', label: 'LeetCode', icon: Code },
     { id: 'participation', label: 'Participation', icon: Users },
@@ -1483,7 +1480,6 @@ export const FacultyDashboard: React.FC = () => {
     { id: 'bth-skilledge', label: 'SkillEdge', icon: Code },
     { id: 'bth-nptel', label: 'NPTEL', icon: FileCheck },
     { id: 'bth-attendance', label: 'Attendance', icon: Calendar },
-    { id: 'bth-discipline', label: 'Discipline', icon: ShieldAlert },
     { id: 'bth-certificate', label: 'Certificate', icon: FileText },
     { id: 'bth-leetcode', label: 'LeetCode', icon: Code },
     { id: 'bth-participation', label: 'Participation', icon: Users },
@@ -1494,7 +1490,6 @@ export const FacultyDashboard: React.FC = () => {
 
   const facultyMenuItems: MenuItem[] = [
     { id: 'my-students', label: 'My Students', icon: Users, badge: String(students.length) },
-    { id: 'discipline-issues', label: 'Discipline', icon: ShieldAlert },
     {
       id: 'best-student',
       label: 'Best Student',
@@ -1787,18 +1782,6 @@ export const FacultyDashboard: React.FC = () => {
       headerActions={
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => setActiveTab('discipline-issues')}
-            className={`touch-target text-xs px-3.5 py-2 rounded-xl font-mono flex items-center space-x-1.5 cursor-pointer shadow-sm transition-all min-h-[44px] ${
-              activeTab === 'discipline-issues' || activeTab === 'discipline' || activeTab === 'bth-discipline'
-                ? 'bg-rose-600 text-white font-bold shadow-rose-900/40'
-                : 'text-rose-300 hover:text-white bg-rose-950/80 border border-rose-700/60 hover:bg-rose-900/60'
-            }`}
-            title="Open Campus Discipline Module"
-          >
-            <ShieldAlert className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-            <span>Discipline</span>
-          </button>
-          <button
             onClick={() => setShowForgotModal(true)}
             className="text-xs text-sky-300 hover:text-white bg-sky-950/80 border border-sky-700/60 px-3.5 py-2 min-h-[44px] rounded-xl font-mono flex items-center space-x-1.5 cursor-pointer shadow-sm"
           >
@@ -1809,12 +1792,6 @@ export const FacultyDashboard: React.FC = () => {
       }
     >
       <div className="space-y-6 max-w-7xl mx-auto">
-        {(activeTab === 'discipline-issues' || activeTab === 'discipline' || activeTab === 'bth-discipline') && (
-          <DisciplineIssueModule
-            userRole="FACULTY"
-            onBack={() => setActiveTab('my-students')}
-          />
-        )}
 
         {(activeTab === 'best-elite-student' || activeTab.startsWith('best-elite-')) && (
           <BestEliteStudentsView
@@ -1863,34 +1840,6 @@ export const FacultyDashboard: React.FC = () => {
                 </div>
                 <div className="text-[10px] text-slate-400 font-semibold">Enabled Logins</div>
               </div>
-            </div>
-
-            {/* Quick Access: Department Discipline System Card */}
-            <div className="bg-gradient-to-r from-rose-950/40 via-slate-900 to-slate-900 border border-rose-800/50 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
-              <div className="flex items-center space-x-3">
-                <div className="p-2.5 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 shrink-0">
-                  <ShieldAlert className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white flex items-center space-x-2">
-                    <span>Department Discipline System</span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800/60 font-bold">
-                      All Students
-                    </span>
-                  </h3>
-                  <p className="text-xs text-slate-400 font-mono mt-0.5">
-                    Log and track student rule violations, incident history, and staff actions.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab('discipline-issues')}
-                className="btn-action min-h-[44px] px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center space-x-2 shadow-md shadow-rose-950/50 transition-all cursor-pointer shrink-0"
-              >
-                <ShieldAlert className="w-4 h-4 shrink-0" />
-                <span>Open Discipline Module →</span>
-              </button>
             </div>
 
             {/* CENTRAL STUDENT ROSTER TABLE CONTAINER */}

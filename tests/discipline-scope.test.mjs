@@ -10,7 +10,7 @@ memory.exec(`
   CREATE TABLE students (id TEXT, register_no TEXT, name TEXT, email TEXT, year TEXT, section TEXT, department TEXT,
     created_by_faculty_id TEXT, faculty_workspace_id TEXT);
   CREATE TABLE discipline_records (id TEXT, student_id TEXT, date TEXT, time TEXT, category TEXT, rule_violated TEXT,
-    remark TEXT, warning_action TEXT, action_taken TEXT, fine_amount REAL, fine_details TEXT, recorded_by TEXT,
+    location TEXT DEFAULT '', remark TEXT, warning_action TEXT, action_taken TEXT, fine_amount REAL, fine_details TEXT, recorded_by TEXT,
     assigned_faculty_id TEXT, assigned_staff_name TEXT, created_at TEXT, status TEXT DEFAULT 'OPEN');
   CREATE TABLE faculty_assignments (faculty_id TEXT, year TEXT, section TEXT, is_active INTEGER);
 `);
@@ -46,8 +46,8 @@ test('inactive and wildcard assignments grant no additional workspace records', 
   assert.deepEqual(await visible(['2nd Year', 'B', 0]), ['owned']);
   assert.deepEqual(await visible(['ALL', 'ALL', 1]), ['owned']);
 });
-test('Admin and HOD preserve their department-wide repository access', async () => {
-  for (const role of ['HOD', 'ADMIN']) assert.equal((await db.getAllDisciplineIssues({ facultyId: 'lead', role })).length, 4);
+test('Admin retains department-wide repository access', async () => {
+  assert.equal((await db.getAllDisciplineIssues({ facultyId: 'lead', role: 'ADMIN' })).length, 4);
 });
 
 test('repository reads deny missing identities and non-staff roles', async () => {

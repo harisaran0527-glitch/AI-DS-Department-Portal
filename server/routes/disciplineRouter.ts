@@ -5,7 +5,10 @@ import type { AuthRequest } from '../middleware/auth.js';
 
 type DisciplineDatabase = Pick<SQLiteDB, 'getUserById' | 'getFacultyAssignment' | 'getAllFacultyAssignments' |
   'getAllStudents' | 'getStudentByRegisterNo' | 'getAllDisciplineIssues' | 'addDisciplineIssue' |
-  'updateDisciplineIssue' | 'deleteDisciplineIssue' | 'logAudit'>;
+  'updateDisciplineIssue' | 'deleteDisciplineIssue' | 'logAudit'> & {
+    isDisciplineStudentAssigned?: (facultyId: string, studentId: string) => Promise<boolean>;
+    getDisciplineFacultyForStudent?: (studentId: string) => Promise<{ id: string; name: string; is_active: number } | null>;
+  };
 
 interface Dependencies {
   db: DisciplineDatabase;
@@ -45,6 +48,7 @@ export function createDisciplineRouter({ db, authenticateToken, requireRole, nor
     if (req.user?.role === 'HOD' || req.user?.role === 'ADMIN') return true;
     const facultyId = req.user?.id;
     if (!facultyId || req.user?.role !== 'FACULTY') return false;
+    if (db.isDisciplineStudentAssigned) return db.isDisciplineStudentAssigned(facultyId, student.id);
     if (student.created_by_faculty_id === facultyId || student.faculty_workspace_id === facultyId) return true;
     const assignment = await db.getFacultyAssignment(facultyId, { fresh: true });
     if (!assignment || Number(assignment.is_active) !== 1) return false;
@@ -58,6 +62,13 @@ export function createDisciplineRouter({ db, authenticateToken, requireRole, nor
   async function resolveFacultyAssignmentForStudent(student: StudentRecord) {
     const assignedYear = student.year || '';
     const assignedSection = student.section || '';
+    if (db.getDisciplineFacultyForStudent) {
+      const assignedFaculty = await db.getDisciplineFacultyForStudent(student.id);
+      if (assignedFaculty && Number(assignedFaculty.is_active) === 1) {
+        return { assignedFacultyId: assignedFaculty.id, assignedStaffName: assignedFaculty.name, assignedYear, assignedSection };
+      }
+      return { assignedFacultyId: null, assignedStaffName: 'No Staff Assigned', assignedYear, assignedSection };
+    }
     const creatorId = student.created_by_faculty_id || student.faculty_workspace_id;
     if (creatorId) {
       const creator = await db.getUserById(creatorId);
@@ -142,7 +153,7 @@ export function createDisciplineRouter({ db, authenticateToken, requireRole, nor
     if (!text(body.registerNo) || !text(body.issue)) {
       return res.status(400).json({ error: 'Register Number and Discipline Issue category are required.' });
     }
-    const stringFields = ['registerNo', 'issue', 'ruleViolated', 'actionTaken', 'fineDetails', 'remarks', 'date', 'time'];
+    const stringFields = ['registerNo', 'issue', 'location', 'ruleViolated', 'actionTaken', 'fineDetails', 'remarks', 'date', 'time'];
     if (stringFields.some(key => body[key] !== undefined && (typeof body[key] !== 'string' || body[key].length > 5000)) ||
         (body.status !== undefined && !validStatuses.includes(body.status))) {
       return res.status(400).json({ error: 'Text fields must contain valid text of at most 5000 characters.' });
@@ -166,7 +177,7 @@ export function createDisciplineRouter({ db, authenticateToken, requireRole, nor
       }
       const assignment = await resolveFacultyAssignmentForStudent(student);
       const createdRecord = await db.addDisciplineIssue({
-        studentId: student.id, date, time, category: text(body.issue),
+        studentId: student.id, date, time, category: text(body.issue), location: text(body.location),
         ruleViolated: text(body.ruleViolated), actionTaken: text(body.actionTaken),
         fineAmount: fine, fineDetails: text(body.fineDetails), remark: text(body.remarks),
         status: body.status || 'OPEN',
@@ -192,6 +203,7 @@ export function createDisciplineRouter({ db, authenticateToken, requireRole, nor
     const body = req.body || {};
     const stringFields = ['date', 'time', 'issue', 'ruleViolated', 'actionTaken', 'fineDetails', 'remarks'];
     if (stringFields.some(key => typeof body[key] !== 'string' || body[key].length > 5000) ||
+        (body.location !== undefined && (typeof body.location !== 'string' || body.location.length > 5000)) ||
         !text(body.issue) || !validStatuses.includes(body.status)) {
       return res.status(400).json({ error: 'Provide valid incident details and status.' });
     }
@@ -213,7 +225,7 @@ export function createDisciplineRouter({ db, authenticateToken, requireRole, nor
         return res.status(404).json({ error: 'Discipline record not found in your authorized workspace.' });
       }
       const updated = await db.updateDisciplineIssue(id, {
-        date, time, category: text(body.issue), ruleViolated: text(body.ruleViolated),
+        date, time, category: text(body.issue), location: text(body.location), ruleViolated: text(body.ruleViolated),
         actionTaken: text(body.actionTaken), fineAmount: fine, fineDetails: text(body.fineDetails),
         remark: text(body.remarks), status: body.status
       }, { facultyId: req.user!.id, role: req.user!.role });

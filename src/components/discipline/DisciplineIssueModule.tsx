@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { API } from '../../services/api';
 import * as XLSX from 'xlsx';
+import { createDisciplineExportWorkbook, createDisciplineReportSvg } from './disciplineExcel';
 import {
   ShieldAlert,
   Search,
   Plus,
   FileSpreadsheet,
   FileText,
+  Image as ImageIcon,
   AlertCircle,
   CheckCircle2,
   X,
@@ -35,6 +37,7 @@ export interface DisciplineRecordItem {
   department: string;
   date: string;
   time: string;
+  location: string;
   issue: string;
   category?: string;
   ruleViolated: string;
@@ -51,9 +54,9 @@ interface DisciplineStudentSummary {
   registerNo: string;
   name: string;
   email: string;
+  department?: string;
   year: string;
   section: string;
-  department?: string;
   assignedStaffName?: string;
 }
 
@@ -63,16 +66,49 @@ const htmlEntities: Record<string, string> = {
 const escapeHtml = (value: unknown): string => String(value ?? '').replace(/[&<>"']/g, character => htmlEntities[character] || character);
 
 const ISSUE_OPTIONS = [
-  'Dress Code / ID Card Violation',
-  'Late Coming / Unpunctuality',
-  'Mobile Phone Usage in Class/Lab',
-  'Classroom Disruption / Misbehavior',
-  'Lab Infrastructure Misuse',
-  'Unauthorized Absence / Bunking',
-  'Academic Malpractice / Copying',
-  'Library / Campus Misconduct',
-  'Other Violation'
+  'Late Arrival',
+  'Dress Code Violation',
+  'Not Wearing ID Card',
+  'Wearing Ornaments',
+  'Mobile Phone Usage',
+  'Misbehavior',
+  'Improper Hairstyle',
+  'Not Wearing Shoes',
+  'Roaming in Other Departments',
+  'Roaming in Common Areas During Class Hours',
+  'Parking Misuse',
+  'Bike Stunt',
+  'Playing During Class Hours',
+  'Roaming During Class Hours',
+  'Unauthorized Exit',
+  'Inappropriate Interaction with Opposite Gender',
+  'Ragging',
+  'Drug Use'
 ];
+
+const LOCATION_OPTIONS = [
+  'Gate',
+  'In Front of Boys Hostel',
+  'Student Two-Wheeler Parking',
+  'Near Coffee Day',
+  'Ground',
+  'Near Stage',
+  'In Front of SkillEdge Block',
+  'Near Bus Shed',
+  'APJ Abdul Kalam Block (Main Block)',
+  'H. J. Bhabha Block (EEE Block)',
+  'Srinivasa Ramanujan Block (First Year Block)',
+  'J. C. Bose Block (Civil & Mech Block)',
+  'Ratan Tata Block (MBA Block)',
+  'Mahatma Gandhi Block (Library)',
+  'M. S. Dhoni Block (Canteen & Sports Complex)',
+  'SkillEdge Block',
+  'Kailash Boys Hostel',
+  'Sivakami Ammal Girls Hostel',
+  'Others'
+];
+
+const ACTION_OPTIONS = ['Warning', 'Counselling', 'Parent Meeting', 'Written Apology', 'Fine', 'Suspension', 'Other'];
 
 const RULE_VIOLATED_OPTIONS = [
   'Rule 1: Mandatory Formal Dress Code & ID Card Display',
@@ -87,9 +123,10 @@ const RULE_VIOLATED_OPTIONS = [
 interface DisciplineIssueModuleProps {
   userRole?: string;
   onBack?: () => void;
+  standalonePortal?: boolean;
 }
 
-export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ userRole = 'FACULTY', onBack }) => {
+export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ userRole = 'FACULTY', onBack, standalonePortal = false }) => {
   const recordRequest = useRef(0);
   const lookupRequest = useRef(0);
   const suggestionRequest = useRef(0);
@@ -108,6 +145,8 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
   const [issueFilter, setIssueFilter] = useState('ALL');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [singleDate, setSingleDate] = useState(new Date().toISOString().slice(0, 10));
+  const [reportMode, setReportMode] = useState<'SINGLE_DAY' | 'DATE_RANGE' | 'OVERALL'>('OVERALL');
 
   // Modal State
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -130,6 +169,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
     email: string;
     year: string;
     section: string;
+    department?: string;
     assignedStaffName?: string;
   } | null>(null);
   const [isLookingUp, setIsLookingUp] = useState(false);
@@ -141,6 +181,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
 
   // Manual Staff Fields
   const [selectedIssue, setSelectedIssue] = useState(ISSUE_OPTIONS[0]);
+  const [selectedLocation, setSelectedLocation] = useState(LOCATION_OPTIONS[0]);
   const [selectedRule, setSelectedRule] = useState(RULE_VIOLATED_OPTIONS[0]);
   const [staffActionTaken, setStaffActionTaken] = useState('');
   const [fineAmountInput, setFineAmountInput] = useState<number | ''>(0);
@@ -182,7 +223,8 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
     setIsLoading(true);
     setError('');
     try {
-      const res = await API.getDisciplineRecords({
+      const getRecords = standalonePortal ? API.getDisciplinePortalRecords : API.getDisciplineRecords;
+      const res = await getRecords({
         search: searchQuery,
         year: yearFilter,
         section: sectionFilter,
@@ -208,8 +250,12 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
   }, [fetchRecords]);
 
   const filteredRecords = useMemo(() => records.filter(record =>
-    (!fromDate || record.date >= fromDate) && (!toDate || record.date <= toDate)
-  ), [records, fromDate, toDate]);
+    reportMode === 'SINGLE_DAY'
+      ? record.date === singleDate
+      : reportMode === 'DATE_RANGE'
+        ? (!fromDate || record.date >= fromDate) && (!toDate || record.date <= toDate)
+        : true
+  ), [records, reportMode, singleDate, fromDate, toDate]);
   const directoryStudents = useMemo(() => studentMatches.filter(student =>
     (yearFilter === 'ALL' || student.year === yearFilter) &&
     (sectionFilter === 'ALL' || student.section.toUpperCase() === sectionFilter)
@@ -222,7 +268,8 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
     let cancelled = false;
     const timeout = window.setTimeout(async () => {
       try {
-        const result = await API.searchDisciplineStudents(query);
+        const searchStudents = standalonePortal ? API.searchDisciplinePortalStudents : API.searchDisciplineStudents;
+        const result = await searchStudents(query);
         if (!cancelled && requestId === studentSearchRequest.current) setStudentMatches(result.students);
       } catch (failure) {
         if (!cancelled && requestId === studentSearchRequest.current) {
@@ -251,7 +298,8 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
     setProfileError('');
     setProfileLoading(true);
     try {
-      const result = await API.getDisciplineRecords({ registerNo: student.registerNo });
+      const getRecords = standalonePortal ? API.getDisciplinePortalRecords : API.getDisciplineRecords;
+      const result = await getRecords({ registerNo: student.registerNo });
       if (requestId === profileRequest.current) setProfileRecords(result.records || []);
     } catch (failure) {
       if (requestId === profileRequest.current) {
@@ -265,8 +313,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
   const handleOpenRecordProfile = (record: DisciplineRecordItem) => {
     void handleOpenProfile({
       id: record.studentId, registerNo: record.registerNo, name: record.studentName,
-      email: record.collegeEmail, year: record.year, section: record.section,
-      department: record.department
+      email: record.collegeEmail, department: record.department, year: record.year, section: record.section,
     });
   };
 
@@ -284,9 +331,10 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
       setRegNoInput(record.registerNo);
       setStudentMatch({
         id: record.studentId, registerNo: record.registerNo, name: record.studentName,
-        email: record.collegeEmail, year: record.year, section: record.section
+        email: record.collegeEmail, department: record.department, year: record.year, section: record.section
       });
       setSelectedIssue(record.issue || record.category || ISSUE_OPTIONS[0]);
+      setSelectedLocation(record.location || LOCATION_OPTIONS[0]);
       setSelectedRule(record.ruleViolated || RULE_VIOLATED_OPTIONS[0]);
       setStaffActionTaken(record.actionTaken || '');
       setFineAmountInput(record.fineAmount || 0);
@@ -298,6 +346,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
       setRegNoInput('');
       setStudentMatch(null);
       setSelectedIssue(ISSUE_OPTIONS[0]);
+      setSelectedLocation(LOCATION_OPTIONS[0]);
       setSelectedRule(RULE_VIOLATED_OPTIONS[0]);
       setStaffActionTaken('');
       setFineAmountInput(0);
@@ -323,7 +372,8 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
     setIsLookingUp(true);
     setLookupError('');
     try {
-      const res = await API.lookupDisciplineStudent(trimmed);
+      const lookupStudent = standalonePortal ? API.lookupDisciplinePortalStudent : API.lookupDisciplineStudent;
+      const res = await lookupStudent(trimmed);
       if (requestId !== lookupRequest.current) return;
       if (res.found && res.student) {
         setStudentMatch(res.student);
@@ -349,7 +399,8 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
     setStudentMatch(null);
 
     if (val.trim().length >= 2) {
-      API.searchDisciplineStudents(val.trim())
+      const searchStudents = standalonePortal ? API.searchDisciplinePortalStudents : API.searchDisciplineStudents;
+      searchStudents(val.trim())
         .then((res) => {
           if (requestId !== suggestionRequest.current) return;
           setSuggestions(res.students || []);
@@ -390,15 +441,22 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
       return;
     }
 
+    const parsedFine = Number(fineAmountInput);
+    if (!Number.isFinite(parsedFine) || parsedFine < 0) {
+      setFormError('Fine amount must be a valid non-negative number.');
+      return;
+    }
+
     setFormError('');
     setIsSubmitting(true);
 
     try {
       const recordData = {
         issue: selectedIssue,
+        location: selectedLocation,
         ruleViolated: selectedRule,
         actionTaken: staffActionTaken,
-        fineAmount: Number(fineAmountInput) || 0,
+        fineAmount: parsedFine,
         fineDetails: fineDetailsInput,
         remarks: additionalRemarks,
         date: currentDateStr,
@@ -406,9 +464,11 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
         status: recordStatus
       };
       if (editingRecord) {
-        await API.updateDisciplineRecord(editingRecord.id, recordData);
+        if (standalonePortal) await API.updateDisciplinePortalRecord(editingRecord.id, recordData);
+        else await API.updateDisciplineRecord(editingRecord.id, recordData);
       } else {
-        await API.createDisciplineRecord({ ...recordData, registerNo: studentMatch.registerNo });
+        if (standalonePortal) await API.createDisciplinePortalRecord({ ...recordData, registerNo: studentMatch.registerNo });
+        else await API.createDisciplineRecord({ ...recordData, registerNo: studentMatch.registerNo });
       }
 
       setSuccessMessage(`Discipline issue ${editingRecord ? 'updated' : 'recorded'} successfully for ${studentMatch.name} (${studentMatch.registerNo}).`);
@@ -428,7 +488,8 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
     if (!deletingId) return;
     setIsDeleting(true);
     try {
-      await API.deleteDisciplineRecord(deletingId);
+      if (standalonePortal) await API.deleteDisciplinePortalRecord(deletingId);
+      else await API.deleteDisciplineRecord(deletingId);
       setSuccessMessage('Discipline record removed successfully.');
       setTimeout(() => setSuccessMessage(''), 3000);
       setDeletingId(null);
@@ -447,48 +508,8 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
       return;
     }
 
-    const headers = [
-      'S.No',
-      'Date',
-      'Time',
-      'Register No',
-      'Student Name',
-      'College Mail ID',
-      'Year',
-      'Section',
-      'Issue Category',
-      'Rule Violated',
-      'Staff Action Taken',
-      'Fine Amount (INR)',
-      'Fine Details',
-      'Additional Remarks',
-      'Reported By Staff',
-      'Status'
-    ];
-
-    const rows = filteredRecords.map((r, idx) => [
-      idx + 1,
-      r.date || '',
-      r.time || '',
-      r.registerNo || '',
-      r.studentName || '',
-      r.collegeEmail || '',
-      r.year || '',
-      r.section || '',
-      r.issue || r.category || '',
-      r.ruleViolated || '',
-      r.actionTaken || '',
-      r.fineAmount || 0,
-      r.fineDetails || '',
-      r.remarks || '',
-      r.recordedBy || '',
-      r.status || 'OPEN'
-    ]);
-
     try {
-      const workbook = XLSX.utils.book_new();
-      const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Discipline Records');
+      const workbook = createDisciplineExportWorkbook(filteredRecords);
       const nowStr = new Date().toISOString().split('T')[0];
       XLSX.writeFile(workbook, `Student_Discipline_Records_Report_${nowStr}.xlsx`);
     } catch (failure) {
@@ -520,13 +541,16 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
         <td style="border:1px solid #cbd5e1; padding:6px; font-weight:bold;">${escapeHtml(r.date)}<br/><span style="font-size:10px; color:#64748b;">${escapeHtml(r.time)}</span></td>
         <td style="border:1px solid #cbd5e1; padding:6px; font-weight:bold; color:#0f172a;">${escapeHtml(r.registerNo)}</td>
         <td style="border:1px solid #cbd5e1; padding:6px;"><strong>${escapeHtml(r.studentName)}</strong><br/><span style="font-size:10px; color:#475569;">${escapeHtml(r.collegeEmail)}</span></td>
+        <td style="border:1px solid #cbd5e1; padding:6px;">${escapeHtml(r.department)}</td>
         <td style="border:1px solid #cbd5e1; padding:6px; text-align:center;">${escapeHtml(r.year)}<br/>Sec ${escapeHtml(r.section)}</td>
         <td style="border:1px solid #cbd5e1; padding:6px; color:#dc2626; font-weight:bold;">${escapeHtml(r.issue || r.category)}</td>
+        <td style="border:1px solid #cbd5e1; padding:6px;">${escapeHtml(r.location || '-')}</td>
         <td style="border:1px solid #cbd5e1; padding:6px; font-size:11px;">${escapeHtml(r.ruleViolated)}</td>
         <td style="border:1px solid #cbd5e1; padding:6px; font-size:11px;">${escapeHtml(r.actionTaken || '-')}</td>
         <td style="border:1px solid #cbd5e1; padding:6px; text-align:right; font-weight:bold; color:#b91c1c;">₹${escapeHtml(r.fineAmount || 0)}</td>
         <td style="border:1px solid #cbd5e1; padding:6px; font-size:11px;">${escapeHtml(r.remarks || '-')}</td>
         <td style="border:1px solid #cbd5e1; padding:6px; font-size:10px; color:#475569;">${escapeHtml(r.recordedBy)}</td>
+        <td style="border:1px solid #cbd5e1; padding:6px;">${escapeHtml(r.status)}</td>
       </tr>
     `
       )
@@ -576,13 +600,16 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
               <th style="width: 75px;">Date/Time</th>
               <th style="width: 90px;">Reg No</th>
               <th style="width: 140px;">Student Name</th>
+              <th>Department</th>
               <th style="width: 60px;">Class</th>
               <th style="width: 110px;">Issue Category</th>
+              <th style="width: 130px;">Location / Block</th>
               <th>Rule Violated</th>
               <th>Action Taken</th>
               <th style="width: 60px;">Fine</th>
               <th>Remarks</th>
               <th style="width: 100px;">Recorded By</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody>
@@ -599,6 +626,26 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
 
     printWindow.document.write(htmlContent);
     printWindow.document.close();
+  };
+
+  const handleExportImage = () => {
+    if (filteredRecords.length === 0) {
+      setError('No discipline records are available for image export.');
+      return;
+    }
+    try {
+      const image = createDisciplineReportSvg(filteredRecords);
+      const url = URL.createObjectURL(new Blob([image], { type: 'image/svg+xml;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Discipline_Report_${new Date().toISOString().slice(0, 10)}.svg`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'The image report could not be generated.');
+    }
   };
 
   // Compute Quick Stats
@@ -648,6 +695,13 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
             </p>
           </div>
 
+          <div className="space-y-1">
+            <label className="text-[11px] font-mono text-slate-400">Department (Auto-Fetched)</label>
+            <input type="text" readOnly tabIndex={-1} value={studentMatch ? studentMatch.department : ''}
+              placeholder="Auto-filled from database"
+              className="w-full bg-slate-900/60 border border-slate-800 text-slate-300 px-3 py-2 rounded-lg text-xs font-semibold cursor-not-allowed outline-none" />
+          </div>
+
           {/* Action Header Buttons */}
           <div className="flex flex-wrap items-center gap-2.5">
             <button
@@ -677,6 +731,15 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
             >
               <FileText className="w-4 h-4 text-sky-400 shrink-0" />
               <span>PDF Export</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleExportImage}
+              className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-violet-950/80 hover:bg-violet-900 text-violet-300 border border-violet-700/60 font-semibold text-xs flex items-center space-x-1.5 transition-all cursor-pointer"
+              title="Download filtered report as SVG image"
+            >
+              <ImageIcon className="w-4 h-4 shrink-0" />
+              <span>Image Export</span>
             </button>
           </div>
         </div>
@@ -821,20 +884,44 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
             </button>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3 border-t border-slate-800 pt-3">
-          <label className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
-            From
-            <input type="date" value={fromDate} max={toDate || undefined} onChange={event => setFromDate(event.target.value)}
-              className="min-h-[40px] rounded-lg border border-slate-700 bg-slate-950 px-2 text-white" />
-          </label>
-          <label className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
-            To
-            <input type="date" value={toDate} min={fromDate || undefined} onChange={event => setToDate(event.target.value)}
-              className="min-h-[40px] rounded-lg border border-slate-700 bg-slate-950 px-2 text-white" />
-          </label>
-          {(fromDate || toDate) && <button type="button" onClick={() => { setFromDate(''); setToDate(''); }}
-            className="min-h-[40px] rounded-lg px-3 text-xs text-cyan-300 hover:bg-slate-800">Clear date range</button>}
-        </div>
+        <section aria-label="Discipline reports" className="space-y-3 border-t border-slate-800 pt-3">
+          <h2 className="text-xs font-bold uppercase tracking-wide text-white">{userRole === 'FACULTY' ? 'Faculty Reports' : 'Discipline Reports'}</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            {([
+              ['SINGLE_DAY', 'Single Day'],
+              ['DATE_RANGE', 'Date Range'],
+              ['OVERALL', 'Overall']
+            ] as const).map(([mode, label]) => (
+              <button key={mode} type="button" aria-pressed={reportMode === mode} onClick={() => setReportMode(mode)}
+                className={`min-h-[40px] rounded-lg border px-3 text-xs font-semibold ${reportMode === mode ? 'border-cyan-500 bg-cyan-950 text-cyan-200' : 'border-slate-700 text-slate-300 hover:bg-slate-800'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {reportMode === 'SINGLE_DAY' && (
+            <label className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
+              Date
+              <input aria-label="Report date" type="date" value={singleDate} onChange={event => setSingleDate(event.target.value)}
+                className="min-h-[40px] rounded-lg border border-slate-700 bg-slate-950 px-2 text-white" />
+            </label>
+          )}
+          {reportMode === 'DATE_RANGE' && (
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
+                From
+                <input type="date" value={fromDate} max={toDate || undefined} onChange={event => setFromDate(event.target.value)}
+                  className="min-h-[40px] rounded-lg border border-slate-700 bg-slate-950 px-2 text-white" />
+              </label>
+              <label className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
+                To
+                <input type="date" value={toDate} min={fromDate || undefined} onChange={event => setToDate(event.target.value)}
+                  className="min-h-[40px] rounded-lg border border-slate-700 bg-slate-950 px-2 text-white" />
+              </label>
+              {(fromDate || toDate) && <button type="button" onClick={() => { setFromDate(''); setToDate(''); }}
+                className="min-h-[40px] rounded-lg px-3 text-xs text-cyan-300 hover:bg-slate-800">Clear date range</button>}
+            </div>
+          )}
+        </section>
       </div>
 
       <section className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/80 p-4" aria-labelledby="discipline-student-search-title">
@@ -878,6 +965,13 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
           <div className="p-8 text-center text-rose-400 space-y-2">
             <AlertCircle className="w-8 h-8 mx-auto" />
             <p className="text-xs font-mono">{error}</p>
+            <button
+              type="button"
+              onClick={() => void fetchRecords()}
+              className="min-h-[44px] rounded-xl border border-rose-800 px-4 py-2 text-xs font-semibold text-rose-200 hover:bg-rose-950"
+            >
+              Retry loading records
+            </button>
           </div>
         ) : filteredRecords.length === 0 ? (
           <div className="p-12 text-center space-y-3">
@@ -970,6 +1064,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
                     <th className="px-4 py-3.5">Student Name</th>
                     <th className="px-4 py-3.5">Year & Sec</th>
                     <th className="px-4 py-3.5">Issue Category</th>
+                    <th className="px-4 py-3.5">Location / Block</th>
                     <th className="px-4 py-3.5">Rule Violated</th>
                     <th className="px-4 py-3.5">Staff Action Taken</th>
                     <th className="px-4 py-3.5">Fine (₹)</th>
@@ -985,6 +1080,8 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
                         <div className="font-semibold text-slate-200">{r.date}</div>
                         <div className="text-[10px] text-slate-400 font-mono">{r.time || 'N/A'}</div>
                       </td>
+
+                      <td className="px-4 py-3 text-slate-300">{r.location || '-'}</td>
 
                       {/* Register No */}
                       <td className="px-4 py-3 whitespace-nowrap font-mono font-bold text-cyan-400">
@@ -1085,7 +1182,13 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
             </div>
             <h3 className="mb-3 text-sm font-semibold">Discipline incident history ({profileRecords.length})</h3>
             {profileLoading ? <div className="flex items-center gap-2 py-8 text-sm text-slate-300"><Loader2 className="h-4 w-4 animate-spin" /> Loading authorized incident history…</div>
-              : profileError ? <p role="alert" className="rounded-lg bg-rose-950 p-3 text-sm text-rose-200">{profileError}</p>
+              : profileError ? <div className="space-y-3 rounded-lg bg-rose-950 p-3 text-sm text-rose-200">
+                <p role="alert">{profileError}</p>
+                <button type="button" onClick={() => void handleOpenProfile(profileStudent)}
+                  className="min-h-[44px] rounded-lg border border-rose-700 px-3 py-2 text-xs font-semibold hover:bg-rose-900">
+                  Retry loading student history
+                </button>
+              </div>
                 : profileRecords.length === 0 ? <p className="py-8 text-sm text-slate-400">No discipline incidents are recorded for this student.</p>
                   : <div className="space-y-3">{profileRecords.map(item => (
                     <article key={item.id} className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
@@ -1312,7 +1415,7 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* Issue Category Dropdown */}
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Issue Category *</label>
+                  <label className="text-xs font-semibold text-slate-300">Discipline Issue *</label>
                   <select
                     value={selectedIssue}
                     onChange={(e) => setSelectedIssue(e.target.value)}
@@ -1327,15 +1430,14 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
                   </select>
                 </div>
 
-                {/* Rule Violated Dropdown */}
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Rule Violated *</label>
+                  <label className="text-xs font-semibold text-slate-300">Location / Block *</label>
                   <select
-                    value={selectedRule}
-                    onChange={(e) => setSelectedRule(e.target.value)}
+                    value={selectedLocation}
+                    onChange={(e) => setSelectedLocation(e.target.value)}
                     className="w-full bg-slate-900 border border-slate-700 text-white px-3 py-2.5 rounded-xl text-base sm:text-xs min-h-[44px] focus:border-cyan-500 focus:outline-none cursor-pointer"
                   >
-                    {RULE_VIOLATED_OPTIONS.map((opt) => (
+                    {LOCATION_OPTIONS.map((opt) => (
                       <option key={opt} value={opt}>
                         {opt}
                       </option>
@@ -1344,16 +1446,22 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
                 </div>
               </div>
 
-              {/* Staff Action Taken Textarea */}
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300">Staff Action Taken (Free Text)</label>
-                <textarea
-                  rows={2}
-                  value={staffActionTaken}
-                  onChange={(e) => setStaffActionTaken(e.target.value)}
-                  placeholder="Enter action taken by staff (e.g., Warning issued, sent to HOD cabin, parent called...)"
-                  className="w-full bg-slate-900 border border-slate-700 text-white p-3 rounded-xl text-base sm:text-xs focus:border-cyan-500 focus:outline-none placeholder:text-slate-500"
-                />
+                <label className="text-xs font-semibold text-slate-300">Rule Violated</label>
+                <select value={selectedRule} onChange={event => setSelectedRule(event.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 text-white px-3 py-2.5 rounded-xl text-base sm:text-xs min-h-[44px]">
+                  {RULE_VIOLATED_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300">Action Taken *</label>
+                <select required value={staffActionTaken} onChange={event => setStaffActionTaken(event.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 text-white px-3 py-2.5 rounded-xl text-base sm:text-xs min-h-[44px]">
+                  <option value="">Select action</option>
+                  {!ACTION_OPTIONS.includes(staffActionTaken) && staffActionTaken && <option value={staffActionTaken}>{staffActionTaken}</option>}
+                  {ACTION_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
+                </select>
               </div>
 
               {/* Fine Amount & Details */}
@@ -1363,7 +1471,8 @@ export const DisciplineIssueModule: React.FC<DisciplineIssueModuleProps> = ({ us
                   <input
                     type="number"
                     min={0}
-                    step={10}
+                    step={1}
+                    required
                     value={fineAmountInput}
                     onChange={(e) => setFineAmountInput(e.target.value === '' ? '' : Number(e.target.value))}
                     placeholder="Enter fine amount (0 if none)"

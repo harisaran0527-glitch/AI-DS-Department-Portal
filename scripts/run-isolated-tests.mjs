@@ -17,7 +17,7 @@ Object.assign(env, {
   NODE_ENV: 'test', VERCEL: '1', USE_SQLITE: 'false', DATABASE_PATH: ':memory:',
   JWT_SECRET: 'isolated-test-runner-only-never-use-for-deployment'
 });
-const result = spawnSync(process.execPath, ['--test', ...files.map(file => path.join(root, 'tests', file))], {
+const result = spawnSync(process.execPath, ['--import', 'tsx/esm', '--test', ...files.map(file => path.join(root, 'tests', file))], {
   cwd: root, env, stdio: 'inherit'
 });
 if (result.error) throw result.error;

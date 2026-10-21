@@ -14,6 +14,36 @@ export function getApiBaseUrl(): string {
 
 export const API_BASE = getApiBaseUrl();
 
+async function disciplinePortalRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${API_BASE}/discipline-portal${path}`, {
+    ...options,
+    cache: 'no-store',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string> || {})
+    }
+  });
+  const body = await response.json().catch(() => ({})) as { error?: string } & T;
+  if (!response.ok) throw new Error(body.error || `Discipline Portal request failed (${response.status}).`);
+  return body;
+}
+
+async function disciplinePortalAuthRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${API_BASE}/discipline-portal/auth${path}`, {
+    ...options,
+    cache: 'no-store',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string> || {})
+    }
+  });
+  const body = await response.json().catch(() => ({})) as { error?: string } & T;
+  if (!response.ok) throw new Error(body.error || `Discipline Portal authentication failed (${response.status}).`);
+  return body;
+}
+
 /** Fetch proof content with headers so session tokens never enter URLs or browser history. */
 export async function openAuthenticatedFile(endpoint: string, role: Role, options: { download?: boolean; filename?: string } = {}): Promise<void> {
   if (!/^\/faculty\/(?:certificates|participation|nptel-proofs)\/[^/]+\/(?:view|download)$/.test(endpoint)) {
@@ -1326,6 +1356,7 @@ export const API = {
   createDisciplineRecord: async (recordData: {
     registerNo: string;
     issue: string;
+    location?: string;
     ruleViolated?: string;
     actionTaken?: string;
     fineAmount?: number;
@@ -1343,6 +1374,7 @@ export const API = {
 
   updateDisciplineRecord: async (id: string, recordData: {
     issue: string;
+    location?: string;
     ruleViolated: string;
     actionTaken: string;
     fineAmount: number;
@@ -1362,5 +1394,98 @@ export const API = {
     return request<{ message: string }>(`/discipline/records/${encodeURIComponent(id)}`, {
       method: 'DELETE'
     });
-  }
+  },
+
+  disciplinePortalLogin: async (email: string, password: string, role: 'FACULTY' | 'ADMIN') =>
+    disciplinePortalAuthRequest<{ user: UserSession }>('/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, role })
+    }),
+
+  disciplinePortalMe: async () => disciplinePortalAuthRequest<{ user: UserSession }>('/me'),
+
+  disciplinePortalLogout: async () => disciplinePortalAuthRequest<{ message: string }>('/logout', {
+    method: 'POST',
+    body: JSON.stringify({})
+  }),
+
+  lookupDisciplinePortalStudent: async (registerNo: string) =>
+    disciplinePortalRequest<{ found: boolean; student?: {
+      id: string; registerNo: string; name: string; email: string; year: string; section: string; department: string
+    }; error?: string }>(
+      `/lookup-student/${encodeURIComponent(registerNo)}`
+    ),
+
+  searchDisciplinePortalStudents: async (query: string) =>
+    disciplinePortalRequest<{ students: Array<{
+      id: string; registerNo: string; name: string; email: string; year: string; section: string; department: string
+    }> }>(
+      `/students/search?q=${encodeURIComponent(query)}`
+    ),
+
+  getDisciplinePortalRecords: async (params?: { registerNo?: string; year?: string; section?: string; issue?: string; search?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.registerNo) query.set('registerNo', params.registerNo);
+    if (params?.year && params.year !== 'ALL') query.set('year', params.year);
+    if (params?.section && params.section !== 'ALL') query.set('section', params.section);
+    if (params?.issue && params.issue !== 'ALL') query.set('issue', params.issue);
+    if (params?.search) query.set('search', params.search);
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return disciplinePortalRequest<{ records: any[] }>(`/records${suffix}`);
+  },
+
+  createDisciplinePortalRecord: async (data: {
+    registerNo: string; issue: string; location?: string; ruleViolated?: string; actionTaken?: string;
+    fineAmount?: number; fineDetails?: string; remarks?: string; date?: string; time?: string;
+    status?: 'OPEN' | 'UNDER_REVIEW' | 'RESOLVED'
+  }) => disciplinePortalRequest<{ message: string; record: any }>('/records', {
+      method: 'POST', body: JSON.stringify(data)
+    }),
+
+  updateDisciplinePortalRecord: async (id: string, data: {
+    issue: string; location?: string; ruleViolated: string; actionTaken: string; fineAmount: number;
+    fineDetails: string; remarks: string; date: string; time: string; status: 'OPEN' | 'UNDER_REVIEW' | 'RESOLVED'
+  }) =>
+    disciplinePortalRequest<{ message: string }>(`/records/${encodeURIComponent(id)}`, {
+      method: 'PUT', body: JSON.stringify(data)
+    }),
+
+  deleteDisciplinePortalRecord: async (id: string) =>
+    disciplinePortalRequest<{ message: string }>(`/records/${encodeURIComponent(id)}`, {
+      method: 'DELETE', body: JSON.stringify({})
+    }),
+
+  getDisciplinePortalFaculty: async () => disciplinePortalRequest<{ faculty: Array<{
+    id: string; email: string; name: string; is_active: number; student_count: number
+  }> }>('/faculty'),
+
+  createDisciplinePortalFaculty: async (data: { name: string; email: string; password: string }) =>
+    disciplinePortalRequest<{ message: string }>('/faculty', { method: 'POST', body: JSON.stringify(data) }),
+
+  setDisciplinePortalFacultyStatus: async (id: string, isActive: boolean) =>
+    disciplinePortalRequest<{ message: string }>(`/faculty/${encodeURIComponent(id)}/status`, {
+      method: 'PUT', body: JSON.stringify({ isActive })
+    }),
+
+  getDisciplinePortalFacultyStudents: async (id: string) =>
+    disciplinePortalRequest<{ students: Array<{
+      id: string; name: string; registerNo: string; email: string; department: string; year: string; section: string
+    }> }>(`/faculty/${encodeURIComponent(id)}/students`),
+
+  assignDisciplinePortalStudents: async (facultyId: string, registerNumbers: string[]) =>
+    disciplinePortalRequest<{ message: string; assigned: string[]; skipped: string[] }>('/assignments', {
+      method: 'POST', body: JSON.stringify({ facultyId, registerNumbers })
+    }),
+
+  previewDisciplinePortalStudentImport: async (facultyId: string, rows: unknown[]) =>
+    disciplinePortalRequest<{ preview: Array<{
+      rowNumber: number; row: Record<string, string>; errors: string[]; valid: boolean
+    }> }>('/students/import-preview', { method: 'POST', body: JSON.stringify({ facultyId, rows }) }),
+
+  confirmDisciplinePortalStudentImport: async (facultyId: string, rows: unknown[]) =>
+    disciplinePortalRequest<{ message: string; imported: string[]; skipped: Array<{
+      rowNumber: number; errors: string[]
+    }>; failed: Array<{ registerNo: string; error: string }> }>('/students/import-confirm', {
+      method: 'POST', body: JSON.stringify({ facultyId, rows })
+    })
 };

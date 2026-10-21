@@ -77,6 +77,26 @@ export async function initDatabaseSchema(): Promise<void> {
       FOREIGN KEY (faculty_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS discipline_portal_users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('ADMIN', 'FACULTY')),
+      password_hash TEXT NOT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS discipline_portal_assignments (
+      id TEXT PRIMARY KEY,
+      faculty_id TEXT NOT NULL,
+      student_id TEXT NOT NULL,
+      assigned_by TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE (faculty_id, student_id),
+      FOREIGN KEY (faculty_id) REFERENCES discipline_portal_users(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS students (
       id TEXT PRIMARY KEY,
       register_no TEXT UNIQUE NOT NULL,
@@ -173,6 +193,7 @@ export async function initDatabaseSchema(): Promise<void> {
       student_id TEXT NOT NULL,
       date TEXT NOT NULL,
       category TEXT NOT NULL,
+      location TEXT NOT NULL DEFAULT '',
       remark TEXT NOT NULL,
       warning_action TEXT NOT NULL,
       recorded_by TEXT NOT NULL,
@@ -496,6 +517,8 @@ export async function initDatabaseSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_users_identifier ON users(identifier);
     CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
     CREATE INDEX IF NOT EXISTS idx_faculty_assign ON faculty_assignments(faculty_id, is_active);
+    CREATE INDEX IF NOT EXISTS idx_discipline_portal_users_email ON discipline_portal_users(email);
+    CREATE INDEX IF NOT EXISTS idx_discipline_portal_assignments_faculty ON discipline_portal_assignments(faculty_id, student_id);
     CREATE INDEX IF NOT EXISTS idx_students_reg_no ON students(register_no);
     CREATE INDEX IF NOT EXISTS idx_students_email ON students(email);
     CREATE INDEX IF NOT EXISTS idx_students_year_sec ON students(year, section);
@@ -539,6 +562,7 @@ export async function initDatabaseSchema(): Promise<void> {
         `ALTER TABLE academic_records ADD COLUMN IF NOT EXISTS created_at TEXT;`,
         `ALTER TABLE subjects ADD COLUMN IF NOT EXISTS subject_abbreviation TEXT;`,
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS time TEXT;`,
+        `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS location TEXT NOT NULL DEFAULT '';`,
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS fine_amount REAL DEFAULT 0;`,
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS action_taken TEXT;`,
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS rule_violated TEXT;`,
@@ -606,10 +630,14 @@ export async function initDatabaseSchema(): Promise<void> {
       `ALTER TABLE academic_records ADD COLUMN created_at TEXT;`,
       `ALTER TABLE subjects ADD COLUMN subject_abbreviation TEXT;`,
       `ALTER TABLE discipline_records ADD COLUMN time TEXT;`,
+      `ALTER TABLE discipline_records ADD COLUMN location TEXT NOT NULL DEFAULT '';`,
       `ALTER TABLE discipline_records ADD COLUMN fine_amount REAL DEFAULT 0;`,
       `ALTER TABLE discipline_records ADD COLUMN action_taken TEXT;`,
       `ALTER TABLE discipline_records ADD COLUMN rule_violated TEXT;`,
       `ALTER TABLE discipline_records ADD COLUMN fine_details TEXT;`,
+      `ALTER TABLE discipline_records ADD COLUMN assigned_faculty_id TEXT;`,
+      `ALTER TABLE discipline_records ADD COLUMN assigned_staff_name TEXT;`,
+      `ALTER TABLE discipline_records ADD COLUMN created_at TEXT;`,
       `ALTER TABLE certificate_records ADD COLUMN company_name TEXT;`,
       `ALTER TABLE certificate_records ADD COLUMN proof_file_path TEXT;`,
       `ALTER TABLE certificate_records ADD COLUMN created_at TEXT;`,
@@ -1538,6 +1566,7 @@ export class SQLiteDB {
     personalEmail?: string;
     year: string;
     section: string;
+    department?: string;
     batch: string;
     classCoordinatorName?: string;
     cgpa?: number | null;
@@ -1548,13 +1577,14 @@ export class SQLiteDB {
     const parsedCgpa = (stu.cgpa !== undefined && stu.cgpa !== null && String(stu.cgpa) !== '' && String(stu.cgpa).trim().toUpperCase() !== 'N/A' && String(stu.cgpa).trim().toUpperCase() !== 'NULL' && !isNaN(Number(stu.cgpa))) ? Math.max(0, Math.min(10, Number(stu.cgpa))) : null;
     await executeRun(`
       INSERT INTO students (id, register_no, name, email, personal_email, department, year, section, batch, class_coordinator_name, cgpa, overall_score, current_rank, created_by_faculty_id, faculty_workspace_id)
-      VALUES (?, ?, ?, ?, ?, 'AI & DS', ?, ?, ?, ?, ?, ?, 99, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 99, ?, ?)
     `, [
       stu.id,
       stu.registerNo,
       stu.name,
       stu.email,
       stu.personalEmail ? stu.personalEmail.trim() : null,
+      stu.department?.trim() || 'AI & DS',
       stu.year,
       stu.section,
       stu.batch,
@@ -2283,6 +2313,7 @@ export class SQLiteDB {
     date: string;
     time: string;
     category: string;
+    location?: string;
     ruleViolated: string;
     actionTaken: string;
     fineAmount: number;
@@ -2301,15 +2332,16 @@ export class SQLiteDB {
 
     await executeRun(`
       INSERT INTO discipline_records (
-        id, student_id, date, time, category, rule_violated, remark, warning_action, action_taken, fine_amount, fine_details, recorded_by, assigned_faculty_id, assigned_staff_name, created_at, status
+        id, student_id, date, time, category, location, rule_violated, remark, warning_action, action_taken, fine_amount, fine_details, recorded_by, assigned_faculty_id, assigned_staff_name, created_at, status
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       id,
       data.studentId,
       date,
       time,
       data.category || 'Discipline Issue',
+      data.location || '',
       data.ruleViolated || '',
       data.remark || '',
       data.actionTaken || '',
@@ -2329,6 +2361,7 @@ export class SQLiteDB {
       date,
       time,
       category: data.category,
+      location: data.location || '',
       rule_violated: data.ruleViolated,
       remark: data.remark,
       action_taken: data.actionTaken,
@@ -2359,6 +2392,7 @@ export class SQLiteDB {
         d.date,
         d.time,
         d.category,
+        d.location,
         d.rule_violated,
         d.remark,
         d.warning_action,
@@ -2442,6 +2476,7 @@ export class SQLiteDB {
       time: r.time || '',
       issue: r.category,
       category: r.category,
+      location: r.location || '',
       ruleViolated: r.rule_violated || '',
       actionTaken: r.action_taken || r.warning_action || '',
       fineAmount: Number(r.fine_amount) || 0,
@@ -2459,6 +2494,7 @@ export class SQLiteDB {
     date: string;
     time: string;
     category: string;
+    location: string;
     ruleViolated: string;
     actionTaken: string;
     fineAmount: number;
@@ -2467,10 +2503,10 @@ export class SQLiteDB {
     status: 'OPEN' | 'UNDER_REVIEW' | 'RESOLVED';
   }, scope?: { facultyId: string; role: string }): Promise<boolean> {
     if (!scope?.facultyId || !['FACULTY', 'HOD', 'ADMIN'].includes(scope.role)) return false;
-    let sql = `UPDATE discipline_records SET date = ?, time = ?, category = ?, rule_violated = ?,
+    let sql = `UPDATE discipline_records SET date = ?, time = ?, category = ?, location = ?, rule_violated = ?,
       remark = ?, warning_action = ?, action_taken = ?, fine_amount = ?, fine_details = ?, status = ?
       WHERE id = ?`;
-    const params: (string | number)[] = [data.date, data.time, data.category, data.ruleViolated,
+    const params: (string | number)[] = [data.date, data.time, data.category, data.location || '', data.ruleViolated,
       data.remark, data.actionTaken, data.actionTaken, data.fineAmount, data.fineDetails, data.status, id];
     if (scope.role === 'FACULTY') {
       sql += ` AND id IN (

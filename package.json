@@ -12,6 +12,7 @@
     "test:auth": "node scripts/run-isolated-tests.mjs auth account-initialization",
     "dev": "node ./node_modules/vite/bin/vite.js",
     "server": "node --import tsx/esm server/index.ts",
+    "discipline:provision-admin": "node --import tsx/esm server/scripts/createDisciplinePortalAdmin.ts",
     "build": "node ./node_modules/vite/bin/vite.js build",
     "lint": "oxlint",
     "preview": "vite preview",

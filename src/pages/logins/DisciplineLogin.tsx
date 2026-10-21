@@ -3,12 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { API } from '../../services/api';
 import '../../components/discipline/discipline-login.css';
 
-/** Public reference labels and palette, using the main portal's existing accounts. */
+/** The standalone Discipline Portal has its own Admin and Faculty accounts. */
 export const DisciplineLogin: React.FC = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'FACULTY' | 'HOD' | 'ADMIN'>('FACULTY');
+  const [role, setRole] = useState<'FACULTY' | 'ADMIN'>('FACULTY');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
 
@@ -18,7 +18,7 @@ export const DisciplineLogin: React.FC = () => {
     setPending(true);
     setError('');
     try {
-      const result = await API.login(email, password, role);
+      const result = await API.disciplinePortalLogin(email, password, role);
       if (!result.user || result.user.role !== role) throw new Error('Unable to verify portal access.');
       navigate('/discipline', { replace: true });
     } catch (failure) {

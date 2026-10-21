@@ -15,6 +15,7 @@ import subjectsRoutes from './routes/subjects.js';
 import rankingsRoutes from './routes/rankings.js';
 import skilledgeRoutes from './routes/skilledge.js';
 import disciplineRoutes from './routes/discipline.js';
+import { disciplinePortalAuthRouter, disciplinePortalRouter } from './routes/disciplinePortal.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -119,6 +120,10 @@ app.use('/api/skilledge', skilledgeRoutes);
 app.use('/skilledge', skilledgeRoutes);
 app.use('/api/discipline', disciplineRoutes);
 app.use('/discipline', disciplineRoutes);
+app.use('/api/discipline-portal/auth', disciplinePortalAuthRouter);
+app.use('/discipline-portal/auth', disciplinePortalAuthRouter);
+app.use('/api/discipline-portal', disciplinePortalRouter);
+app.use('/discipline-portal', disciplinePortalRouter);
 
 // Health check endpoint (Responds to /api/health, /health, and root /api)
 app.get(['/api/health', '/health', '/api', '/'], (req, res) => {

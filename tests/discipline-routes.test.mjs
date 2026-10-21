@@ -32,8 +32,8 @@ const db = {
   },
   addDisciplineIssue: async input => { assert.equal(requiresPrimaryDatabase(), true); saved.push(input); return { id: 'new-record', ...input }; },
   updateDisciplineIssue: async (id, input, scope) => {
-    assert.equal(scope.facultyId, 'f1');
-    assert.equal(scope.role, 'FACULTY');
+    if (scope.role === 'FACULTY') assert.equal(scope.facultyId, 'f1');
+    assert.ok(['FACULTY', 'HOD', 'ADMIN'].includes(scope.role));
     if (id !== 'r1') return false;
     updated.push({ id, ...input });
     return true;
@@ -104,6 +104,27 @@ test('HOD and Admin retain department-wide lookup access', async () => {
     assert.equal((await (await request('/lookup-student/002', { role })).json()).found, true);
   }
 });
+test('HOD can view department records and update an incident status', async () => {
+  const recordsResponse = await request('/records', { role: 'HOD' });
+  assert.equal(recordsResponse.status, 200);
+  assert.equal((await recordsResponse.json()).records[0].id, 'r1');
+
+  updated = [];
+  const updateResponse = await request('/records/r1', { role: 'HOD', method: 'PUT', body: {
+    issue: 'Department review', ruleViolated: 'Fixture rule', actionTaken: 'Resolved',
+    fineAmount: 0, fineDetails: '', remarks: 'Reviewed by HOD', date: '2026-10-01',
+    time: '09:15', status: 'RESOLVED'
+  } });
+  assert.equal(updateResponse.status, 200);
+  assert.equal(updated[0].status, 'RESOLVED');
+
+  saved = [];
+  const createResponse = await request('/records', { role: 'HOD', method: 'POST', body: {
+    registerNo: '002', issue: 'Department incident'
+  } });
+  assert.equal(createResponse.status, 201);
+  assert.equal(saved[0].studentId, 's2');
+});
 test('malformed inputs, negative fines, and invalid incident dates do not persist', async () => {
   saved = [];
   for (const invalid of [{ issue: {} }, { fineAmount: -1 }, { fineAmount: 'Infinity' },
@@ -172,7 +193,7 @@ test('authorized faculty can update an in-scope incident and persist its status'
   assert.equal(response.status, 200);
   assert.deepEqual(updated, [{
     id: 'r1', date: '2026-10-01', time: '09:15', category: 'Late Arrival',
-    ruleViolated: 'Rule 2', actionTaken: 'Warning issued', fineAmount: 0,
+    location: '', ruleViolated: 'Rule 2', actionTaken: 'Warning issued', fineAmount: 0,
     fineDetails: '', remark: 'Fixture update', status: 'RESOLVED'
   }]);
   assert.equal((await request('/records/outside', { method: 'PUT', body: {

@@ -38,6 +38,13 @@ test('all four portal forms and Discipline render empty credentials despite reme
       }
       assert.doesNotMatch(markup, /remembered-memory|student123|admin123|hod123/);
     }
+    const disciplineMarkup = renderToStaticMarkup(React.createElement(
+      MemoryRouter, {}, React.createElement(DisciplineLogin)
+    ));
+    for (const role of ['FACULTY', 'ADMIN']) {
+      assert.match(disciplineMarkup, new RegExp(`<option value="${role}"(?: selected="")?>`));
+    }
+    assert.doesNotMatch(disciplineMarkup, /<option value="HOD"/);
   } finally { globalThis.window = browserWindow; }
 });
 

@@ -23,7 +23,7 @@ memory.exec(`
     faculty_workspace_id TEXT, personal_email TEXT, mobile_number TEXT, address TEXT
   );
   CREATE TABLE discipline_records (
-    id TEXT PRIMARY KEY, student_id TEXT NOT NULL, date TEXT NOT NULL, category TEXT NOT NULL,
+    id TEXT PRIMARY KEY, student_id TEXT NOT NULL, date TEXT NOT NULL, category TEXT NOT NULL, location TEXT DEFAULT '',
     remark TEXT NOT NULL, warning_action TEXT NOT NULL, recorded_by TEXT NOT NULL,
     FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
   );
@@ -41,12 +41,13 @@ process.env.DATABASE_PATH = ':memory:';
 process.env.USE_SQLITE = 'true';
 delete process.env.VERCEL;
 isolateServer(undefined, { 'better-sqlite3': MemoryOnlyDriver }, { loadRealDatabase: true });
-const { databaseReady, initDatabaseSchema } = await import('../server/db.ts');
+const { databaseReady, initDatabaseSchema, db } = await import('../server/db.ts');
 
 test('status migration preserves existing discipline records and defaults them to OPEN', async () => {
   await databaseReady;
 
   const record = memory.prepare('SELECT * FROM discipline_records WHERE id = ?').get('legacy-record');
+  const columns = new Set(memory.prepare('PRAGMA table_info(discipline_records)').all().map(column => column.name));
   assert.equal(record.status, 'OPEN');
   assert.equal(record.student_id, 'legacy-student');
   assert.equal(record.date, '2026-10-01');
@@ -54,6 +55,10 @@ test('status migration preserves existing discipline records and defaults them t
   assert.equal(record.remark, 'Original note');
   assert.equal(record.warning_action, 'Warning');
   assert.equal(record.recorded_by, 'faculty-1');
+  assert.ok(columns.has('assigned_faculty_id'));
+  assert.ok(columns.has('assigned_staff_name'));
+  assert.ok(columns.has('created_at'));
+  assert.ok(columns.has('location'));
   assert.equal(memory.prepare('SELECT COUNT(*) AS count FROM users').get().count, 0);
 });
 
@@ -66,4 +71,57 @@ test('status migration is idempotent for already-migrated data', async () => {
   const record = memory.prepare('SELECT * FROM discipline_records WHERE id = ?').get('legacy-record');
   assert.equal(record.status, 'RESOLVED');
   assert.equal(record.remark, 'Original note');
+});
+
+test('discipline issue create, history read, edit, and status persist in the isolated database', async () => {
+  await databaseReady;
+  const created = await db.addDisciplineIssue({
+    studentId: 'legacy-student',
+    date: '2026-10-20',
+    time: '09:30:00',
+    category: 'Fixture Incident',
+    location: 'Gate',
+    ruleViolated: 'Fixture rule',
+    actionTaken: 'Warning',
+    fineAmount: 0,
+    fineDetails: '',
+    remark: 'Created in memory only',
+    status: 'OPEN',
+    recordedBy: 'Fixture faculty',
+    assignedFacultyId: 'fixture-faculty',
+    assignedStaffName: 'Fixture Faculty'
+  });
+  const scope = { facultyId: 'fixture-hod', role: 'HOD' };
+  const firstRead = await db.getAllDisciplineIssues({ registerNo: 'AVS001', ...scope });
+  assert.ok(firstRead.some(record => record.id === created.id && record.status === 'OPEN'));
+
+  const updated = await db.updateDisciplineIssue(created.id, {
+    date: '2026-10-20',
+    time: '10:15:00',
+    category: 'Fixture Incident Updated',
+    location: 'Ground',
+    ruleViolated: 'Updated fixture rule',
+    actionTaken: 'Follow-up completed',
+    fineAmount: 25,
+    fineDetails: 'Fixture amount',
+    remark: 'Updated in memory only',
+    status: 'RESOLVED'
+  }, scope);
+  assert.equal(updated, true);
+
+  const refreshedRead = await db.getAllDisciplineIssues({ registerNo: 'AVS001', ...scope });
+  const persisted = refreshedRead.find(record => record.id === created.id);
+  assert.equal(persisted.category, 'Fixture Incident Updated');
+  assert.equal(persisted.time, '10:15:00');
+  assert.equal(persisted.location, 'Ground');
+  assert.equal(persisted.fineAmount, 25);
+  assert.equal(persisted.remarks, 'Updated in memory only');
+  assert.equal(persisted.status, 'RESOLVED');
+  assert.equal(await db.updateDisciplineIssue(created.id, {
+    date: '2026-10-20', time: '10:15:00', category: 'Unauthorized', ruleViolated: '',
+    actionTaken: '', fineAmount: 0, fineDetails: '', remark: '', status: 'OPEN'
+  }), false);
+
+  const existing = memory.prepare('SELECT remark, status FROM discipline_records WHERE id = ?').get('legacy-record');
+  assert.deepEqual(existing, { remark: 'Original note', status: 'RESOLVED' });
 });

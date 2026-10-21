@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { API } from '../../services/api';
 import type { UserSession } from '../../types';
 import { DisciplineIssueModule } from '../../components/discipline/DisciplineIssueModule';
+import { DisciplineAdminDashboard } from './DisciplineAdminDashboard';
 import { Loader2 } from 'lucide-react';
 
 export const DisciplineIssuePage: React.FC = () => {
@@ -12,12 +13,12 @@ export const DisciplineIssuePage: React.FC = () => {
   const [accessError, setAccessError] = useState('');
 
   useEffect(() => {
-    API.getMe()
+    API.disciplinePortalMe()
       .then((res) => {
-        if (res?.user && ['FACULTY', 'HOD', 'ADMIN'].includes(res.user.role)) {
+        if (res?.user && ['FACULTY', 'ADMIN'].includes(res.user.role)) {
           setSession(res.user);
         } else {
-          setAccessError('A Faculty, HOD, or Admin session is required.');
+          setAccessError('A Discipline Portal Faculty or Admin session is required.');
         }
       })
       .catch(() => {
@@ -54,13 +55,15 @@ export const DisciplineIssuePage: React.FC = () => {
           <span>{session.name} · {session.role}</span>
           <button type="button" className="rounded-lg bg-slate-800 px-4 py-2" onClick={async () => {
             try {
-              await API.logout(session.role);
+              await API.disciplinePortalLogout();
               navigate('/discipline/login', { replace: true });
             } catch (error) { alert(error instanceof Error ? error.message : 'Sign out could not be completed. Please try again.'); }
           }}>Sign Out</button>
         </div>
+        {session.role === 'ADMIN' && <DisciplineAdminDashboard />}
         <DisciplineIssueModule
           userRole={session.role}
+          standalonePortal
           onBack={() => {
             if (session?.role === 'HOD') navigate('/hod/dashboard');
             else if (session?.role === 'ADMIN') navigate('/admin/dashboard');

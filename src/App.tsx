@@ -90,8 +90,8 @@ export const App: React.FC = () => {
                 </ProtectedRoute>
               }
             />
-            <Route path="/faculty/discipline" element={<DisciplineIssuePage />} />
-            <Route path="/discipline-issues" element={<DisciplineIssuePage />} />
+            <Route path="/faculty/discipline" element={<Navigate to="/discipline/login" replace />} />
+            <Route path="/discipline-issues" element={<Navigate to="/discipline/login" replace />} />
             <Route path="/discipline" element={<DisciplineIssuePage />} />
             <Route
               path="/hod/dashboard"
