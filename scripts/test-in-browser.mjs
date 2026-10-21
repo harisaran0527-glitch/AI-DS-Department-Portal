@@ -15,6 +15,16 @@ async function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function waitForSelector(cdp, selector, maxWaitMs = 6000) {
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    const found = await cdp.eval(`Boolean(document.querySelector('${selector}'))`);
+    if (found) return true;
+    await wait(250);
+  }
+  return false;
+}
+
 async function getWsUrl(port = 9222) {
   for (let i = 0; i < 30; i++) {
     try {
