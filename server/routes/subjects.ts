@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { db } from '../db.js';
-import { authenticateToken, requireRole, AuthRequest } from '../middleware/auth.js';
+import { authenticateToken, requireRole, AuthRequest, getRouteParam } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -262,7 +262,7 @@ router.post('/', requireRole('FACULTY', 'HOD', 'ADMIN'), async (req: AuthRequest
 // DELETE /api/subjects/by-code/:code - Delete a subject by code
 router.delete('/by-code/:code', requireRole('FACULTY', 'HOD', 'ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
-    const { code } = req.params;
+    const code = getRouteParam(req, 'code');
     const existing = await db.findSubjectByCode(code);
     if (!existing) {
       return res.status(404).json({ error: 'Subject not found.' });
@@ -279,7 +279,7 @@ router.delete('/by-code/:code', requireRole('FACULTY', 'HOD', 'ADMIN'), async (r
 // PUT /api/subjects/:id - Update an existing subject
 router.put('/:id', requireRole('FACULTY', 'HOD', 'ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = getRouteParam(req, 'id');
     const {
       subject_code,
       subject_name,
@@ -327,7 +327,7 @@ router.put('/:id', requireRole('FACULTY', 'HOD', 'ADMIN'), async (req: AuthReque
 // DELETE /api/subjects/:id - Delete a subject by ID
 router.delete('/:id', requireRole('FACULTY', 'HOD', 'ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = getRouteParam(req, 'id');
     const existing = await db.getSubjectById(id);
     if (!existing) {
       return res.status(404).json({ error: 'Subject not found.' });

@@ -95,9 +95,7 @@ export class DBService {
       this.setItem(KEYS.FINALIZED_AWARDS, []);
     }
 
-    // System accounts must be explicitly managed through PostgreSQL database, zero hardcoded credentials
-    localStorage.removeItem(KEYS.ADMIN_ACCOUNT);
-    localStorage.removeItem(KEYS.HOD_ACCOUNT);
+    // Account provisioning is explicit. Never seed accounts or rewrite stored credentials.
   }
 
   // --- Rate Limiting & Account Enumeration Defense ---
@@ -274,7 +272,10 @@ export class DBService {
     return targetStudent.year === facultySession.assignedYear && targetStudent.section === facultySession.assignedSection;
   }
 
-  public static async bulkImportStudents(newStudents: Omit<Student, 'id' | 'overallScore' | 'currentRank' | 'portalPasswordHash'>[], defaultPass = 'student123'): Promise<number> {
+  public static async bulkImportStudents(newStudents: Omit<Student, 'id' | 'overallScore' | 'currentRank' | 'portalPasswordHash'>[], defaultPass: string): Promise<number> {
+    if (typeof defaultPass !== 'string' || defaultPass.length < 6) {
+      throw new Error('An explicit portal password of at least 6 characters is required.');
+    }
     const list = this.getStudents();
     const defaultHash = await hashPassword(defaultPass);
     let imported = 0;

@@ -30,7 +30,7 @@ const db = {
       .filter(row => filters.role !== 'FACULTY' || filters.facultyId === row.assignedFacultyId);
   },
   addDisciplineIssue: async input => { assert.equal(requiresPrimaryDatabase(), true); saved.push(input); return { id: 'new-record', ...input }; },
-  deleteDisciplineIssue: async id => { deleted.push(id); return true; },
+  deleteDisciplineIssue: async (id, scope) => { assert.equal(scope.facultyId, 'f1'); assert.equal(scope.role, 'FACULTY'); deleted.push(id); return true; },
   logAudit: async () => { if (auditFails) throw new Error('isolated audit failure'); }
 };
 const authenticateToken = (req, res, next) => {
@@ -158,4 +158,16 @@ test('record list scope always comes from the authenticated identity', async () 
   const response = await request('/records?facultyId=f1&role=ADMIN', { id: 'f2' });
   assert.equal(response.status, 200);
   assert.deepEqual((await response.json()).records, []);
+});
+
+test('clients cannot forge the student identity, staff attribution, or faculty assignment on insert', async () => {
+  saved = [];
+  const response = await request('/records', { method: 'POST', body: {
+    registerNo: '001', issue: 'Late Arrival', studentId: 's2', recordedBy: 'forged',
+    assignedFacultyId: 'f2', assignedStaffName: 'forged', facultyId: 'f2', role: 'ADMIN'
+  } });
+  assert.equal(response.status, 201);
+  assert.equal(saved[0].studentId, 's1');
+  assert.equal(saved[0].assignedFacultyId, 'f1');
+  assert.equal(saved[0].recordedBy, 'Fixture Faculty (staff@example.invalid)');
 });

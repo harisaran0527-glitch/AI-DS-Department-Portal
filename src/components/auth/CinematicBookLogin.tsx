@@ -47,13 +47,12 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
     setShowPassword(false);
     setErrorMessage('');
     setAuthStatus('idle');
-
+    setRememberMe(false);
     localStorage.removeItem(`remembered_email_${portalRole.toLowerCase()}`);
     localStorage.removeItem('remembered_email_student');
     localStorage.removeItem('remembered_email_faculty');
     localStorage.removeItem('remembered_email_hod');
     localStorage.removeItem('remembered_email_admin');
-
     document.documentElement.classList.remove('light');
     document.documentElement.classList.add('dark');
     document.documentElement.setAttribute('data-theme', 'dark');
@@ -80,10 +79,8 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
     setErrorMessage('');
     setAuthStatus('loading');
 
-    localStorage.removeItem(`remembered_email_${portalRole.toLowerCase()}`);
-
     try {
-      const res = await API.login(identifier, password, portalRole);
+      const res = await API.login(identifier, password, portalRole, rememberMe);
 
       if (res && res.user) {
         setAuthenticatedName(res.user.name);
@@ -184,7 +181,7 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
                   </motion.div>
                 ) : (
                   /* THE REQUIRED LOGIN FORM PRINTED ON THE FINAL OPEN PAGE */
-                  <form onSubmit={handleLoginSubmit} className="w-full flex flex-col space-y-2.5">
+                  <form onSubmit={handleLoginSubmit} autoComplete="off" className="w-full flex flex-col space-y-2.5">
                     
                     {/* AVSEC SALEM & ROLE TITLE HEADER */}
                     <div className="flex flex-col items-center justify-center text-center space-y-1 mb-0.5">
@@ -219,8 +216,11 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
                         <input
                           type="text"
                           required
+                          id={`${portalRole.toLowerCase()}-identifier`}
                           placeholder={placeholderIdentifier}
                           value={identifier}
+                          name={`${portalRole.toLowerCase()}-identifier`}
+                          autoComplete="off"
                           onChange={(e) => setIdentifier(e.target.value)}
                           className="w-full bg-slate-950/90 border border-cyan-500/50 rounded-lg py-2.5 pl-12 pr-3 min-h-[44px] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-1 focus:ring-cyan-400/50 shadow-[0_0_10px_rgba(6,182,212,0.2)] transition-all"
                         />
@@ -237,8 +237,11 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
                         <input
                           type={showPassword ? 'text' : 'password'}
                           required
+                          id={`${portalRole.toLowerCase()}-password`}
                           placeholder="Enter password"
                           value={password}
+                          name={`${portalRole.toLowerCase()}-password`}
+                          autoComplete="new-password"
                           onChange={(e) => setPassword(e.target.value)}
                           className="w-full bg-slate-950/90 border border-cyan-500/50 rounded-lg py-2.5 pl-12 pr-12 min-h-[44px] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-1 focus:ring-cyan-400/50 shadow-[0_0_10px_rgba(6,182,212,0.2)] transition-all"
                         />

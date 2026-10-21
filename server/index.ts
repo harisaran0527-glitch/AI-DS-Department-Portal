@@ -42,7 +42,7 @@ app.use(
       if (!origin) {
         return callback(null, true);
       }
-      if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+      if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
       return callback(new Error(`Origin ${origin} not allowed by CORS`));
@@ -134,7 +134,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   const status = typeof err.status === 'number' && err.status >= 400 && err.status <= 599 ? err.status : 500;
   return res.status(status).json({
     success: false,
-    error: err.message || 'An internal server error occurred.',
+    error: status >= 500 ? 'An internal server error occurred. Please try again.' : (err.message || 'The request could not be processed.'),
     timestamp: new Date().toISOString()
   });
 });
@@ -153,8 +153,10 @@ if (!process.env.VERCEL && fs.existsSync(DIST_PATH)) {
 
 import { initSkillEdgeScheduler } from './services/skilledgeSync.js';
 import { pgPool } from './postgresAdapter.js';
+import { databaseReady } from './db.js';
 
-if (!process.env.VERCEL) {
+async function startLocalServer() {
+  await databaseReady;
   const server = app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`🚀 AI & DS Department Server listening on 0.0.0.0:${PORT}`);
     initSkillEdgeScheduler();
@@ -184,6 +186,13 @@ if (!process.env.VERCEL) {
 
   process.on('SIGTERM', () => handleShutdown('SIGTERM'));
   process.on('SIGINT', () => handleShutdown('SIGINT'));
+}
+
+if (!process.env.VERCEL) {
+  startLocalServer().catch((error) => {
+    console.error('[Startup] Database initialization failed; HTTP listener and schedulers were not started.', error);
+    process.exitCode = 1;
+  });
 }
 
 export default app;

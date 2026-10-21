@@ -74,13 +74,12 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
     setErrorMessage('');
     setAuthStatus('idle');
     setFocusedField(null);
-
+    setRememberMe(false);
     localStorage.removeItem(`remembered_email_${portalRole.toLowerCase()}`);
     localStorage.removeItem('remembered_email_student');
     localStorage.removeItem('remembered_email_faculty');
     localStorage.removeItem('remembered_email_hod');
     localStorage.removeItem('remembered_email_admin');
-
     document.documentElement.classList.remove('light');
     document.documentElement.classList.add('dark');
     document.documentElement.setAttribute('data-theme', 'dark');
@@ -100,10 +99,8 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
     setErrorMessage('');
     setAuthStatus('loading');
 
-    localStorage.removeItem(`remembered_email_${portalRole.toLowerCase()}`);
-
     try {
-      const res = await API.login(identifier, password, portalRole);
+      const res = await API.login(identifier, password, portalRole, rememberMe);
 
       if (res && res.user) {
         setAuthenticatedName(res.user.name);
@@ -279,6 +276,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
               <motion.form
                 key="form"
                 onSubmit={handleLoginSubmit}
+                autoComplete="off"
                 className="space-y-4"
               >
                 {/* ERROR MESSAGE ALERT */}
@@ -313,8 +311,11 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                       onChange={(e) => setIdentifier(e.target.value)}
                       onFocus={() => setFocusedField('identifier')}
                       onBlur={() => setFocusedField(null)}
+                      id={`${portalRole.toLowerCase()}-identifier`}
                       placeholder={placeholderIdentifier || "Enter your college email or ID"}
-                      autoComplete="username"
+                      name={`${portalRole.toLowerCase()}-identifier`}
+                      aria-label={placeholderIdentifier}
+                      autoComplete="off"
                     />
                     <div className="caret-glow" />
                   </div>
@@ -344,8 +345,11 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                       onChange={(e) => setPassword(e.target.value)}
                       onFocus={() => setFocusedField('password')}
                       onBlur={() => setFocusedField(null)}
+                      id={`${portalRole.toLowerCase()}-password`}
                       placeholder="Enter your password"
-                      autoComplete="current-password"
+                      name={`${portalRole.toLowerCase()}-password`}
+                      aria-label="Portal password"
+                      autoComplete="new-password"
                     />
                     <button
                       type="button"

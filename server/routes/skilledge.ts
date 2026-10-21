@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { db } from '../db.js';
 import { syncDepartmentSkillEdge, syncStudentSkillEdge } from '../services/skilledgeSync.js';
 import { normalizeEmail } from '../../scripts/skilledge_connector.js';
+import crypto from 'node:crypto';
+import { authenticateToken, requireRole } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -11,10 +13,14 @@ const router = Router();
  * Allows institutional local sync agent to securely push updated SkillEdge data to Neon PostgreSQL.
  */
 router.post('/sync-ingest', async (req: Request, res: Response) => {
-  const syncSecret = process.env.SKILLEDGE_SYNC_TOKEN || 'aids-skilledge-sync-secret';
+  const syncSecret = process.env.SKILLEDGE_SYNC_TOKEN;
   const clientSecret = req.headers['x-skilledge-sync-key'] || req.headers['authorization']?.replace('Bearer ', '');
 
-  if (clientSecret !== syncSecret && process.env.NODE_ENV === 'production') {
+  if (!syncSecret || Buffer.byteLength(syncSecret.trim()) < 32 || /^your_/i.test(syncSecret)) {
+    return res.status(503).json({ error: 'SkillEdge ingestion authentication is not configured.' });
+  }
+  if (typeof clientSecret !== 'string' || Buffer.byteLength(clientSecret) !== Buffer.byteLength(syncSecret) ||
+      !crypto.timingSafeEqual(Buffer.from(clientSecret), Buffer.from(syncSecret))) {
     return res.status(401).json({ error: 'Unauthorized: Invalid SkillEdge sync token.' });
   }
 
@@ -33,7 +39,7 @@ router.post('/sync-ingest', async (req: Request, res: Response) => {
     if (!normEmail) continue;
 
     const matchedStudent = students.find((s) => {
-      const stuEmail = normalizeEmail(s.email || s.college_email || s.personal_email);
+      const stuEmail = normalizeEmail(s.email || s.college_email || s.personal_email || '');
       return stuEmail === normEmail;
     });
 
@@ -71,7 +77,7 @@ router.post('/sync-ingest', async (req: Request, res: Response) => {
  * POST /api/skilledge/trigger-sync
  * Manual trigger for department-wide SkillEdge synchronization.
  */
-router.post('/trigger-sync', async (req: Request, res: Response) => {
+router.post('/trigger-sync', authenticateToken, requireRole('HOD', 'ADMIN'), async (req: Request, res: Response) => {
   try {
     const summary = await syncDepartmentSkillEdge('MANUAL_HOD');
     return res.json({

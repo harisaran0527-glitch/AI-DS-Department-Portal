@@ -1,11 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import { db, normalizeYear, normalizeSection } from '../db.js';
+import { withPrimaryDatabase } from '../databasePolicy.js';
+import { isJwtConfiguredForRuntime, isSessionRole, matchesCredentialVersion, sessionTokenDigest, verifySessionToken } from '../services/sessionTokens.js';
+import type { SessionClaims } from '../services/sessionTokens.js';
 
 dotenv.config();
 
-export const JWT_SECRET = process.env.JWT_SECRET || 'aids_system_secure_jwt_secret_token_key_2026';
+export { isJwtConfiguredForRuntime };
 
 export function isJwtConfiguredForRuntime(): boolean {
   return Boolean(process.env.JWT_SECRET?.trim()) ||
@@ -13,6 +15,7 @@ export function isJwtConfiguredForRuntime(): boolean {
 }
 
 export interface AuthRequest extends Request {
+  session?: { tokenDigest: string; claims: SessionClaims };
   user?: {
     id: string;
     email: string;
@@ -22,85 +25,87 @@ export interface AuthRequest extends Request {
     assignedSection?: string;
     registerNo?: string;
     studentId?: string;
+    requiresPasswordChange?: boolean;
   };
 }
 
+/** Named API parameters are scalar; Express 5 also types wildcard captures as arrays. */
+export function getRouteParam(req: Request, name: string): string {
+  const value = req.params[name];
+  if (typeof value !== 'string' || !value || value.length > 256) {
+    throw Object.assign(new Error('Invalid route parameter.'), { status: 400 });
+  }
+  return value;
+}
+
 export function authenticateToken(req: AuthRequest, res: Response, next: NextFunction) {
+  res.setHeader('Cache-Control', 'no-store');
   if (!isJwtConfiguredForRuntime()) {
     return res.status(503).json({ error: 'Authentication is not configured. Please contact the portal administrator.' });
   }
-  let authHeader = req.headers.authorization;
-  if (!authHeader && req.headers.Authorization && typeof req.headers.Authorization === 'string') {
-    authHeader = req.headers.Authorization;
+  const roleHeader = req.headers['x-portal-role'];
+  const portalRole = typeof roleHeader === 'string' ? roleHeader.trim().toUpperCase() : undefined;
+  if (roleHeader !== undefined && !isSessionRole(portalRole)) {
+    return res.status(401).json({ error: 'A valid portal role is required.' });
   }
-
-  let tokenFromHeader: string | undefined;
-  if (authHeader && typeof authHeader === 'string') {
-    const parts = authHeader.trim().split(/\s+/);
-    if (parts.length === 2 && parts[0].toLowerCase() === 'bearer') {
-      const candidate = parts[1].trim();
-      if (candidate && candidate !== 'null' && candidate !== 'undefined' && candidate !== '""' && candidate !== "''") {
-        tokenFromHeader = candidate;
-      }
-    }
-  }
-
-  // Determine target role strictly from request header or path prefix
-  const portalRole = (req.headers['x-portal-role'] as string || '').trim().toLowerCase();
   const path = (req.originalUrl || req.path || '').toLowerCase();
-
-  let targetRole: string | undefined = portalRole || undefined;
-  if (!targetRole) {
-    targetRole = path.match(/^\/(?:api\/)?(admin|hod|faculty|student)(?:\/|$)/)?.[1];
-  }
-
-  // Check role-specific cookie ONLY if Bearer header was not provided
-  let tokenFromCookie: string | undefined;
-  if (targetRole) {
-    switch (targetRole) {
-      case 'admin': tokenFromCookie = req.cookies?.aids_admin_token; break;
-      case 'hod': tokenFromCookie = req.cookies?.aids_hod_token; break;
-      case 'faculty': tokenFromCookie = req.cookies?.aids_faculty_token; break;
-      case 'student': tokenFromCookie = req.cookies?.aids_student_token; break;
-    }
+  const targetRole = portalRole || path.match(/^\/(?:api\/)?(admin|hod|faculty|student)(?:\/|$)/)?.[1]?.toUpperCase();
+  const authorization = req.headers.authorization;
+  let token: string | undefined;
+  let cookieAuthentication = false;
+  if (authorization !== undefined) {
+    const match = authorization.match(/^Bearer\s+(\S+)$/i);
+    if (!match) return res.status(401).json({ error: 'Invalid Authorization header.' });
+    token = match[1];
   } else {
-    // For shared paths (e.g. /files/:id, /files/:id/download, /files/record/...), accept any active portal session cookie
-    tokenFromCookie = req.cookies?.aids_faculty_token ||
-                      req.cookies?.aids_student_token ||
-                      req.cookies?.aids_hod_token ||
-                      req.cookies?.aids_admin_token;
+    const candidates = targetRole ? [req.cookies?.[`aids_${targetRole.toLowerCase()}_token`]] :
+      ['faculty', 'student', 'hod', 'admin'].map(role => req.cookies?.[`aids_${role}_token`]).filter(Boolean);
+    if (candidates.length !== 1) return res.status(401).json({ error: 'Select a portal and sign in to continue.' });
+    token = candidates[0];
+    cookieAuthentication = true;
   }
-
-  // Priority: 1. Authorization: Bearer token (explicit in request header)
-  //           2. Role-specific HttpOnly cookie (aids_admin_token, aids_faculty_token, etc.)
-  //           3. URL query parameter (for direct browser file views and downloads)
-  const tokenFromQuery = (req.query?.token as string) || undefined;
-  const token = tokenFromHeader || tokenFromCookie || tokenFromQuery;
-
-  if (!token) {
-    return res.status(401).json({ error: 'Unauthorized: Missing authentication session token.' });
+  if (typeof token !== 'string' || !token || token.length > 8192) return res.status(401).json({ error: 'Missing or invalid session token.' });
+  if (cookieAuthentication && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    // Browser cookie mutations must originate from this app or its configured frontend.
+    const publicProtocol = process.env.NODE_ENV === 'production' || process.env.VERCEL ? 'https' : req.protocol;
+    const trustedOrigins = new Set([new URL(`${publicProtocol}://${req.get('host')}`).origin]);
+    if (process.env.FRONTEND_URL) {
+      try { trustedOrigins.add(new URL(process.env.FRONTEND_URL).origin); } catch { /* fail closed */ }
+    }
+    if (typeof req.headers.origin !== 'string' || !trustedOrigins.has(req.headers.origin)) {
+      return res.status(403).json({ error: 'A trusted application origin is required.' });
+    }
   }
-
+  let claims: SessionClaims;
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    if (decoded && decoded.role) {
-      decoded.role = String(decoded.role).trim().toUpperCase();
-    }
-
-    // Role Consistency Validation:
-    // If request explicitly declared a portal role (via X-Portal-Role header),
-    // verify that the provided token belongs to that exact role.
-    if (portalRole && decoded.role !== portalRole.toUpperCase()) {
-      return res.status(401).json({
-        error: `Unauthorized: Session token is for ${decoded.role}, but portal requires ${portalRole.toUpperCase()}. Please log in as ${portalRole.toUpperCase()}.`
-      });
-    }
-
-    req.user = decoded;
-    next();
+    claims = verifySessionToken(token);
   } catch {
     return res.status(401).json({ error: 'Unauthorized: Invalid or expired session token.' });
   }
+  if (portalRole && claims.role !== portalRole) return res.status(401).json({ error: 'This session belongs to a different portal.' });
+  // A cookie selected by its role name must contain a token for that same role.
+  if (cookieAuthentication && targetRole && claims.role !== targetRole) return res.status(401).json({ error: 'This cookie belongs to a different portal.' });
+  const tokenDigest = sessionTokenDigest(token);
+  return withPrimaryDatabase(async () => {
+    try {
+      const user = await db.getUserById(claims.id);
+      if (!user || Number(user.is_active) !== 1 || user.role.trim().toUpperCase() !== claims.role ||
+          typeof user.password_hash !== 'string' || !matchesCredentialVersion(claims.credentialVersion, user.password_hash) ||
+          await db.isSessionRevoked(tokenDigest)) {
+        return res.status(401).json({ error: 'This session is no longer authorized. Please sign in again.' });
+      }
+      req.user = { id: user.id, email: user.email, name: user.name, role: claims.role,
+        assignedYear: user.year, assignedSection: user.section,
+        registerNo: claims.role === 'STUDENT' ? user.identifier : undefined,
+        studentId: claims.role === 'STUDENT' ? user.id : undefined,
+        requiresPasswordChange: claims.requiresPasswordChange === true };
+      req.session = { tokenDigest, claims };
+    } catch (error) {
+      console.error('[Auth] Session validation unavailable', error);
+      return res.status(503).json({ error: 'Session validation is temporarily unavailable. Please try again.' });
+    }
+    return next();
+  });
 }
 
 export function requireRole(...roles: string[]) {
@@ -141,7 +146,7 @@ export async function verifyFacultySectionAccess(req: AuthRequest, res: Response
     (req.query?.studentId as string) ||
     (req.query?.id as string);
 
-  if (!targetStudentId) {
+  if (typeof targetStudentId !== 'string' || !targetStudentId || targetStudentId.length > 256) {
     return res.status(400).json({ error: 'Bad Request: Target Student ID missing.' });
   }
 
@@ -154,17 +159,17 @@ export async function verifyFacultySectionAccess(req: AuthRequest, res: Response
   const isWorkspaceStaff = targetStudent.faculty_workspace_id === req.user.id;
 
   // Derived from relational faculty_assignments
-  const facultyAssignment = await db.getFacultyAssignment(req.user.id);
-  const assignedYear = facultyAssignment ? facultyAssignment.year : req.user.assignedYear;
-  const assignedSection = facultyAssignment ? facultyAssignment.section : req.user.assignedSection;
+  const facultyAssignment = await db.getFacultyAssignment(req.user.id, { fresh: true });
+  const assignedYear = facultyAssignment?.is_active ? facultyAssignment.year : undefined;
+  const assignedSection = facultyAssignment?.is_active ? facultyAssignment.section : undefined;
 
   const cleanAssignedYear = normalizeYear(assignedYear);
   const cleanAssignedSec = normalizeSection(assignedSection);
   const cleanStudentYear = normalizeYear(targetStudent.year);
   const cleanStudentSec = normalizeSection(targetStudent.section);
 
-  const isYearMatch = !cleanAssignedYear || cleanAssignedYear === 'ALL' || cleanStudentYear === cleanAssignedYear;
-  const isSectionMatch = !cleanAssignedSec || cleanAssignedSec === 'ALL' || cleanStudentSec === cleanAssignedSec;
+  const isYearMatch = Boolean(cleanAssignedYear && cleanAssignedYear !== 'ALL' && cleanStudentYear === cleanAssignedYear);
+  const isSectionMatch = Boolean(cleanAssignedSec && cleanAssignedSec !== 'ALL' && cleanStudentSec === cleanAssignedSec);
 
   if ((isYearMatch && isSectionMatch) || isCreatedByStaff || isWorkspaceStaff) {
     return next();
@@ -174,7 +179,6 @@ export async function verifyFacultySectionAccess(req: AuthRequest, res: Response
     error: `Forbidden: Access denied. Student (${targetStudent.year} Section ${targetStudent.section}) is outside your assigned workspace (${assignedYear} Section ${assignedSection}).`
   });
 
-  next();
 }
 
 // Server-Side Authorization: Lockout Student Mutation Attempts (100% View-Only)

@@ -6,21 +6,16 @@ import {
   Search,
   Code,
   BookOpen,
-  Award,
   Trophy,
   FileCheck,
   FileText,
-  ExternalLink,
-  CheckCircle2,
   AlertCircle,
   Filter,
   User,
   Star,
-  Download,
   Edit3,
   X,
   Check,
-  ShieldCheck,
   Trash2,
   PlusCircle,
   Sparkles,
@@ -126,8 +121,7 @@ export const BestEliteStudentsView: React.FC<BestEliteStudentsViewProps> = ({
   userRole,
   assignedYear,
   assignedSection,
-  selectedCategory: propCategory,
-  onSelectStudent
+  selectedCategory: propCategory
 }) => {
   const [allStudents, setAllStudents] = useState<Student[]>([]);
   const [student360Map, setStudent360Map] = useState<Record<string, any>>({});
@@ -145,8 +139,8 @@ export const BestEliteStudentsView: React.FC<BestEliteStudentsViewProps> = ({
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [yearFilter, setYearFilter] = useState<string>(assignedYear || 'ALL');
-  const [sectionFilter, setSectionFilter] = useState<string>(assignedSection || 'ALL');
+  const [yearFilter] = useState<string>(assignedYear || 'ALL');
+  const [sectionFilter] = useState<string>(assignedSection || 'ALL');
 
   // Management Modal & Selected Profile Modal State
   const [showManageModal, setShowManageModal] = useState<boolean>(false);

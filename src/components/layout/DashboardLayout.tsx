@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, LogOut, ShieldCheck, UserCheck, GraduationCap, Crown, Sparkles, ChevronDown, ChevronRight } from 'lucide-react';
+import { Menu, X, LogOut, Sparkles, ChevronDown, ChevronRight } from 'lucide-react';
 
 export type MenuItem = {
   id: string;

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { API } from '../../services/api';
-import type { Subject, Student } from '../../types';
+import type { Student } from '../../types';
 import { SubjectManagement } from './SubjectManagement';
 import {
   BookOpen,
@@ -13,16 +13,11 @@ import {
   X,
   Loader2,
   Search,
-  Filter,
   RefreshCw,
   GraduationCap,
   Download,
   ListOrdered,
-  Layers,
-  ChevronRight,
-  UserCheck,
-  Check,
-  Sparkles
+  ChevronRight
 } from 'lucide-react';
 
 interface AcademicsModuleProps {

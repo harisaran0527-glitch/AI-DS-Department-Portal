@@ -36,15 +36,15 @@ export const DisciplineLogin: React.FC = () => {
           <img src="/images/avsec-salem-logo.png" alt="AVS Engineering College" />
           <h2 id="discipline-title">Discipline Portal</h2>
           <p className="discipline-login-subtitle">Discipline Register Access</p>
-          <form onSubmit={submit}>
+          <form onSubmit={submit} autoComplete="off">
             <label htmlFor="discipline-email">Registered Email</label>
-            <input id="discipline-email" type="email" autoComplete="username" placeholder="Enter registered email"
+            <input id="discipline-email" name="discipline-identifier" type="email" autoComplete="off" placeholder="Enter registered email"
               required value={email} onChange={event => setEmail(event.target.value)} disabled={pending} />
             <label htmlFor="discipline-password">Password</label>
-            <input id="discipline-password" type="password" autoComplete="current-password" placeholder="Enter portal password" required
+            <input id="discipline-password" name="discipline-password" type="password" autoComplete="new-password" required
               value={password} onChange={event => setPassword(event.target.value)} disabled={pending} />
             <label htmlFor="discipline-role">Select Role</label>
-            <select id="discipline-role" value={role} onChange={event => setRole(event.target.value as typeof role)} disabled={pending}>
+            <select id="discipline-role" value={role} onChange={event => { setRole(event.target.value as typeof role); setEmail(''); setPassword(''); setError(''); }} disabled={pending}>
               <option value="FACULTY">Faculty</option><option value="ADMIN">Admin</option>
             </select>
             {error && <p className="discipline-login-error" role="alert">{error}</p>}

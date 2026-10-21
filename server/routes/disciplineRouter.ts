@@ -27,7 +27,7 @@ export function createDisciplineRouter({ db, authenticateToken, requireRole, nor
     if (!text(req.user?.id)) return res.status(401).json({ error: 'A valid staff session is required.' });
     try {
       const user = await db.getUserById(req.user!.id);
-      if (!user || !user.is_active || text(user.role).toUpperCase() !== req.user!.role) {
+      if (!user || Number(user.is_active) !== 1 || text(user.role).toUpperCase() !== req.user!.role) {
         return res.status(403).json({ error: 'This staff session is no longer authorized.' });
       }
       // Use current authoritative identity for audit attribution, not stale token display fields.
@@ -45,8 +45,8 @@ export function createDisciplineRouter({ db, authenticateToken, requireRole, nor
     const facultyId = req.user?.id;
     if (!facultyId || req.user?.role !== 'FACULTY') return false;
     if (student.created_by_faculty_id === facultyId || student.faculty_workspace_id === facultyId) return true;
-    const assignment = await db.getFacultyAssignment(facultyId);
-    if (!assignment?.is_active) return false;
+    const assignment = await db.getFacultyAssignment(facultyId, { fresh: true });
+    if (!assignment || Number(assignment.is_active) !== 1) return false;
     const year = normalizeYear(assignment.year);
     const section = normalizeSection(assignment.section);
     // Missing or wildcard assignments must not turn into unrestricted access.
@@ -192,7 +192,7 @@ export function createDisciplineRouter({ db, authenticateToken, requireRole, nor
       if (!visibleRecords.some(record => record.id === id)) {
         return res.status(404).json({ error: 'Discipline record not found in your authorized workspace.' });
       }
-      if (!await db.deleteDisciplineIssue(id)) return res.status(404).json({ error: 'Discipline record not found.' });
+      if (!await db.deleteDisciplineIssue(id, { facultyId: req.user!.id, role: req.user!.role })) return res.status(404).json({ error: 'Discipline record not found.' });
       try {
         await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'DELETE_DISCIPLINE_RECORD', `RECORD:${id}`);
       } catch (error) { console.error('[Discipline] Audit write failed after deletion', error); }

@@ -53,8 +53,10 @@ export const DisciplineIssuePage: React.FC = () => {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <span>{session.name} · {session.role}</span>
           <button type="button" className="rounded-lg bg-slate-800 px-4 py-2" onClick={async () => {
-            await API.logout(session.role);
-            navigate('/discipline/login', { replace: true });
+            try {
+              await API.logout(session.role);
+              navigate('/discipline/login', { replace: true });
+            } catch (error) { alert(error instanceof Error ? error.message : 'Sign out could not be completed. Please try again.'); }
           }}>Sign Out</button>
         </div>
         <DisciplineIssueModule

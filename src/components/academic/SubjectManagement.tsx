@@ -6,7 +6,6 @@ import type { Subject } from '../../types';
 import {
   BookOpen,
   Search,
-  Filter,
   Check,
   AlertCircle,
   Loader2,

@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { db } from '../db.js';
-import { authenticateToken, requireRole, AuthRequest } from '../middleware/auth.js';
+import { authenticateToken, requireRole, AuthRequest, getRouteParam } from '../middleware/auth.js';
 import {
   calculateCategoryScores,
   computeOverallScore,
@@ -55,7 +55,7 @@ router.get('/faculty-list', async (req: AuthRequest, res: Response) => {
 
 // PUT HOD Faculty Assignment (Assign Faculty -> Year + Section)
 router.put('/faculty-assignments/:id', async (req: AuthRequest, res: Response) => {
-  const { id } = req.params;
+  const id = getRouteParam(req, 'id');
   const { year, section, role } = req.body || {};
 
   const facultyUser = await db.getUserById(id);
@@ -76,7 +76,7 @@ router.put('/faculty-assignments/:id', async (req: AuthRequest, res: Response) =
 });
 
 router.put('/faculty/:id', async (req: AuthRequest, res: Response) => {
-  const { id } = req.params;
+  const id = getRouteParam(req, 'id');
   const { year, section, role } = req.body || {};
 
   const facultyUser = await db.getUserById(id);
@@ -421,7 +421,7 @@ router.post('/students/:studentId/update-profile', async (req: AuthRequest, res:
 
 // GET single student 360 profile for HOD (department wide)
 router.get('/students/:studentId/360', async (req: AuthRequest, res: Response) => {
-  const { studentId } = req.params;
+  const studentId = getRouteParam(req, 'studentId');
   const full360 = await db.getStudent360(studentId);
 
   if (!full360) {
@@ -689,7 +689,7 @@ router.get('/award-candidates-v2', async (req: AuthRequest, res: Response) => {
 // POST HOD Action on Award Candidate (APPROVE / REJECT)
 router.post('/awards/:studentId/action', async (req: AuthRequest, res: Response) => {
   try {
-    const { studentId } = req.params;
+    const studentId = getRouteParam(req, 'studentId');
     let { action, awardTitle, reason, remarks } = req.body || {};
 
     if (typeof action === 'object' && action !== null) {
@@ -748,7 +748,7 @@ router.post('/awards/:studentId/action', async (req: AuthRequest, res: Response)
 
 // DELETE Finalized Award by HOD
 router.delete('/awards/:awardId', async (req: AuthRequest, res: Response) => {
-  const { awardId } = req.params;
+  const awardId = getRouteParam(req, 'awardId');
   await db.deleteFinalizedAward(awardId);
   await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'DELETE_FINALIZED_AWARD', `AWARD:${awardId}`);
   return res.json({ message: 'Finalized award deleted successfully.' });
@@ -761,7 +761,7 @@ router.post('/students/:studentId/records/:recordType', async (req: AuthRequest,
 
 // GET dedicated individual faculty workspace details for HOD inspection
 router.get('/faculty/:facultyId', async (req: AuthRequest, res: Response) => {
-  const { facultyId } = req.params;
+  const facultyId = getRouteParam(req, 'facultyId');
   const facultyUser = await db.getUserById(facultyId);
 
   if (!facultyUser || facultyUser.role !== 'FACULTY') {
