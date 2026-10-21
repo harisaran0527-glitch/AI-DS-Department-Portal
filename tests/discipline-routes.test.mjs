@@ -13,6 +13,7 @@ const owned = { id: 's1', registerNo: '001', name: 'Fixture Student', email: 'fi
 const outside = { ...owned, id: 's2', registerNo: '002', created_by_faculty_id: 'f2', section: 'B' };
 let saved = [];
 let deleted = [];
+let updated = [];
 let auditFails = false;
 let recordsFail = false;
 let assignment;
@@ -65,13 +66,13 @@ async function request(path, { role = 'FACULTY', id, method = 'GET', body, cooki
 
 test('every discipline endpoint rejects unauthenticated access before reaching data', async () => {
   for (const [path, method] of [['/records', 'GET'], ['/students/search?q=Fixture', 'GET'],
-    ['/lookup-student/001', 'GET'], ['/records', 'POST'], ['/records/r1', 'DELETE']]) {
+    ['/lookup-student/001', 'GET'], ['/records', 'POST'], ['/records/r1', 'PUT'], ['/records/r1', 'DELETE']]) {
     assert.equal((await request(path, { role: null, method })).status, 401);
   }
 });
 test('student sessions cannot read or mutate staff discipline routes', async () => {
-  for (const method of ['GET', 'POST', 'DELETE']) {
-    assert.equal((await request(method === 'DELETE' ? '/records/r1' : '/records', { role: 'STUDENT', method })).status, 403);
+  for (const method of ['GET', 'POST', 'PUT', 'DELETE']) {
+    assert.equal((await request(method === 'DELETE' || method === 'PUT' ? '/records/r1' : '/records', { role: 'STUDENT', method })).status, 403);
   }
 });
 test('role-scoped cookie sessions work and private responses forbid caching', async () => {
@@ -153,6 +154,31 @@ test('authorized insert and deletion retain their response contracts', async () 
   assert.equal(saved[0].studentId, 's1');
   assert.equal((await request('/records/r1', { method: 'DELETE' })).status, 200);
   assert.deepEqual(deleted, ['r1']);
+});
+test('authorized faculty can update an in-scope incident and persist its status', async () => {
+  updated = [];
+  const response = await request('/records/r1', { method: 'PUT', body: {
+    issue: 'Late Arrival', ruleViolated: 'Rule 2', actionTaken: 'Warning issued',
+    fineAmount: 0, fineDetails: '', remarks: 'Fixture update', date: '2026-10-01',
+    time: '09:15', status: 'RESOLVED'
+  } });
+  assert.equal(response.status, 200);
+  assert.deepEqual(updated, [{
+    id: 'r1', date: '2026-10-01', time: '09:15', category: 'Late Arrival',
+    ruleViolated: 'Rule 2', actionTaken: 'Warning issued', fineAmount: 0,
+    fineDetails: '', remark: 'Fixture update', status: 'RESOLVED'
+  }]);
+  assert.equal((await request('/records/outside', { method: 'PUT', body: {
+    issue: 'Late Arrival', ruleViolated: '', actionTaken: '', fineAmount: 0,
+    fineDetails: '', remarks: '', date: '2026-10-01', time: '09:15', status: 'OPEN'
+  } })).status, 404);
+});
+test('invalid incident status cannot be written', async () => {
+  const response = await request('/records/r1', { method: 'PUT', body: {
+    issue: 'Late Arrival', ruleViolated: '', actionTaken: '', fineAmount: 0,
+    fineDetails: '', remarks: '', date: '2026-10-01', time: '09:15', status: 'FORGED'
+  } });
+  assert.equal(response.status, 400);
 });
 test('record list scope always comes from the authenticated identity', async () => {
   const response = await request('/records?facultyId=f1&role=ADMIN', { id: 'f2' });

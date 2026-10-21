@@ -27,6 +27,7 @@ import {
   Crown,
   Download,
   XCircle,
+  ShieldAlert,
 } from 'lucide-react';
 
 import { ForgotPasswordModal } from '../../components/common/ForgotPasswordModal';
@@ -36,6 +37,7 @@ import { GeminiTopRecognitionView } from '../../components/ranking/GeminiTopReco
 import { GeminiCategoryBestPerformerCard } from '../../components/ranking/GeminiCategoryBestPerformerCard';
 import { GeminiFullLeetCodeDashboard } from '../../components/ranking/GeminiFullLeetCodeDashboard';
 import { StudentAiRewardCard } from '../../components/ranking/StudentAiRewardCard';
+import { StudentDisciplineView } from '../../components/discipline/StudentDisciplineView';
 import { getNptelUrlForStudent } from '../../services/nptelUrlHelper';
 
 export const StudentDashboard: React.FC = () => {
@@ -179,6 +181,7 @@ export const StudentDashboard: React.FC = () => {
     { id: 'skilledge', label: 'SkillEdge', icon: Code },
     { id: 'nptel', label: 'NPTEL', icon: FileCheck },
     { id: 'attendance', label: 'Attendance', icon: Calendar },
+    { id: 'discipline', label: 'Discipline', icon: ShieldAlert },
     { id: 'certificates', label: 'Certificates', icon: FileText },
     { id: 'participation', label: 'Participation', icon: Users },
     { id: 'leetcode', label: 'LeetCode', icon: Code },
@@ -254,6 +257,8 @@ export const StudentDashboard: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {activeTab === 'discipline' && <StudentDisciplineView records={_discipline} />}
 
         {(activeTab === 'dashboard' || activeTab === 'awards') && (
           <StudentAiRewardCard studentId={student.id} />

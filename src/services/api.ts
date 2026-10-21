@@ -1301,7 +1301,16 @@ export const API = {
   },
 
   searchDisciplineStudents: async (query: string) => {
-    return request<{ students: any[] }>(`/discipline/students/search?q=${encodeURIComponent(query)}`);
+    return request<{ students: Array<{
+      id: string;
+      registerNo: string;
+      name: string;
+      email: string;
+      year: string;
+      section: string;
+      department: string;
+      assignedStaffName?: string;
+    }> }>(`/discipline/students/search?q=${encodeURIComponent(query)}`);
   },
 
   getDisciplineRecords: async (params?: { registerNo?: string; year?: string; section?: string; issue?: string; search?: string }) => {
@@ -1325,6 +1334,7 @@ export const API = {
     remarks?: string;
     date?: string;
     time?: string;
+    status?: 'OPEN' | 'UNDER_REVIEW' | 'RESOLVED';
   }) => {
     return request<{ message: string; record: any }>('/discipline/records', {
       method: 'POST',
@@ -1332,8 +1342,25 @@ export const API = {
     });
   },
 
+  updateDisciplineRecord: async (id: string, recordData: {
+    issue: string;
+    ruleViolated: string;
+    actionTaken: string;
+    fineAmount: number;
+    fineDetails: string;
+    remarks: string;
+    date: string;
+    time: string;
+    status: 'OPEN' | 'UNDER_REVIEW' | 'RESOLVED';
+  }) => {
+    return request<{ message: string }>(`/discipline/records/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(recordData)
+    });
+  },
+
   deleteDisciplineRecord: async (id: string) => {
-    return request<{ message: string }>(`/discipline/records/${id}`, {
+    return request<{ message: string }>(`/discipline/records/${encodeURIComponent(id)}`, {
       method: 'DELETE'
     });
   }

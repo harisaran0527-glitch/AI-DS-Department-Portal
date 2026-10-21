@@ -176,6 +176,7 @@ export async function initDatabaseSchema(): Promise<void> {
       remark TEXT NOT NULL,
       warning_action TEXT NOT NULL,
       recorded_by TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'OPEN',
       FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
     );
 
@@ -545,6 +546,7 @@ export async function initDatabaseSchema(): Promise<void> {
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS assigned_faculty_id TEXT;`,
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS assigned_staff_name TEXT;`,
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS created_at TEXT;`,
+        `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'OPEN';`,
         `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS company_name TEXT;`,
         `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS proof_file_path TEXT;`,
         `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS created_at TEXT;`,
@@ -608,6 +610,7 @@ export async function initDatabaseSchema(): Promise<void> {
       `ALTER TABLE discipline_records ADD COLUMN action_taken TEXT;`,
       `ALTER TABLE discipline_records ADD COLUMN rule_violated TEXT;`,
       `ALTER TABLE discipline_records ADD COLUMN fine_details TEXT;`,
+      `ALTER TABLE discipline_records ADD COLUMN status TEXT NOT NULL DEFAULT 'OPEN';`,
       `ALTER TABLE certificate_records ADD COLUMN company_name TEXT;`,
       `ALTER TABLE certificate_records ADD COLUMN proof_file_path TEXT;`,
       `ALTER TABLE certificate_records ADD COLUMN created_at TEXT;`,
@@ -2282,6 +2285,7 @@ export class SQLiteDB {
     fineAmount: number;
     fineDetails?: string;
     remark: string;
+    status?: 'OPEN' | 'UNDER_REVIEW' | 'RESOLVED';
     recordedBy: string;
     assignedFacultyId?: string | null;
     assignedStaffName?: string;
@@ -2294,9 +2298,9 @@ export class SQLiteDB {
 
     await executeRun(`
       INSERT INTO discipline_records (
-        id, student_id, date, time, category, rule_violated, remark, warning_action, action_taken, fine_amount, fine_details, recorded_by, assigned_faculty_id, assigned_staff_name, created_at
+        id, student_id, date, time, category, rule_violated, remark, warning_action, action_taken, fine_amount, fine_details, recorded_by, assigned_faculty_id, assigned_staff_name, created_at, status
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       id,
       data.studentId,
@@ -2312,7 +2316,8 @@ export class SQLiteDB {
       data.recordedBy || data.assignedStaffName || 'Faculty',
       data.assignedFacultyId || null,
       data.assignedStaffName || 'No Staff Assigned',
-      createdAt
+      createdAt,
+      data.status || 'OPEN'
     ]);
 
     return {
@@ -2326,6 +2331,7 @@ export class SQLiteDB {
       action_taken: data.actionTaken,
       fine_amount: fine,
       fine_details: data.fineDetails,
+      status: data.status || 'OPEN',
       recorded_by: data.recordedBy,
       assigned_faculty_id: data.assignedFacultyId || null,
       assigned_staff_name: data.assignedStaffName || 'No Staff Assigned',
@@ -2360,6 +2366,7 @@ export class SQLiteDB {
         d.assigned_faculty_id,
         d.assigned_staff_name,
         d.created_at,
+        d.status,
         s.register_no,
         s.name as student_name,
         s.email as college_email,
@@ -2438,6 +2445,7 @@ export class SQLiteDB {
       fineDetails: r.fine_details || '',
       remarks: r.remark || '',
       recordedBy: r.recorded_by,
+      status: r.status || 'OPEN',
       assignedFacultyId: r.assigned_faculty_id || null,
       assignedStaffName: r.assigned_staff_name || 'No Staff Assigned',
       createdAt: r.created_at || r.date

@@ -107,3 +107,26 @@ No commit, push, new repository, deployment, or production project creation was 
 ## Safe resumption
 
 Pause the other editing agent, inspect both agents' intended diffs together, and confirm a single writer before restoring the missing router. Preserve the original database syntax fix and auth scripts. Review and connect the backend policy, rerun security tests, resolve production startup with actual logs, obtain authorized source backups/export/accounts, and then complete source-faithful implementation and reconciled migration. Production deployment and any new independent destination must follow the owner's stated verification and approval requirements.
+
+## Discipline portal implementation update — 21 October 2026
+
+This update supersedes the earlier paused/incomplete implementation status above for the Antigravity working tree only. It does not assert production integration or deployment.
+
+### Confirmed reference access
+
+The public reference currently renders its AVS Discipline Portal sign-in screen with Registered Email, Password, Faculty/Admin role selection, and Sign In. Authenticated reference dashboards and reports could not be inspected without an authorized account. The main student portal currently renders its student sign-in page; authenticated student data was not accessed. The public-source inventory above remains the source for additional fields and workflow details, subject to its stated verification limits.
+
+### Local implementation
+
+- Added an authorized student directory search by name/register number, year/section filters, and a student profile with incident history. Search and record APIs continue to apply current backend scope; faculty access is limited to ownership or active assigned year/section.
+- Added incident editing for category, date/time, description/remarks, action, fine details, and status. The API validates updates, rechecks staff identity and record scope, and records an audit event. Status values are Open, Under Review, and Resolved.
+- Added incident date-range reporting and a genuine `.xlsx` workbook export using the existing SheetJS dependency. Exports contain only records the authenticated API returned.
+- Added a student Discipline tab that displays the authenticated student's existing `getStudent360` discipline records as view-only. It has no mutation controls; the student API remains restricted to the student's own profile.
+- Added HOD to the standalone discipline sign-in role selector; existing HOD and Admin department-wide access still comes from the backend role authorization.
+- Added the additive discipline status column to the existing schema initializer. No initializer, migration, backend server, production record, or live database was run during this work.
+
+### Validation and limits
+
+The isolated workspace test runner passed 78 tests, including discipline route, authorization, scope, and in-memory persistence tests. Server/API syntax checking passed for 28 files. The prepared TypeScript check passed. The production frontend build passed; Vite reports the existing >500 kB JavaScript chunk warning. The local discipline login was smoke-checked in a browser at a 390px viewport. No production build was deployed.
+
+No protected reference screens were available, no live student/faculty/incident records were read or modified, and no production role session or deployment was tested. Final integration still requires production diagnosis, owner-authorized role verification, database schema review/approval for the new status column, and cross-branch review. This local change is not ready for deployment; it is ready for final code review/integration once those blockers are resolved.

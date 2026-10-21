@@ -11,7 +11,7 @@ memory.exec(`
     created_by_faculty_id TEXT, faculty_workspace_id TEXT);
   CREATE TABLE discipline_records (id TEXT, student_id TEXT, date TEXT, time TEXT, category TEXT, rule_violated TEXT,
     remark TEXT, warning_action TEXT, action_taken TEXT, fine_amount REAL, fine_details TEXT, recorded_by TEXT,
-    assigned_faculty_id TEXT, assigned_staff_name TEXT, created_at TEXT);
+    assigned_faculty_id TEXT, assigned_staff_name TEXT, created_at TEXT, status TEXT DEFAULT 'OPEN');
   CREATE TABLE faculty_assignments (faculty_id TEXT, year TEXT, section TEXT, is_active INTEGER);
 `);
 for (const [id, year, section, owner] of [['owned', '2nd Year', 'A', 'f1'], ['blank', '', '', 'f2'],

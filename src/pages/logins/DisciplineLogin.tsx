@@ -8,7 +8,7 @@ export const DisciplineLogin: React.FC = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'FACULTY' | 'ADMIN'>('FACULTY');
+  const [role, setRole] = useState<'FACULTY' | 'HOD' | 'ADMIN'>('FACULTY');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
 
