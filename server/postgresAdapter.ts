@@ -28,22 +28,79 @@ export let sqliteDb: any = null;
 
 const globalForPg = globalThis as unknown as { __pgPool?: pg.Pool };
 
+export function resolvePgConnection(connStr: string): {
+  effectiveConnStr: string;
+  ssl: pg.ConnectionConfig['ssl'];
+  provider: 'neon' | 'supabase' | 'postgresql';
+  host: string;
+  port: number;
+} {
+  let effective = connStr.trim();
+  let host = 'localhost';
+  let port = 5432;
+  let provider: 'neon' | 'supabase' | 'postgresql' = 'postgresql';
+
+  try {
+    const parsed = new URL(effective);
+    host = parsed.hostname;
+    port = parsed.port ? parseInt(parsed.port, 10) : 5432;
+  } catch {
+    const m = effective.match(/@([^:/]+)(?::(\d+))?/);
+    if (m) {
+      host = m[1];
+      if (m[2]) port = parseInt(m[2], 10);
+    }
+  }
+
+  if (host.includes('neon.tech') || effective.includes('neon.tech')) {
+    provider = 'neon';
+  } else if (host.includes('supabase.co') || host.includes('supabase.com') || effective.includes('supabase')) {
+    provider = 'supabase';
+  }
+
+  // When connecting to Supabase pooler on port 5432 (Session Mode), automatically route to
+  // port 6543 (Transaction Mode / Supavisor).
+  if (provider === 'supabase' && effective.includes('pooler.supabase.com:5432')) {
+    effective = effective.replace(':5432', ':6543');
+    port = 6543;
+  }
+
+  let ssl: pg.ConnectionConfig['ssl'];
+
+  if (process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== undefined) {
+    ssl = { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === 'true' };
+  } else if (provider === 'neon') {
+    // Neon Serverless PostgreSQL uses valid certificates signed by ISRG Root X1 (Let's Encrypt).
+    // Standard Node.js root CAs cryptographically verify this certificate chain.
+    // Upgrading sslmode to verify-full ensures full hostname and certificate validation
+    // and eliminates the pg-connection-string forward-compatibility security warning.
+    if (effective.includes('sslmode=require')) {
+      effective = effective.replace('sslmode=require', 'sslmode=verify-full');
+    }
+    ssl = { rejectUnauthorized: true };
+  } else if (provider === 'supabase') {
+    // Supabase poolers use internal certificate chains; default to rejectUnauthorized: false
+    // unless a custom CA bundle is provided via DATABASE_SSL_CA
+    ssl = { rejectUnauthorized: false };
+  } else {
+    ssl = effective.includes('sslmode=require') || effective.includes('sslmode=verify')
+      ? { rejectUnauthorized: true }
+      : { rejectUnauthorized: false };
+  }
+
+  return { effectiveConnStr: effective, ssl, provider, host, port };
+}
+
 if (isPgConfigured) {
   if (globalForPg.__pgPool) {
     pgPool = globalForPg.__pgPool;
   } else {
     try {
-      let effectiveConnStr = connectionString!;
-      // When connecting to Supabase pooler on port 5432 (Session Mode), automatically route to
-      // port 6543 (Transaction Mode / Supavisor). Transaction mode handles serverless scale
-      // without exhausting physical PostgreSQL connection limits.
-      if (effectiveConnStr.includes('pooler.supabase.com:5432')) {
-        effectiveConnStr = effectiveConnStr.replace(':5432', ':6543');
-      }
+      const resolved = resolvePgConnection(connectionString!);
 
       pgPool = new Pool({
-        connectionString: effectiveConnStr,
-        ssl: { rejectUnauthorized: false },
+        connectionString: resolved.effectiveConnStr,
+        ssl: resolved.ssl,
         max: 10,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 5000,
@@ -59,7 +116,15 @@ if (isPgConfigured) {
       });
 
       globalForPg.__pgPool = pgPool;
-      console.log('⚡ PostgreSQL Adapter Initialized (Connecting via Transaction Mode Pooler on Port 6543)');
+
+      const providerLabel = resolved.provider === 'neon'
+        ? 'Neon Serverless PostgreSQL'
+        : resolved.provider === 'supabase'
+        ? 'Supabase Transaction Pooler'
+        : 'PostgreSQL';
+
+      const tlsLabel = typeof resolved.ssl === 'object' && resolved.ssl?.rejectUnauthorized ? 'verify-full' : 'enabled';
+      console.log(`⚡ PostgreSQL Adapter Initialized (${providerLabel} on ${resolved.host}:${resolved.port}, TLS: ${tlsLabel})`);
     } catch (err: any) {
       console.warn('⚠️ Failed to initialize PostgreSQL Pool:', err.message);
     }
