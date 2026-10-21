@@ -2680,8 +2680,6 @@ export class SQLiteDB {
     ]);
     return true;
   }
-    return true;
-  }
 
   public async addParticipationRecord(rec: { studentId: string; eventName: string; organizer?: string }): Promise<string> {
     const id = `part-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
