@@ -45,7 +45,7 @@ export const CinematicBookLogin: React.FC<CinematicBookLoginProps> = ({
     setIdentifier('');
     setPassword('');
     setShowPassword(false);
-    setErrorMessage('');
+setErrorMessage('');
     setAuthStatus('idle');
     setRememberMe(false);
     localStorage.removeItem(`remembered_email_${portalRole.toLowerCase()}`);

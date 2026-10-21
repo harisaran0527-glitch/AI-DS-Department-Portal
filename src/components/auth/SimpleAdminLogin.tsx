@@ -22,7 +22,7 @@ export const SimpleAdminLogin: React.FC = () => {
     setIdentifier('');
     setPassword('');
     setShowPassword(false);
-    setErrorMessage('');
+setErrorMessage('');
     setAuthStatus('idle');
     setRememberMe(false);
     localStorage.removeItem('remembered_email_admin');
@@ -137,6 +137,7 @@ export const SimpleAdminLogin: React.FC = () => {
                   disabled={authStatus === 'loading'}
                   placeholder="Enter admin email or ID"
                   value={identifier}
+name="admin-identifier"
                   aria-label="Admin email or ID"
                   autoComplete="off"
                   onChange={(e) => setIdentifier(e.target.value)}
@@ -160,6 +161,7 @@ export const SimpleAdminLogin: React.FC = () => {
                   disabled={authStatus === 'loading'}
                   placeholder="Enter admin password"
                   value={password}
+name="admin-password"
                   aria-label="Admin portal password"
                   autoComplete="new-password"
                   onChange={(e) => setPassword(e.target.value)}

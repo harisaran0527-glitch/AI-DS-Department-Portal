@@ -35,6 +35,19 @@ export function isolateServer(database, modules = {}, { loadRealDatabase = false
         export const db = globalThis.__isolatedServerDatabase;
         export const normalizeYear = value => ({I:'1st Year',II:'2nd Year',III:'3rd Year',IV:'4th Year'}[value] || value || '');
         export const normalizeSection = value => String(value || '').trim().toUpperCase();
+        export const normalizeStudentRecord = stu => stu ? ({
+          ...stu,
+          registerNo: (stu.register_no || stu.registerNo || '').trim(),
+          register_no: (stu.register_no || stu.registerNo || '').trim(),
+          collegeEmail: (stu.email || stu.collegeEmail || stu.college_email || '').trim(),
+          college_email: (stu.email || stu.collegeEmail || stu.college_email || '').trim(),
+          classCoordinatorName: stu.class_coordinator_name || stu.classCoordinatorName || 'Assigned Faculty',
+          class_coordinator_name: stu.class_coordinator_name || stu.classCoordinatorName || 'Assigned Faculty',
+          overallScore: stu.overall_score !== undefined ? stu.overall_score : (stu.overallScore || 0),
+          overall_score: stu.overall_score !== undefined ? stu.overall_score : (stu.overallScore || 0),
+          currentRank: stu.current_rank !== undefined ? stu.current_rank : (stu.currentRank || 99),
+          current_rank: stu.current_rank !== undefined ? stu.current_rank : (stu.currentRank || 99),
+        }) : null;
         export class SQLiteDB {}
       ` };
       if (url.startsWith('file:') && /\.tsx?$/.test(url)) {

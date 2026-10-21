@@ -67,7 +67,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
     setIdentifier('');
     setPassword('');
     setShowPassword(false);
-    setErrorMessage('');
+setErrorMessage('');
     setAuthStatus('idle');
     setFocusedField(null);
     setRememberMe(false);
@@ -291,6 +291,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                       onFocus={() => setFocusedField('identifier')}
                       onBlur={() => setFocusedField(null)}
                       placeholder={placeholderIdentifier || "Enter your college email or ID"}
+name={`${portalRole.toLowerCase()}-identifier`}
                       aria-label={placeholderIdentifier}
                       autoComplete="off"
                     />
@@ -323,6 +324,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                       onFocus={() => setFocusedField('password')}
                       onBlur={() => setFocusedField(null)}
                       placeholder="Enter your password"
+name={`${portalRole.toLowerCase()}-password`}
                       aria-label="Portal password"
                       autoComplete="new-password"
                     />

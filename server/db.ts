@@ -1654,7 +1654,7 @@ export class SQLiteDB {
 
       if (!singleRow || !singleRow.student) return null;
 
-      student = singleRow.student;
+      student = (normalizeStudentRecord(singleRow.student) as StudentRecord) || singleRow.student;
       academicsRaw = singleRow.academics_raw || [];
       arrears = singleRow.arrears || [];
       skillRaw = singleRow.skill_raw || null;

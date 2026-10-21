@@ -43,10 +43,10 @@ app.use(
       if (!origin) {
         return callback(null, true);
       }
-      if (allowedOrigins.includes(origin)) {
+      if (allowedOrigins.includes(origin) || (process.env.NODE_ENV !== 'production' && /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(origin))) {
         return callback(null, true);
       }
-      return callback(new Error(`Origin ${origin} not allowed by CORS`));
+      return callback(new Error(Origin  not allowed by CORS));
     },
     credentials: true
   })
@@ -99,31 +99,31 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
-// API Routes (Mounted on both /api and direct root for Vercel Serverless Function compatibility)
+// Production & Preview Static Serving if client dist exists (SPA client routing)
+const DIST_PATH = path.resolve(process.cwd(), 'dist');
+if (!process.env.VERCEL && fs.existsSync(DIST_PATH)) {
+  app.use(express.static(DIST_PATH));
+  app.use((req, res, next) => {
+    if (req.method === 'GET' && !req.path.startsWith('/api')) {
+      return res.sendFile(path.join(DIST_PATH, 'index.html'));
+    }
+    next();
+  });
+}
+
+// API Routes (Mounted under /api)
 app.use('/api/auth', authRoutes);
-app.use('/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/admin', adminRoutes);
 app.use('/api/faculty', facultyRoutes);
-app.use('/faculty', facultyRoutes);
 app.use('/api/hod', hodRoutes);
-app.use('/hod', hodRoutes);
 app.use('/api/student', studentRoutes);
-app.use('/student', studentRoutes);
 app.use('/api/files', filesRoutes);
-app.use('/files', filesRoutes);
 app.use('/api/subjects', subjectsRoutes);
-app.use('/subjects', subjectsRoutes);
 app.use('/api/rankings', rankingsRoutes);
-app.use('/rankings', rankingsRoutes);
 app.use('/api/skilledge', skilledgeRoutes);
-app.use('/skilledge', skilledgeRoutes);
 app.use('/api/discipline', disciplineRoutes);
-app.use('/discipline', disciplineRoutes);
 app.use('/api/discipline-portal/auth', disciplinePortalAuthRouter);
-app.use('/discipline-portal/auth', disciplinePortalAuthRouter);
 app.use('/api/discipline-portal', disciplinePortalRouter);
-app.use('/discipline-portal', disciplinePortalRouter);
 
 // Health check endpoint (Responds to /api/health, /health, and root /api)
 app.get(['/api/health', '/health', '/api', '/'], (req, res) => {
@@ -143,18 +143,6 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
     timestamp: new Date().toISOString()
   });
 });
-
-// Production & Preview Static Serving if client dist exists
-const DIST_PATH = path.resolve(process.cwd(), 'dist');
-if (!process.env.VERCEL && fs.existsSync(DIST_PATH)) {
-  app.use(express.static(DIST_PATH));
-  app.use((req, res, next) => {
-    if (req.method === 'GET' && !req.path.startsWith('/api')) {
-      return res.sendFile(path.join(DIST_PATH, 'index.html'));
-    }
-    next();
-  });
-}
 
 import { initSkillEdgeScheduler } from './services/skilledgeSync.js';
 import { pgPool } from './postgresAdapter.js';

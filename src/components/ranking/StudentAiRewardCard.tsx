@@ -71,7 +71,6 @@ export const StudentAiRewardCard: React.FC<{ studentId?: string }> = ({ studentI
   }
 
   const {
-    totalPoints,
     categoryPoints,
     activitiesConsidered,
     evidenceSources,
@@ -82,8 +81,19 @@ export const StudentAiRewardCard: React.FC<{ studentId?: string }> = ({ studentI
     confidenceScore
   } = rewardData;
 
+  const totalScorePoints = rewardData.totalRewardScore ?? rewardData.totalPoints ?? 0;
+  const confidenceDisplay = typeof confidenceScore === 'number' && confidenceScore <= 1
+    ? Math.round(confidenceScore * 100)
+    : (confidenceScore || 96);
+  const evidenceList: string[] = Array.isArray(evidenceSources)
+    ? evidenceSources
+    : typeof evidenceSources === 'object' && evidenceSources !== null
+      ? Object.values(evidenceSources)
+      : [];
+
   const categoryIcons: Record<string, any> = {
     academics: BookOpen,
+    academic: BookOpen,
     nptel: FileCheck,
     leetcode: Code,
     projects: Trophy,
@@ -92,6 +102,8 @@ export const StudentAiRewardCard: React.FC<{ studentId?: string }> = ({ studentI
     participation: Award,
     attendance: Calendar,
     discipline: ShieldCheck,
+    certificates: FileText,
+    skilledge: Code,
     skills: Code
   };
 
@@ -137,7 +149,7 @@ export const StudentAiRewardCard: React.FC<{ studentId?: string }> = ({ studentI
         <div className="flex items-center space-x-3">
           <div className="text-right">
             <div className="text-[10px] text-slate-400 uppercase font-mono font-bold">Total Reward Score</div>
-            <div className="text-2xl font-extrabold text-amber-400 font-mono">{totalPoints} <span className="text-xs text-slate-400 font-normal">pts</span></div>
+            <div className="text-2xl font-extrabold text-amber-400 font-mono">{totalScorePoints} <span className="text-xs text-slate-400 font-normal">pts</span></div>
           </div>
           <button
             onClick={fetchReward}
@@ -169,13 +181,13 @@ export const StudentAiRewardCard: React.FC<{ studentId?: string }> = ({ studentI
           <div className="text-[10px] text-slate-400 uppercase font-mono font-bold">Award Eligibility</div>
           <div className="flex items-center space-x-1.5 text-xs text-emerald-400 font-bold font-mono">
             <CheckCircle2 className="w-4 h-4" />
-            <span className="truncate">{awardEligibility || 'Eligible'}</span>
+            <span className="truncate">{Array.isArray(awardEligibility) ? (awardEligibility.length > 0 ? awardEligibility.join(', ') : 'Eligible') : (awardEligibility || 'Eligible')}</span>
           </div>
         </div>
 
         <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-1">
           <div className="text-[10px] text-slate-400 uppercase font-mono font-bold">AI Reliability / Confidence</div>
-          <div className="text-sm font-bold text-purple-300 font-mono">{confidenceScore}% Verified Data</div>
+          <div className="text-sm font-bold text-purple-300 font-mono">{confidenceDisplay}% Verified Data</div>
         </div>
       </div>
 
@@ -188,7 +200,7 @@ export const StudentAiRewardCard: React.FC<{ studentId?: string }> = ({ studentI
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
           {Object.entries(categoryPoints || {}).map(([cat, pts]: [string, any]) => {
-            const IconComponent = categoryIcons[cat] || Star;
+            const IconComponent = categoryIcons[cat.toLowerCase()] || Star;
             return (
               <div key={cat} className="bg-slate-950 border border-slate-800 p-3 rounded-xl flex items-center justify-between">
                 <div className="flex items-center space-x-2 truncate">
@@ -223,8 +235,8 @@ export const StudentAiRewardCard: React.FC<{ studentId?: string }> = ({ studentI
         <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-2">
           <h4 className="font-bold text-white uppercase text-[11px] text-slate-400">Evidence / Database Sources</h4>
           <ul className="space-y-1.5 text-slate-300">
-            {Array.isArray(evidenceSources) && evidenceSources.length > 0 ? (
-              evidenceSources.map((ev: string, idx: number) => (
+            {evidenceList.length > 0 ? (
+              evidenceList.map((ev: string, idx: number) => (
                 <li key={idx} className="flex items-start space-x-2">
                   <span className="text-emerald-400">✓</span>
                   <span>{ev}</span>

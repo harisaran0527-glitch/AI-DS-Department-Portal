@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Papa from 'papaparse';
-import { API } from '../../services/api';
+import { API, clearSessionAuth } from '../../services/api';
 import type { UserSession, AcademicYear, Section } from '../../types';
 import { DashboardLayout, type MenuItem } from '../../components/layout/DashboardLayout';
 import { ConfirmDeleteModal } from '../../components/common/ConfirmDeleteModal';
@@ -644,10 +644,11 @@ export const AdminDashboard: React.FC = () => {
     try {
       await API.logout('ADMIN');
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Sign out could not be completed. Please try again.');
-      return;
+console.warn('Backend logout unavailable, clearing local session:', error);
+    } finally {
+      clearSessionAuth('ADMIN');
+      navigate('/admin', { replace: true });
     }
-    navigate('/admin');
   };
 
   const filteredFaculty = useMemo(() => {

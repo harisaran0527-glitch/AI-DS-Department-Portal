@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { API, openAuthenticatedFile } from '../../services/api';
+import { API, openAuthenticatedFile, clearSessionAuth } from '../../services/api';
 import type { UserSession } from '../../types';
 import { DashboardLayout, type MenuItem } from '../../components/layout/DashboardLayout';
 import { ProofAttachmentControl } from '../../components/common/ProofAttachmentControl';
@@ -67,27 +67,77 @@ export const StudentDashboard: React.FC = () => {
   const [changePassSuccess, setChangePassSuccess] = useState('');
   const [isChangingPass, setIsChangingPass] = useState(false);
 
+  const [loadingSlow, setLoadingSlow] = useState<boolean>(false);
+
   const fetchProfile = React.useCallback(async () => {
+    setIsLoading(true);
+    setErrorMsg('');
+    setLoadingSlow(false);
+
+    let isDone = false;
+    // Safety watchdog: ensure loading screen NEVER hangs indefinitely (max 8s)
+    const slowTimer = setTimeout(() => {
+      if (!isDone) setLoadingSlow(true);
+    }, 3000);
+    const watchdogTimer = setTimeout(() => {
+      if (!isDone) {
+        setIsLoading(false);
+        setErrorMsg('Loading 360° Profile timed out. The server may be waking up or busy. Please retry.');
+      }
+    }, 8000);
+
     try {
-      const meRes = await API.getMe('STUDENT');
+      // 1. Parallelize authentication check and essential 360 profile load
+      const [meRes, full360] = await Promise.all([
+        API.getMe('STUDENT'),
+        API.getStudentSelfProfile({ timeoutMs: 7000 })
+      ]);
+
       if (!meRes.user || meRes.user.role !== 'STUDENT') {
-        navigate('/student');
+        isDone = true;
+        clearTimeout(slowTimer);
+        clearTimeout(watchdogTimer);
+        clearSessionAuth('STUDENT');
+        navigate('/student', { replace: true });
         return;
       }
+
       setSession(meRes.user);
       if (meRes.user.requiresPasswordChange) {
         setShowFirstLoginChangeModal(true);
       }
 
-      const [full360, connRes] = await Promise.all([
-        API.getStudentSelfProfile(),
-        API.getConnectedAccounts().catch(() => ({ connectedAccounts: [], externalMetrics: [] }))
-      ]);
+      // Essential student 360 profile data is ready - render dashboard immediately!
       setStudent360(full360);
-      setConnectedData(connRes);
+      setIsLoading(false);
+      isDone = true;
+      clearTimeout(slowTimer);
+      clearTimeout(watchdogTimer);
+
+      // 2. Load secondary non-critical data in background without blocking dashboard display
+      API.getConnectedAccounts()
+        .then(connRes => setConnectedData(connRes))
+        .catch(() => setConnectedData({ connectedAccounts: [], externalMetrics: [] }));
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to fetch student profile.');
-    } finally {
+      isDone = true;
+      clearTimeout(slowTimer);
+      clearTimeout(watchdogTimer);
+      console.error('Error loading Student 360 profile:', err);
+
+      const isAuthError = err?.status === 401 ||
+        err?.status === 403 ||
+        err?.message?.toLowerCase().includes('session expired') ||
+        err?.message?.toLowerCase().includes('unauthorized') ||
+        err?.message?.toLowerCase().includes('sign in again') ||
+        err?.message?.toLowerCase().includes('different portal');
+
+      if (isAuthError) {
+        clearSessionAuth('STUDENT');
+        navigate('/student', { replace: true });
+        return;
+      }
+
+      setErrorMsg(err.message || 'Failed to load student profile. Please check your connection and retry.');
       setIsLoading(false);
     }
   }, [navigate]);
@@ -101,10 +151,11 @@ export const StudentDashboard: React.FC = () => {
     try {
       await API.logout('STUDENT');
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Sign out could not be completed. Please try again.');
-      return;
+      console.warn('Backend logout unavailable, clearing local session:', error);
+    } finally {
+      clearSessionAuth('STUDENT');
+      navigate('/student', { replace: true });
     }
-    navigate('/student');
   };
 
   const handleRefreshLeetCode = async () => {
@@ -144,28 +195,59 @@ export const StudentDashboard: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#080A0F] text-[#F1F5F9] flex flex-col items-center justify-center font-sans space-y-4">
+      <div className="min-h-screen bg-[#080A0F] text-[#F1F5F9] flex flex-col items-center justify-center font-sans space-y-4 p-4 text-center">
         <img src="/images/avsec-salem-logo.png" alt="AVSEC Salem Logo" className="h-9 w-auto max-h-9 max-w-[36px] object-contain animate-pulse" />
         <div className="flex items-center space-x-3 text-[#A78BFA]">
           <Sparkles className="w-5 h-5 animate-spin" />
           <span className="text-sm font-mono tracking-wider">Loading 360° Student Performance Profile...</span>
         </div>
+        {loadingSlow && (
+          <p className="text-xs text-slate-400 font-mono animate-fade-in max-w-sm">
+            Connecting to secure database... (taking longer than usual, please wait)
+          </p>
+        )}
       </div>
     );
   }
 
   if (errorMsg || !student360 || !student360.student) {
+    const isTimeoutOrNetwork = Boolean(
+      errorMsg && (
+        errorMsg.toLowerCase().includes('timeout') ||
+        errorMsg.toLowerCase().includes('network') ||
+        errorMsg.toLowerCase().includes('failed to fetch') ||
+        errorMsg.toLowerCase().includes('gateway') ||
+        errorMsg.toLowerCase().includes('504') ||
+        errorMsg.toLowerCase().includes('503') ||
+        errorMsg.toLowerCase().includes('502')
+      )
+    );
+
     return (
       <div className="min-h-screen bg-[#080A0F] text-[#F1F5F9] flex items-center justify-center font-sans p-6">
         <div className="bg-[#12161F] border border-[#252B36] p-8 rounded-2xl max-w-md text-center space-y-4 shadow-2xl">
           <img src="/images/avsec-salem-logo.png" alt="AVSEC Salem Logo" className="h-9 w-auto max-h-9 max-w-[36px] object-contain mx-auto" />
-          <h3 className="text-lg font-bold text-[#F1F5F9]">No Student Profile Linked Yet</h3>
+          <h3 className="text-lg font-bold text-[#F1F5F9]">
+            {isTimeoutOrNetwork ? 'Connection / Loading Issue' : 'No Student Profile Linked Yet'}
+          </h3>
           <p className="text-xs text-[#94A3B8] leading-relaxed">
             {errorMsg || 'Your student account is authenticated, but your 360 performance record has not been imported by the department admin yet.'}
           </p>
-          <button onClick={handleLogout} className="bg-[#A78BFA] hover:bg-[#C4B5FD] text-[#080A0F] font-bold px-4 py-2 rounded-xl text-xs btn-action">
-            Logout to Portal
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => fetchProfile()}
+              className="bg-[#A78BFA] hover:bg-[#C4B5FD] text-[#080A0F] font-bold px-4 py-2 rounded-xl text-xs btn-action flex items-center space-x-1.5 cursor-pointer shadow-lg"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry Loading Profile</span>
+            </button>
+            <button
+              onClick={handleLogout}
+              className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold px-4 py-2 rounded-xl text-xs cursor-pointer transition-colors"
+            >
+              Logout to Portal
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -177,6 +259,21 @@ export const StudentDashboard: React.FC = () => {
   const scoreLabel = scoreIsVerified ? scoreValue.toFixed(1) : 'N/A';
   const rankValue = Number(student.currentRank);
   const rankLabel = scoreIsVerified && Number.isInteger(rankValue) && rankValue > 0 && rankValue !== 99 ? `#${rankValue}` : 'N/A';
+
+  const registerNoDisplay = student.registerNo || student.register_no || (_session as any)?.identifier || (_session as any)?.registerNo || 'N/A';
+  const coordinatorDisplay = student.classCoordinatorName || (student as any).class_coordinator_name || 'Assigned Faculty';
+  const cgpaDisplay = (student.cgpa !== null && student.cgpa !== undefined && String(student.cgpa).trim() !== '' && !isNaN(Number(student.cgpa)))
+    ? Number(student.cgpa).toFixed(2)
+    : 'N/A';
+  const scoreDisplay = typeof student.overallScore === 'number'
+    ? student.overallScore.toFixed(1)
+    : typeof (student as any).overall_score === 'number'
+      ? (student as any).overall_score.toFixed(1)
+      : '0.0';
+  const rankVal = student.currentRank ?? (student as any).current_rank;
+  const rankDisplay = (typeof rankVal === 'number' && rankVal > 0 && rankVal < 99)
+    ? `#${rankVal}`
+    : 'Unranked';
 
   const studentMenuItems: MenuItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
@@ -201,8 +298,8 @@ export const StudentDashboard: React.FC = () => {
     <DashboardLayout
       portalRole="STUDENT"
       userName={student.name}
-      userRoleTitle={`Reg No: ${student.registerNo}`}
-      subtitle={`${student.year} Sec ${student.section} | Coord: ${student.classCoordinatorName}`}
+      userRoleTitle={`Reg No: ${registerNoDisplay}`}
+      subtitle={`${student.year} Sec ${student.section} | Coord: ${coordinatorDisplay}`}
       menuItems={studentMenuItems}
       activeTab={activeTab}
       onSelectTab={setActiveTab}
@@ -240,7 +337,7 @@ export const StudentDashboard: React.FC = () => {
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-slate-400 font-mono mt-0.5">
-                Register No: <strong className="text-white">{student.registerNo || 'N/A'}</strong> | Batch {student.batch || 'N/A'}
+Register No: <strong className="text-white">{registerNoDisplay}</strong> | Batch {student.batch}
               </p>
             </div>
           </div>
@@ -248,17 +345,17 @@ export const StudentDashboard: React.FC = () => {
           <div className="grid grid-cols-3 gap-2 sm:flex sm:items-center sm:gap-4 w-full md:w-auto">
             <div className="bg-slate-950 border border-slate-800 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-center flex-1 md:flex-none">
               <div className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-mono tracking-wider font-semibold">CGPA</div>
-              <div className="text-base sm:text-xl font-extrabold text-emerald-400 font-mono mt-0.5">{(student.cgpa !== null && student.cgpa !== undefined && student.cgpa !== '') ? Number(student.cgpa).toFixed(2) : 'N/A'}</div>
+              <div className="text-base sm:text-xl font-extrabold text-emerald-400 font-mono mt-0.5">{cgpaDisplay}</div>
             </div>
 
             <div className="bg-slate-950 border border-slate-800 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-center flex-1 md:flex-none">
               <div className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-mono tracking-wider font-semibold">Score</div>
-              <div className="text-base sm:text-xl font-extrabold text-indigo-400 font-mono mt-0.5">{scoreLabel}</div>
+<div className="text-base sm:text-xl font-extrabold text-indigo-400 font-mono mt-0.5">{scoreDisplay}</div>
             </div>
 
             <div className="bg-slate-950 border border-slate-800 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-center flex-1 md:flex-none">
               <div className="text-[9px] sm:text-[10px] text-amber-400 uppercase font-mono tracking-wider font-semibold">Rank</div>
-              <div className="text-base sm:text-xl font-extrabold text-amber-400 font-mono mt-0.5">{rankLabel}</div>
+<div className="text-base sm:text-xl font-extrabold text-amber-400 font-mono mt-0.5">{rankDisplay}</div>
             </div>
           </div>
         </div>
@@ -1301,11 +1398,11 @@ export const StudentDashboard: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono">
                 <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-1">
                   <span className="text-slate-400 text-[11px]">Cumulative Grade Point Average (CGPA):</span>
-                  <div className="text-2xl font-extrabold text-emerald-400">{(student.cgpa !== null && student.cgpa !== undefined && student.cgpa !== '') ? Number(student.cgpa).toFixed(2) : 'Not Available'}</div>
+                  <div className="text-2xl font-extrabold text-emerald-400">{cgpaDisplay !== 'N/A' ? cgpaDisplay : 'Not Available'}</div>
                 </div>
                 <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-1">
                   <span className="text-slate-400 text-[11px]">Overall Composite Score:</span>
-                  <div className="text-2xl font-extrabold text-indigo-400">{scoreLabel}</div>
+<div className="text-2xl font-extrabold text-indigo-400">{scoreDisplay}</div>
                 </div>
               </div>
 
@@ -1474,6 +1571,7 @@ export const StudentDashboard: React.FC = () => {
                     await API.changePassword(changeCurrPass, changeNewPass);
                     setChangePassSuccess('Password updated successfully. Please sign in again.');
                     setTimeout(() => {
+                      clearSessionAuth('STUDENT');
                       navigate('/student', { replace: true });
                     }, 1800);
                   } catch (err: any) {

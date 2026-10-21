@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { db } from '../db.js';
+import { db, normalizeStudentRecord } from '../db.js';
 import type { StudentRecord } from '../db.js';
 import { authenticateToken, requireRole, AuthRequest } from '../middleware/auth.js';
 import { calculateCategoryScores, computeOverallScore, generateAIExplanation } from '../scoringEngine.js';
@@ -8,8 +8,7 @@ const router = Router();
 
 router.use(authenticateToken, requireRole('STUDENT'));
 
-// GET student's own 360 profile (WITH AUTOMATIC LIVE REFRESH ON OPEN)
-router.get('/me', async (req: AuthRequest, res: Response) => {
+async function resolveStudentFromRequest(req: AuthRequest): Promise<StudentRecord | null> {
   const userRegNo = req.user?.registerNo;
   const userId = req.user?.id;
   const userStudentId = req.user?.studentId;
@@ -24,43 +23,21 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
     stuRecord = allStus.find((s) =>
       (s.email && s.email.trim().toLowerCase() === userEmail.trim().toLowerCase()) ||
       (s.college_email && s.college_email.trim().toLowerCase() === userEmail.trim().toLowerCase())
-    );
+    ) || null;
   }
+  return stuRecord ? (normalizeStudentRecord(stuRecord) as StudentRecord) : null;
+}
+
+// GET student's own 360 profile (WITH AUTOMATIC LIVE REFRESH ON OPEN)
+router.get('/me', async (req: AuthRequest, res: Response) => {
+  const stuRecord = await resolveStudentFromRequest(req);
 
   if (!stuRecord) {
     return res.status(404).json({ error: 'Student profile not found.' });
   }
 
   const studentId = stuRecord.id;
-  const initial360 = await db.getStudent360(studentId);
-
-  // Auto-refresh LeetCode profile statistics when profile is opened if handle is connected & data is stale (> 5 mins)
-  const connAccs = await db.getConnectedAccounts(studentId);
-  const lcConn = connAccs.find((a: any) => a.provider === 'LeetCode');
-  const handle = lcConn?.provider_username || initial360?.leetcode?.username;
-
-  if (handle && !['student', 'leetcode_user', 'null', 'undefined'].includes(handle.toLowerCase())) {
-    const lastSynced = lcConn?.last_synced_at || initial360?.leetcode?.lastUpdated;
-    const isStale = !lastSynced || (Date.now() - new Date(lastSynced).getTime() > 300000);
-    if (isStale) {
-      try {
-        const { syncLeetCodeProfile } = await import('../services/externalSync.js');
-        await syncLeetCodeProfile(studentId, handle);
-      } catch (_err) {
-        // Silently preserve verified database statistics if live fetch fails during page open
-      }
-    }
-  }
-
-  // Auto-refresh SkillEdge metrics from source database if configured
-  try {
-    const { syncStudentSkillEdge } = await import('../services/skilledgeSync.js');
-    await syncStudentSkillEdge(studentId, 'LIVE_READ');
-  } catch (_skErr) {
-    // Preserve cached record gracefully if SkillEdge DB is unreachable
-  }
-
-  const full360 = (await db.getStudent360(studentId)) || initial360;
+  const full360 = await db.getStudent360(studentId);
 
   if (!full360) {
     return res.status(404).json({ error: 'Student profile 360 not found.' });
@@ -71,6 +48,45 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
     ...stuRecord,
     registerNo: stuRecord.registerNo || stuRecord.register_no || profileStudent.registerNo || profileStudent.register_no
   };
+
+  // Non-blocking background sync if connected handles are stale (> 5 mins)
+  // NEVER block the student's initial profile load on external internet calls!
+  try {
+    const connAccs = await db.getConnectedAccounts(studentId).catch(() => []);
+    const lcConn = connAccs.find((a: any) => a.provider === 'LeetCode');
+    const handle = lcConn?.provider_username || full360?.leetcode?.username;
+
+    if (handle && !['student', 'leetcode_user', 'null', 'undefined'].includes(handle.toLowerCase())) {
+      const lastSynced = lcConn?.last_synced_at || full360?.leetcode?.lastUpdated;
+      const isStale = !lastSynced || (Date.now() - new Date(lastSynced).getTime() > 300000);
+      if (isStale) {
+        void (async () => {
+          try {
+            const { syncLeetCodeProfile } = await import('../services/externalSync.js');
+            await syncLeetCodeProfile(studentId, handle);
+          } catch (_err) {
+            // Silently preserve verified database statistics in background
+          }
+        })();
+      }
+    }
+
+    // Non-blocking background SkillEdge check
+    void (async () => {
+      try {
+        const { syncStudentSkillEdge } = await import('../services/skilledgeSync.js');
+        await syncStudentSkillEdge(studentId, 'LIVE_READ');
+      } catch (_skErr) {
+        // Preserve cached record gracefully
+      }
+    })();
+  } catch (_bgErr) {
+    // Non-critical background dispatch error - never fail student profile load
+  }
+
+  if (full360.student) {
+    full360.student = (normalizeStudentRecord(full360.student) as StudentRecord) || full360.student;
+  }
 
   const [allAwards, allTeams, representativeEvaluation, scoringConfig] = await Promise.all([
     db.getFinalizedAwards(),
@@ -108,6 +124,7 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
 
   return res.json({
     ...full360,
+    user: req.user,
     finalizedAwards,
     teams,
     representativeEvaluation,
@@ -201,20 +218,34 @@ router.post('/sync-nptel', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// GET /api/student/ai-reward - Get student's own Gemini AI Reward Score & Breakdown
-router.get('/ai-reward', async (req: AuthRequest, res: Response) => {
+// GET /api/student/ai-reward and /api/student/:studentId/ai-reward - Get student's own Gemini AI Reward Score & Breakdown
+router.get(['/ai-reward', '/:studentId/ai-reward'], async (req: AuthRequest, res: Response) => {
   try {
-    let studentId = req.user!.studentId || req.user!.id;
-    const studentObj = (await db.getStudentByRegisterNo(req.user!.registerNo || '')) || (await db.getStudentById(studentId));
-    if (studentObj) studentId = studentObj.id;
+    const stuRecord = await resolveStudentFromRequest(req);
+    if (!stuRecord) {
+      return res.status(404).json({ error: 'Student profile not found.' });
+    }
 
+    const requestedId = req.params.studentId || (req.query.studentId as string);
+    if (requestedId &&
+        requestedId !== stuRecord.id &&
+        requestedId !== stuRecord.register_no &&
+        requestedId !== stuRecord.registerNo) {
+      return res.status(403).json({ error: 'Forbidden: You can only view your own AI reward score.' });
+    }
+
+    const studentId = stuRecord.id;
     const { evaluateStudentRewardPoints } = await import('../services/studentRewardEngine.js');
     let reward = await db.getStudentAiReward(studentId);
     if (!reward) {
       reward = await evaluateStudentRewardPoints(studentId);
     }
 
-    return res.json({ reward });
+    if (!reward) {
+      return res.status(404).json({ error: 'Unable to calculate AI reward: student record not found.' });
+    }
+
+    return res.json({ reward, rewardScore: reward });
   } catch (err: any) {
     console.error('Error fetching student AI reward points:', err);
     return res.status(500).json({ error: err.message || 'Failed to fetch AI reward breakdown.' });

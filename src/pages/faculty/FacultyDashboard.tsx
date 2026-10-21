@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Papa from 'papaparse';
-import { API, API_BASE, fetchWithResilience, openAuthenticatedFile } from '../../services/api';
+import { API, API_BASE, fetchWithResilience, openAuthenticatedFile, clearSessionAuth } from '../../services/api';
 import type { UserSession, Student, TeamHead } from '../../types';
 import { DashboardLayout, type MenuItem } from '../../components/layout/DashboardLayout';
 import { ConfirmDeleteModal } from '../../components/common/ConfirmDeleteModal';
@@ -1404,18 +1404,19 @@ export const FacultyDashboard: React.FC = () => {
     try {
       await API.logout('FACULTY');
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Sign out could not be completed. Please try again.');
-      return;
+console.warn('Backend logout unavailable, clearing local session:', error);
+    } finally {
+      clearSessionAuth('FACULTY');
+      setStudents([]);
+      setSelectedStudent(null);
+      setStudent360Edit(null);
+      setEditLeetCodeUsername('');
+      setNptelConnection(null);
+      setAttStudentStatuses({});
+      setSearchQuery('');
+      setSession(null);
+      navigate('/faculty', { replace: true });
     }
-    setStudents([]);
-    setSelectedStudent(null);
-    setStudent360Edit(null);
-    setEditLeetCodeUsername('');
-    setNptelConnection(null);
-    setAttStudentStatuses({});
-    setSearchQuery('');
-    setSession(null);
-    navigate('/faculty');
   };
 
   // Filtered Roster for My Students
