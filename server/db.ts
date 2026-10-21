@@ -546,7 +546,6 @@ export async function initDatabaseSchema(): Promise<void> {
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS assigned_faculty_id TEXT;`,
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS assigned_staff_name TEXT;`,
         `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS created_at TEXT;`,
-        `ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'OPEN';`,
         `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS company_name TEXT;`,
         `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS proof_file_path TEXT;`,
         `ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS created_at TEXT;`,
@@ -589,6 +588,7 @@ export async function initDatabaseSchema(): Promise<void> {
       for (const colSql of alterCols) {
         try { await pgPool.query(colSql); } catch {}
       }
+      await pgPool.query(`ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'OPEN';`);
     }
   } else if (sqlite) {
     sqlite.exec(ddl);
@@ -610,7 +610,6 @@ export async function initDatabaseSchema(): Promise<void> {
       `ALTER TABLE discipline_records ADD COLUMN action_taken TEXT;`,
       `ALTER TABLE discipline_records ADD COLUMN rule_violated TEXT;`,
       `ALTER TABLE discipline_records ADD COLUMN fine_details TEXT;`,
-      `ALTER TABLE discipline_records ADD COLUMN status TEXT NOT NULL DEFAULT 'OPEN';`,
       `ALTER TABLE certificate_records ADD COLUMN company_name TEXT;`,
       `ALTER TABLE certificate_records ADD COLUMN proof_file_path TEXT;`,
       `ALTER TABLE certificate_records ADD COLUMN created_at TEXT;`,
@@ -650,6 +649,10 @@ export async function initDatabaseSchema(): Promise<void> {
     ];
     for (const colSql of alterCols) {
       try { sqlite.exec(colSql); } catch {}
+    }
+    const disciplineColumns = sqlite.prepare('PRAGMA table_info(discipline_records)').all() as Array<{ name: string }>;
+    if (!disciplineColumns.some(column => column.name === 'status')) {
+      sqlite.exec(`ALTER TABLE discipline_records ADD COLUMN status TEXT NOT NULL DEFAULT 'OPEN';`);
     }
   }
 
@@ -2450,6 +2453,44 @@ export class SQLiteDB {
       assignedStaffName: r.assigned_staff_name || 'No Staff Assigned',
       createdAt: r.created_at || r.date
     }));
+  }
+
+  public async updateDisciplineIssue(id: string, data: {
+    date: string;
+    time: string;
+    category: string;
+    ruleViolated: string;
+    actionTaken: string;
+    fineAmount: number;
+    fineDetails: string;
+    remark: string;
+    status: 'OPEN' | 'UNDER_REVIEW' | 'RESOLVED';
+  }, scope?: { facultyId: string; role: string }): Promise<boolean> {
+    if (!scope?.facultyId || !['FACULTY', 'HOD', 'ADMIN'].includes(scope.role)) return false;
+    let sql = `UPDATE discipline_records SET date = ?, time = ?, category = ?, rule_violated = ?,
+      remark = ?, warning_action = ?, action_taken = ?, fine_amount = ?, fine_details = ?, status = ?
+      WHERE id = ?`;
+    const params: (string | number)[] = [data.date, data.time, data.category, data.ruleViolated,
+      data.remark, data.actionTaken, data.actionTaken, data.fineAmount, data.fineDetails, data.status, id];
+    if (scope.role === 'FACULTY') {
+      sql += ` AND id IN (
+        SELECT d.id FROM discipline_records d JOIN students s ON s.id = d.student_id
+        WHERE d.id = discipline_records.id AND (
+          d.assigned_faculty_id = ? OR s.created_by_faculty_id = ? OR s.faculty_workspace_id = ?
+          OR EXISTS (SELECT 1 FROM faculty_assignments a WHERE a.faculty_id = ? AND a.is_active = 1
+            AND TRIM(a.year) <> '' AND UPPER(TRIM(a.year)) <> 'ALL'
+            AND TRIM(a.section) <> '' AND UPPER(TRIM(a.section)) <> 'ALL'
+            AND LOWER(TRIM(s.year)) = LOWER(TRIM(CASE TRIM(a.year)
+              WHEN 'I' THEN '1st Year' WHEN '1' THEN '1st Year' WHEN '1st' THEN '1st Year'
+              WHEN 'II' THEN '2nd Year' WHEN '2' THEN '2nd Year' WHEN '2nd' THEN '2nd Year'
+              WHEN 'III' THEN '3rd Year' WHEN '3' THEN '3rd Year' WHEN '3rd' THEN '3rd Year'
+              WHEN 'IV' THEN '4th Year' WHEN '4' THEN '4th Year' WHEN '4th' THEN '4th Year' ELSE a.year END))
+            AND UPPER(TRIM(s.section)) = UPPER(TRIM(REPLACE(REPLACE(REPLACE(UPPER(a.section), 'SECTION ', ''), 'SEC ', ''), 'SEC.', ''))))
+        )
+      )`;
+      params.push(scope.facultyId, scope.facultyId, scope.facultyId, scope.facultyId);
+    }
+    return (await executeRun(sql, params)).changes > 0;
   }
 
   public async deleteDisciplineIssue(id: string, scope?: { facultyId: string; role: string }): Promise<boolean> {

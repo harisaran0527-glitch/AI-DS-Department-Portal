@@ -140,10 +140,7 @@ export const HodStudentBulkUploadView: React.FC<{
   // Download official CSV template
   const handleDownloadTemplate = () => {
     const headers = 'Name,Register Number,College Mail ID,Mobile Number,Personal Mail ID,Address,CGPA\n';
-    const sample1 = 'Aravind Kumar S,620125243101,aravind.aids@avsec.edu.in,9876543210,aravind@gmail.com,"Salem, Tamil Nadu",8.45\n';
-    const sample2 = 'Bhavani R,620125243102,bhavani.aids@avsec.edu.in,9876543211,bhavani@gmail.com,"Erode, Tamil Nadu",8.90\n';
-    const csvContent = headers + sample1 + sample2;
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([headers], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;

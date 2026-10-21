@@ -28,15 +28,18 @@ test('resolvePgConnection routes Supabase pooler to port 6543 transaction mode w
   assert.equal(resolved.ssl?.rejectUnauthorized, false);
 });
 
-test('resolvePgConnection respects DATABASE_SSL_REJECT_UNAUTHORIZED override', () => {
+test('Neon certificate verification cannot be disabled by environment override', () => {
   const saved = process.env.DATABASE_SSL_REJECT_UNAUTHORIZED;
   try {
     process.env.DATABASE_SSL_REJECT_UNAUTHORIZED = 'false';
     const neonConn = 'postgresql://user:pass@ep-test.neon.tech/neondb?sslmode=require';
-    const resolvedFalse = resolvePgConnection(neonConn);
-    assert.equal(resolvedFalse.ssl?.rejectUnauthorized, false);
+    assert.throws(() => resolvePgConnection(neonConn), /require certificate and hostname verification/);
 
     process.env.DATABASE_SSL_REJECT_UNAUTHORIZED = 'true';
+    const resolvedNeon = resolvePgConnection(neonConn);
+    assert.equal(resolvedNeon.ssl?.rejectUnauthorized, true);
+    assert.ok(resolvedNeon.effectiveConnStr.includes('sslmode=verify-full'));
+
     const supaConn = 'postgresql://user:pass@pooler.supabase.com:6543/postgres';
     const resolvedTrue = resolvePgConnection(supaConn);
     assert.equal(resolvedTrue.ssl?.rejectUnauthorized, true);

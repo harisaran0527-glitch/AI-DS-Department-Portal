@@ -42,3 +42,16 @@ Logs remain local in `.parallel-local/tests-final.log`, `typecheck-final.log`, `
 - Historical data files already tracked by Git remain unchanged. Review existing tracked exports separately during the final repository/security review; this task neither deletes them nor adds new data exports.
 
 Final GitHub push and production deployment still require the user's separate approval after both agents finish and integration/regression/configuration reviews are complete.
+
+## Isolated integration follow-up (2026-10-21)
+
+The following verification supersedes the source-worktree and test-count statements above for branch `integration/final-hod-portal-20261021` in the separate `HOD-Integration` worktree:
+
+- Integrated the committed Codex security work and Antigravity Discipline implementation. The main, HOD-Codex, and HOD-Antigravity worktrees remain on their original commits; pending source-worktree changes were preserved and not copied wholesale over the stronger Codex authorization implementation.
+- Primary PostgreSQL and SkillEdge Neon connections now force `sslmode=verify-full` and certificate/hostname verification. A configuration that attempts to disable Neon verification fails closed. Supabase's separate connection behavior is unchanged.
+- Added an idempotent Discipline `status` migration test against isolated in-memory SQLite records. Existing rows are preserved and default to `OPEN`; no production database was contacted or migrated.
+- Fixed the Student AI Reward client to use the authenticated self endpoint and canonicalized the register number from the student database row. The student dashboard suppresses scores, ranks and generated score explanations when no database-derived academic evidence exists. HOD/faculty CSV and XLSX templates contain headers only, and missing attendance is displayed as unavailable rather than as a synthetic percentage.
+- Integration validation: `npm.cmd test` passed 85/85; `npm.cmd run typecheck` passed; `npm.cmd run check:server` parsed 29 files with zero syntax errors; and `npm.cmd run build` passed with the existing large-chunk warning (1.55 MB minified JavaScript). Focused Oxlint reported zero errors and existing warnings. `git diff --check` passed.
+- Test fixtures, build and type checks are isolated from production data. These results do not establish live Neon connectivity, production secret configuration, browser end-to-end behavior, or live role logins.
+
+Deployment remains **NO-GO** pending final integration approval, explicit production JWT configuration/origin review, live environment verification, and any required migration approval. No push, main merge, production migration, production record modification, or deployment was performed.

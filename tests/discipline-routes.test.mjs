@@ -31,6 +31,13 @@ const db = {
       .filter(row => filters.role !== 'FACULTY' || filters.facultyId === row.assignedFacultyId);
   },
   addDisciplineIssue: async input => { assert.equal(requiresPrimaryDatabase(), true); saved.push(input); return { id: 'new-record', ...input }; },
+  updateDisciplineIssue: async (id, input, scope) => {
+    assert.equal(scope.facultyId, 'f1');
+    assert.equal(scope.role, 'FACULTY');
+    if (id !== 'r1') return false;
+    updated.push({ id, ...input });
+    return true;
+  },
   deleteDisciplineIssue: async (id, scope) => { assert.equal(scope.facultyId, 'f1'); assert.equal(scope.role, 'FACULTY'); deleted.push(id); return true; },
   logAudit: async () => { if (auditFails) throw new Error('isolated audit failure'); }
 };

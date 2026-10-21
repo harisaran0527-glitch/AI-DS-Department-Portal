@@ -3,6 +3,7 @@ import path from 'path';
 import pg from 'pg';
 import betterSqlite3 from 'better-sqlite3';
 import { db } from '../db.js';
+import { resolvePgConnection } from '../databaseConnection.js';
 import { calculateCategoryScores, computeOverallScore } from '../scoringEngine.js';
 import { normalizeEmail } from '../../scripts/skilledge_connector.js';
 
@@ -155,11 +156,17 @@ export async function fetchLiveRecordFromSkillEdge(collegeEmail: string): Promis
 
   const cfg = loadSkillEdgeConfig();
   if (!cfg || !cfg.connectionUrl) return null;
-
   if (cfg.dbType === 'postgresql') {
+    const resolvedConnection = resolvePgConnection(cfg.connectionUrl);
     const client = new pg.Client({
-      connectionString: cfg.connectionUrl,
-      ssl: cfg.connectionUrl.includes('localhost') || cfg.connectionUrl.includes('127.0.0.1') ? false : { rejectUnauthorized: false }
+      connectionString: resolvedConnection.provider === 'neon'
+        ? resolvedConnection.effectiveConnStr
+        : cfg.connectionUrl,
+      ssl: resolvedConnection.provider === 'neon'
+        ? resolvedConnection.ssl
+        : cfg.connectionUrl.includes('localhost') || cfg.connectionUrl.includes('127.0.0.1')
+          ? false
+          : { rejectUnauthorized: false }
     });
     await client.connect();
     try {

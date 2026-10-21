@@ -65,6 +65,12 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
   if (!full360) {
     return res.status(404).json({ error: 'Student profile 360 not found.' });
   }
+  const profileStudent = full360.student || stuRecord;
+  full360.student = {
+    ...profileStudent,
+    ...stuRecord,
+    registerNo: stuRecord.registerNo || stuRecord.register_no || profileStudent.registerNo || profileStudent.register_no
+  };
 
   const [allAwards, allTeams, representativeEvaluation, scoringConfig] = await Promise.all([
     db.getFinalizedAwards(),
@@ -88,8 +94,17 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
     full360.projects
   );
 
-  const overallScore = computeOverallScore(breakdown, scoringConfig);
-  const aiInsight = generateAIExplanation('BEST_STUDENT', full360.student as any, breakdown, overallScore, full360.leetcode);
+  const isNumericAcademicValue = (value: unknown): boolean =>
+    (typeof value === 'number' && Number.isFinite(value)) ||
+    (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value)));
+  const hasAcademicEvidence = isNumericAcademicValue(full360.student.cgpa) ||
+    (Array.isArray(full360.academics) && full360.academics.some((record: any) =>
+      isNumericAcademicValue(record.sgpa) || isNumericAcademicValue(record.cgpa)
+    ));
+  const overallScore = hasAcademicEvidence ? computeOverallScore(breakdown, scoringConfig) : null;
+  const aiInsight = overallScore === null
+    ? null
+    : generateAIExplanation('BEST_STUDENT', full360.student as any, breakdown, overallScore, full360.leetcode);
 
   return res.json({
     ...full360,
@@ -98,7 +113,7 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
     representativeEvaluation,
     breakdown: {
       overallScore,
-      categoryScores: breakdown,
+      categoryScores: hasAcademicEvidence ? breakdown : { ...breakdown, academic: null },
       aiExplanation: aiInsight
     }
   });

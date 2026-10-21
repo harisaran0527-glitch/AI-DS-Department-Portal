@@ -1139,9 +1139,8 @@ export const API = {
   },
 
   // Gemini Central Student Recognition & Reward Engine API
-  getStudentAiReward: async (studentId?: string) => {
-    const endpoint = studentId ? `/student/${studentId}/ai-reward` : '/student/ai-reward';
-    return request<{ reward: any; rewardScore?: any }>(endpoint);
+  getStudentAiReward: async () => {
+    return request<{ reward: any; rewardScore?: any }>('/student/ai-reward');
   },
 
   getHodAwardCandidatesV2: async (year?: string, section?: string) => {

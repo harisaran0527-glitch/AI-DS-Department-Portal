@@ -303,7 +303,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                     </div>
                     <input
                       id={`${portalRole.toLowerCase()}-identifier`}
-                      name={`${portalRole.toLowerCase()}_identifier`}
+                      name={`${portalRole.toLowerCase()}-identifier`}
                       type="text"
                       required
                       disabled={authStatus === 'loading'}
@@ -311,9 +311,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                       onChange={(e) => setIdentifier(e.target.value)}
                       onFocus={() => setFocusedField('identifier')}
                       onBlur={() => setFocusedField(null)}
-                      id={`${portalRole.toLowerCase()}-identifier`}
                       placeholder={placeholderIdentifier || "Enter your college email or ID"}
-                      name={`${portalRole.toLowerCase()}-identifier`}
                       aria-label={placeholderIdentifier}
                       autoComplete="off"
                     />
@@ -337,7 +335,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                     </div>
                     <input
                       id={`${portalRole.toLowerCase()}-password`}
-                      name={`${portalRole.toLowerCase()}_password`}
+                      name={`${portalRole.toLowerCase()}-password`}
                       type={showPassword ? 'text' : 'password'}
                       required
                       disabled={authStatus === 'loading'}
@@ -345,9 +343,7 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
                       onChange={(e) => setPassword(e.target.value)}
                       onFocus={() => setFocusedField('password')}
                       onBlur={() => setFocusedField(null)}
-                      id={`${portalRole.toLowerCase()}-password`}
                       placeholder="Enter your password"
-                      name={`${portalRole.toLowerCase()}-password`}
                       aria-label="Portal password"
                       autoComplete="new-password"
                     />

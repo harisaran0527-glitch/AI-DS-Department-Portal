@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import pg from 'pg';
 import dotenv from 'dotenv';
+import { resolvePgConnection } from './databaseConnection.js';
 
 dotenv.config();
 
@@ -25,10 +26,11 @@ export async function migrateSqliteToPostgres(pgConnectionString?: string): Prom
     return { success: false, migratedTables: {}, error: `SQLite database file not found at ${DB_PATH}` };
   }
 
+  const resolvedConnection = resolvePgConnection(connectionString);
   const sqlite = new Database(DB_PATH);
   const pool = new Pool({
-    connectionString,
-    ssl: { rejectUnauthorized: false }
+    connectionString: resolvedConnection.effectiveConnStr,
+    ssl: resolvedConnection.ssl
   });
 
   const migratedStats: Record<string, number> = {};

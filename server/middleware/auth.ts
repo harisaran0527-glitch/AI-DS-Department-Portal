@@ -9,11 +9,6 @@ dotenv.config();
 
 export { isJwtConfiguredForRuntime };
 
-export function isJwtConfiguredForRuntime(): boolean {
-  return Boolean(process.env.JWT_SECRET?.trim()) ||
-    (process.env.NODE_ENV !== 'production' && !process.env.VERCEL);
-}
-
 export interface AuthRequest extends Request {
   session?: { tokenDigest: string; claims: SessionClaims };
   user?: {

@@ -172,6 +172,11 @@ export const StudentDashboard: React.FC = () => {
   }
 
   const { student, academics: _academics, arrears: _arrears, skillEdge: _skillEdge, nptel: _nptel, attendance: _attendance, discipline: _discipline, certificates: _certificates, participation: _participation, leetcode, projects: _projects, achievements: _achievements, finalizedAwards } = student360;
+  const scoreValue = student360.breakdown?.overallScore;
+  const scoreIsVerified = typeof scoreValue === 'number' && Number.isFinite(scoreValue);
+  const scoreLabel = scoreIsVerified ? scoreValue.toFixed(1) : 'N/A';
+  const rankValue = Number(student.currentRank);
+  const rankLabel = scoreIsVerified && Number.isInteger(rankValue) && rankValue > 0 && rankValue !== 99 ? `#${rankValue}` : 'N/A';
 
   const studentMenuItems: MenuItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
@@ -235,7 +240,7 @@ export const StudentDashboard: React.FC = () => {
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-slate-400 font-mono mt-0.5">
-                Register No: <strong className="text-white">{student.registerNo}</strong> | Batch {student.batch}
+                Register No: <strong className="text-white">{student.registerNo || 'N/A'}</strong> | Batch {student.batch || 'N/A'}
               </p>
             </div>
           </div>
@@ -248,12 +253,12 @@ export const StudentDashboard: React.FC = () => {
 
             <div className="bg-slate-950 border border-slate-800 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-center flex-1 md:flex-none">
               <div className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-mono tracking-wider font-semibold">Score</div>
-              <div className="text-base sm:text-xl font-extrabold text-indigo-400 font-mono mt-0.5">{student.overallScore ? student.overallScore.toFixed(1) : '0.0'}</div>
+              <div className="text-base sm:text-xl font-extrabold text-indigo-400 font-mono mt-0.5">{scoreLabel}</div>
             </div>
 
             <div className="bg-slate-950 border border-slate-800 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-center flex-1 md:flex-none">
               <div className="text-[9px] sm:text-[10px] text-amber-400 uppercase font-mono tracking-wider font-semibold">Rank</div>
-              <div className="text-base sm:text-xl font-extrabold text-amber-400 font-mono mt-0.5">#{student.currentRank || 1}</div>
+              <div className="text-base sm:text-xl font-extrabold text-amber-400 font-mono mt-0.5">{rankLabel}</div>
             </div>
           </div>
         </div>
@@ -1295,7 +1300,7 @@ export const StudentDashboard: React.FC = () => {
                 </div>
                 <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-1">
                   <span className="text-slate-400 text-[11px]">Overall Composite Score:</span>
-                  <div className="text-2xl font-extrabold text-indigo-400">{student.overallScore ? student.overallScore.toFixed(1) : '0.0'}</div>
+                  <div className="text-2xl font-extrabold text-indigo-400">{scoreLabel}</div>
                 </div>
               </div>
 

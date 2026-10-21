@@ -66,10 +66,7 @@ export const FacultyStudentBulkUploadModal: React.FC<FacultyStudentBulkUploadMod
   // Download official CSV template
   const handleDownloadCsvTemplate = () => {
     const headers = 'Name,Register Number,College Mail ID,Mobile Number,Personal Mail ID,Address,CGPA\n';
-    const sample1 = 'Aravind Kumar S,620125243101,aravind.aids@avsec.edu.in,9876543210,aravind@gmail.com,"Salem, Tamil Nadu",8.45\n';
-    const sample2 = 'Bhavani R,620125243102,bhavani.aids@avsec.edu.in,9876543211,bhavani@gmail.com,"Erode, Tamil Nadu",8.90\n';
-    const csvContent = headers + sample1 + sample2;
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([headers], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -82,27 +79,8 @@ export const FacultyStudentBulkUploadModal: React.FC<FacultyStudentBulkUploadMod
 
   // Download official Excel template (.xlsx)
   const handleDownloadExcelTemplate = () => {
-    const templateRows = [
-      {
-        'Name': 'Aravind Kumar S',
-        'Register Number': '620125243101',
-        'College Mail ID': 'aravind.aids@avsec.edu.in',
-        'Mobile Number': '9876543210',
-        'Personal Mail ID': 'aravind@gmail.com',
-        'Address': 'Salem, Tamil Nadu',
-        'CGPA': 8.45
-      },
-      {
-        'Name': 'Bhavani R',
-        'Register Number': '620125243102',
-        'College Mail ID': 'bhavani.aids@avsec.edu.in',
-        'Mobile Number': '9876543211',
-        'Personal Mail ID': 'bhavani@gmail.com',
-        'Address': 'Erode, Tamil Nadu',
-        'CGPA': 8.90
-      }
-    ];
-    const worksheet = XLSX.utils.json_to_sheet(templateRows);
+    const headers = ['Name', 'Register Number', 'College Mail ID', 'Mobile Number', 'Personal Mail ID', 'Address', 'CGPA'];
+    const worksheet = XLSX.utils.aoa_to_sheet([headers]);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Students');
     XLSX.writeFile(
@@ -601,4 +579,3 @@ export const FacultyStudentBulkUploadModal: React.FC<FacultyStudentBulkUploadMod
     </div>
   );
 };
-

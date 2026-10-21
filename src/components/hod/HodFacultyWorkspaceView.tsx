@@ -112,14 +112,20 @@ export const HodFacultyWorkspaceView: React.FC<HodFacultyWorkspaceViewProps> = (
     // Map 360 data to student rows
     const enrichedStudents = students.map((stu: any) => {
       const s360 = workspace360List.find((w: any) => w.student?.id === stu.id) || {};
-      const attendancePct = s360.attendance?.overallPercentage || s360.attendance?.overall_percentage || 85;
-      const arrearsCount = s360.arrears?.standingArrears || s360.arrears?.historyArrears || stu.historyArrears || 0;
-      const skilledgePts = s360.skillEdge?.totalRewardPoints || stu.skillEdgePoints || 0;
-      const nptelCount = s360.nptel?.courses?.length || (s360.nptel?.verifiedCourses ? 1 : 0);
-      const certsCount = s360.certificates?.length || 0;
-      const pendingCertsCount = s360.certificates?.filter((c: any) => c.verification_status === 'Pending' || c.verificationStatus === 'Pending').length || 0;
-      const projectsCount = s360.projects?.length || 0;
-      const leetcodeSolved = s360.leetcode?.totalSolved || s360.leetcode?.solved_count || stu.leetCodeSolved || 0;
+      const attendanceValue = s360.attendance?.overallPercentage ?? s360.attendance?.overall_percentage;
+      const parsedAttendance = attendanceValue === undefined || attendanceValue === null ? null : Number(attendanceValue);
+      const attendancePct = parsedAttendance !== null && Number.isFinite(parsedAttendance) ? parsedAttendance : null;
+      const arrearsCount = s360.arrears?.standingArrears ?? s360.arrears?.historyArrears ?? stu.historyArrears ?? 0;
+      const skilledgePts = s360.skillEdge?.totalRewardPoints ?? stu.skillEdgePoints ?? 0;
+      const nptelCount = Array.isArray(s360.nptel?.courses)
+        ? s360.nptel.courses.length
+        : Number(Boolean(s360.nptel?.verifiedCourses));
+      const certsCount = Array.isArray(s360.certificates) ? s360.certificates.length : 0;
+      const pendingCertsCount = Array.isArray(s360.certificates)
+        ? s360.certificates.filter((c: any) => c.verification_status === 'Pending' || c.verificationStatus === 'Pending').length
+        : 0;
+      const projectsCount = Array.isArray(s360.projects) ? s360.projects.length : 0;
+      const leetcodeSolved = s360.leetcode?.totalSolved ?? s360.leetcode?.solved_count ?? stu.leetCodeSolved ?? 0;
 
       return {
         ...stu,
@@ -347,8 +353,8 @@ export const HodFacultyWorkspaceView: React.FC<HodFacultyWorkspaceViewProps> = (
                             <div className="text-sm font-bold text-white">{stu.name}</div>
                             <div className="text-xs font-mono font-bold text-amber-400">{stu.registerNo || stu.register_no}</div>
                           </div>
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${stu.attendancePct >= 80 ? 'bg-emerald-950 border border-emerald-700 text-emerald-300' : 'bg-red-950 border border-red-800 text-red-300'}`}>
-                            Att: {stu.attendancePct}%
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${stu.attendancePct === null ? 'bg-slate-900 border border-slate-700 text-slate-400' : stu.attendancePct >= 80 ? 'bg-emerald-950 border border-emerald-700 text-emerald-300' : 'bg-red-950 border border-red-800 text-red-300'}`}>
+                            Att: {stu.attendancePct === null ? 'N/A' : `${stu.attendancePct}%`}
                           </span>
                         </div>
 
@@ -419,8 +425,8 @@ export const HodFacultyWorkspaceView: React.FC<HodFacultyWorkspaceViewProps> = (
                             <td className="py-3 px-3 text-slate-300 font-bold">{stu.registerNo || stu.register_no}</td>
                             <td className="py-3 px-3 font-bold text-white font-sans">{stu.name}</td>
                             <td className="py-3 px-3 text-center font-bold">
-                              <span className={stu.attendancePct >= 80 ? 'text-emerald-400' : 'text-red-400'}>
-                                {stu.attendancePct}%
+                              <span className={stu.attendancePct === null ? 'text-slate-400' : stu.attendancePct >= 80 ? 'text-emerald-400' : 'text-red-400'}>
+                                {stu.attendancePct === null ? 'N/A' : `${stu.attendancePct}%`}
                               </span>
                             </td>
                             <td className="py-3 px-3 text-center font-bold text-emerald-400">
@@ -581,7 +587,10 @@ export const HodFacultyWorkspaceView: React.FC<HodFacultyWorkspaceViewProps> = (
                 <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-4 font-mono">
                   <div className="flex justify-between items-center border-b border-slate-800/80 pb-3">
                     <h4 className="font-bold text-indigo-400 uppercase text-sm">Attendance Summary & Verified Proof</h4>
-                    <span className="text-indigo-400 font-bold text-base">{inspect360?.attendance?.overallPercentage || inspectStudent.attendancePct || 85}%</span>
+                    <span className="text-indigo-400 font-bold text-base">
+                      {inspect360?.attendance?.overallPercentage ?? inspect360?.attendance?.overall_percentage ?? inspectStudent.attendancePct ?? 'N/A'}
+                      {(inspect360?.attendance?.overallPercentage ?? inspect360?.attendance?.overall_percentage ?? inspectStudent.attendancePct) == null ? '' : '%'}
+                    </span>
                   </div>
                   <ProofAttachmentControl studentId={inspectStudent.id} recordType="attendance" recordId="attendance-record" userRole="HOD" readOnly={true} />
                 </div>

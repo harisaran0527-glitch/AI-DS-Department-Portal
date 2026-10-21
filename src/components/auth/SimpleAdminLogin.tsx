@@ -131,18 +131,15 @@ export const SimpleAdminLogin: React.FC = () => {
                 <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-cyan-400 group-focus-within:text-cyan-200 transition-colors pointer-events-none" />
                 <input
                   id="admin-identifier"
-                  name="admin_identifier"
+                  name="admin-identifier"
                   type="text"
                   required
                   disabled={authStatus === 'loading'}
-                  id="admin-identifier"
                   placeholder="Enter admin email or ID"
                   value={identifier}
-                  name="admin-identifier"
                   aria-label="Admin email or ID"
                   autoComplete="off"
                   onChange={(e) => setIdentifier(e.target.value)}
-                  autoComplete="username"
                   className="w-full bg-slate-900/90 border border-cyan-500/50 rounded-xl py-2.5 pl-12 pr-4 min-h-[44px] text-base sm:text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all disabled:opacity-75 disabled:cursor-not-allowed"
                 />
               </div>
@@ -157,18 +154,15 @@ export const SimpleAdminLogin: React.FC = () => {
                 <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-cyan-400 group-focus-within:text-cyan-200 transition-colors pointer-events-none" />
                 <input
                   id="admin-password"
-                  name="admin_password"
+                  name="admin-password"
                   type={showPassword ? 'text' : 'password'}
                   required
                   disabled={authStatus === 'loading'}
-                  id="admin-password"
                   placeholder="Enter admin password"
                   value={password}
-                  name="admin-password"
                   aria-label="Admin portal password"
                   autoComplete="new-password"
                   onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
                   className="w-full bg-slate-900/90 border border-cyan-500/50 rounded-xl py-2.5 pl-12 pr-12 min-h-[44px] text-base sm:text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all disabled:opacity-75 disabled:cursor-not-allowed"
                 />
                 <button
