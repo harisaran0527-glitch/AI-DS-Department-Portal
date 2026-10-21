@@ -66,9 +66,8 @@ if (isPgConfigured) {
   }
 }
 
-if (!process.env.VERCEL) {
-  try {
-    import('better-sqlite3').then((module) => {
+export const sqliteReady: Promise<void> = !process.env.VERCEL
+  ? import('better-sqlite3').then((module) => {
       const Database = module.default || module;
       const DATA_DIR = path.resolve(process.cwd(), 'server', 'data');
       const DB_PATH = process.env.DATABASE_PATH
@@ -87,11 +86,8 @@ if (!process.env.VERCEL) {
       sqliteDb.pragma('foreign_keys = ON');
     }).catch((e) => {
       console.warn('⚠️ SQLite driver not loaded:', e.message);
-    });
-  } catch (e: any) {
-    console.warn('⚠️ SQLite driver not loaded:', e.message);
-  }
-}
+    })
+  : Promise.resolve();
 
 export function isPostgresActive(): boolean {
   return Boolean(pgPool);
@@ -135,6 +131,7 @@ async function runPgWithRetry<T>(queryFn: () => Promise<T>, fallbackFn?: () => T
 
 // Query All Rows (Supports both Sync & Async)
 export async function queryAll<T = any>(sql: string, params: any[] = []): Promise<T[]> {
+  if (!pgPool) await sqliteReady;
   if (requiresPrimaryDatabase() && process.env.USE_SQLITE !== 'true' && !pgPool) throw new Error('The authoritative database is unavailable.');
   if (pgPool) {
     const pgSql = toPgSql(sql);
@@ -154,6 +151,7 @@ export async function queryAll<T = any>(sql: string, params: any[] = []): Promis
 
 // Query Single Row
 export async function queryOne<T = any>(sql: string, params: any[] = []): Promise<T | null> {
+  if (!pgPool) await sqliteReady;
   if (requiresPrimaryDatabase() && process.env.USE_SQLITE !== 'true' && !pgPool) throw new Error('The authoritative database is unavailable.');
   if (pgPool) {
     const pgSql = toPgSql(sql);
@@ -173,6 +171,7 @@ export async function queryOne<T = any>(sql: string, params: any[] = []): Promis
 
 // Execute Statement (INSERT / UPDATE / DELETE)
 export async function executeRun(sql: string, params: any[] = []): Promise<{ changes: number }> {
+  if (!pgPool) await sqliteReady;
   if (requiresPrimaryDatabase() && process.env.USE_SQLITE !== 'true' && !pgPool) throw new Error('The authoritative database is unavailable.');
   if (pgPool) {
     const pgSql = toPgSql(sql);
@@ -200,6 +199,7 @@ export async function executeRun(sql: string, params: any[] = []): Promise<{ cha
 export async function executeTransaction<T>(
   callback: (client?: pg.PoolClient) => Promise<T>
 ): Promise<T> {
+  if (!pgPool) await sqliteReady;
   if (pgPool) {
     let client: pg.PoolClient | null = null;
     const tConn0 = performance.now();

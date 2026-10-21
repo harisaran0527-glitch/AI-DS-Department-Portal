@@ -87,10 +87,10 @@ export const AdminDashboard: React.FC = () => {
   const [isSavingHOD, setIsSavingHOD] = useState(false);
   const [isResettingPass, setIsResettingPass] = useState(false);
   const [isChangingAdminPass, setIsChangingAdminPass] = useState(false);
-  const [updatingHodId, setUpdatingHodId] = useState<string | null>(null);
-  const [updatingFacultyId, setUpdatingFacultyId] = useState<string | null>(null);
+  const [, setUpdatingHodId] = useState<string | null>(null);
+  const [, setUpdatingFacultyId] = useState<string | null>(null);
   const [isImportingCsv, setIsImportingCsv] = useState(false);
-  const [isExportingCsv, setIsExportingCsv] = useState(false);
+
   const [importError, setImportError] = useState('');
 
   const [formFacultyId, setFormFacultyId] = useState('');
@@ -143,7 +143,7 @@ export const AdminDashboard: React.FC = () => {
   });
 
   const [csvText, setCsvText] = useState('');
-  const [defaultStudentPassword, setDefaultStudentPassword] = useState('student123');
+  const [defaultStudentPassword, setDefaultStudentPassword] = useState('');
   const [showDefaultStudentPassword, setShowDefaultStudentPassword] = useState(false);
   const [importResult, setImportResult] = useState<any | null>(null);
 
@@ -190,7 +190,7 @@ export const AdminDashboard: React.FC = () => {
   const parseAndBuildCsvPreview = async (rows: any[]) => {
     try {
       const previewData = await API.previewStudentExcelImport(rows);
-      
+
       const mappedPreview = previewData.preview.map((p) => ({
         rowIndex: p.rowNumber,
         registerNo: p.parsedData.registerNo,
@@ -643,7 +643,10 @@ export const AdminDashboard: React.FC = () => {
   const handleLogout = async () => {
     try {
       await API.logout('ADMIN');
-    } catch {}
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Sign out could not be completed. Please try again.');
+      return;
+    }
     navigate('/admin');
   };
 

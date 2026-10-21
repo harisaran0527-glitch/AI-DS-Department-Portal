@@ -1,12 +1,11 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Papa from 'papaparse';
-import { API, API_BASE, fetchWithResilience, getValidSessionToken } from '../../services/api';
-import type { UserSession, Student, TeamHead, Subject } from '../../types';
+import { API, API_BASE, fetchWithResilience, openAuthenticatedFile } from '../../services/api';
+import type { UserSession, Student, TeamHead } from '../../types';
 import { DashboardLayout, type MenuItem } from '../../components/layout/DashboardLayout';
 import { ConfirmDeleteModal } from '../../components/common/ConfirmDeleteModal';
 import { ForgotPasswordModal } from '../../components/common/ForgotPasswordModal';
-import { SubjectManagement } from '../../components/academic/SubjectManagement';
 import { AcademicsModule } from '../../components/academic/AcademicsModule';
 import { BestEliteStudentsView } from '../../components/elite/BestEliteStudentsView';
 import { GeminiTopRecognitionView } from '../../components/ranking/GeminiTopRecognitionView';
@@ -39,7 +38,6 @@ import {
   ArrowLeft,
   Save,
   RefreshCw,
-  ImageIcon,
   Upload,
   ExternalLink,
   Plus,
@@ -74,14 +72,14 @@ export const FacultyDashboard: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [entryTypeFilter, setEntryTypeFilter] = useState<'ALL' | 'Regular' | 'Lateral Entry'>('ALL');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'DISABLED'>('ALL');
+  const [statusFilter] = useState<'ALL' | 'ACTIVE' | 'DISABLED'>('ALL');
   const [assignedYear, setAssignedYear] = useState('');
   const [assignedSection, setAssignedSection] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [, setIsLoading] = useState(true);
 
   // Student 360 Loading & Error State
   const [student360Loading, setStudent360Loading] = useState(false);
-  const [student360Error, setStudent360Error] = useState('');
+  const [, setStudent360Error] = useState('');
 
   // Sidebar Active Tab & Collapsible Submenu State
   const [activeTab, setActiveTab] = useState<string>('my-students');
@@ -106,7 +104,7 @@ export const FacultyDashboard: React.FC = () => {
   const [addEntryType, setAddEntryType] = useState<'Regular' | 'Lateral Entry'>('Regular');
   const [showAddPassword, setShowAddPassword] = useState(false);
   const [addError, setAddError] = useState('');
-  const [addSuccess, setAddSuccess] = useState('');
+  const [, setAddSuccess] = useState('');
   const [isAddingStudent, setIsAddingStudent] = useState(false);
 
   // Password Reset Modal State for Class Coordinator
@@ -119,17 +117,8 @@ export const FacultyDashboard: React.FC = () => {
   // Delete Student Modal State for Class Coordinator
   const [deleteStudentTarget, setDeleteStudentTarget] = useState<Student | null>(null);
   const [isDeletingStudent, setIsDeletingStudent] = useState(false);
-  const [deleteStudentError, setDeleteStudentError] = useState('');
-  const [updatingStudentId, setUpdatingStudentId] = useState<string | null>(null);
-
-  // CSV File Bulk Import State for Faculty
-  const facCsvFileInputRef = useRef<HTMLInputElement>(null);
-  const [facSelectedCsvFile, setFacSelectedCsvFile] = useState<File | null>(null);
-  const [facCsvRows, setFacCsvRows] = useState<any[]>([]);
-  const [facCsvStats, setFacCsvStats] = useState({ total: 0, valid: 0, duplicates: 0, invalid: 0 });
-  const [facImportResult, setFacImportResult] = useState<any | null>(null);
-  const [isImportingFacCsv, setIsImportingFacCsv] = useState(false);
-  const [facCsvImportError, setFacCsvImportError] = useState('');
+  const [, setDeleteStudentError] = useState('');
+  const [, setUpdatingStudentId] = useState<string | null>(null);
 
   // Global Selected Student state for Module Editors
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -198,9 +187,6 @@ export const FacultyDashboard: React.FC = () => {
   // Module Student Search State inside helper picker
   const [pickerSearchQuery, setPickerSearchQuery] = useState('');
 
-  // Registered subjects state for dynamic academic marks entry
-  const [registeredSubjects, setRegisteredSubjects] = useState<Subject[]>([]);
-
   // --- BEST TEAM HEAD STATE ---
   const [teamHeads, setTeamHeads] = useState<TeamHead[]>([]);
   const [expandedTeamHeadId, setExpandedTeamHeadId] = useState<string | null>(null);
@@ -228,15 +214,6 @@ export const FacultyDashboard: React.FC = () => {
     teamHeadId: string;
   } | null>(null);
 
-  // --- ACADEMICS FORM STATE ---
-  const [examType, setExamType] = useState<'Internal' | 'Model' | 'Semester'>('Internal');
-  const [subjectCount, setSubjectCount] = useState<number>(3);
-  const [subjectRows, setSubjectRows] = useState<{ code: string; title: string; marks?: number; maxMarks?: number; grade?: string; credits?: number }[]>([
-    { code: 'AD3401', title: 'Data Exploration and Visualization', marks: 85, maxMarks: 100, credits: 3 },
-    { code: 'AD3402', title: 'Operating Systems', marks: 78, maxMarks: 100, credits: 3 },
-    { code: 'AD3403', title: 'Machine Learning Tech', marks: 92, maxMarks: 100, credits: 4 }
-  ]);
-
   // --- SKILLEDGE CHECKBOX GRID STATE ---
   const [skillLevels, setSkillLevels] = useState<{
     c: boolean[];
@@ -252,9 +229,9 @@ export const FacultyDashboard: React.FC = () => {
 
   // --- NPTEL FORM & DIRECT EMAIL VERIFICATION STATE ---
   const [nptelSelectedEmail, setNptelSelectedEmail] = useState<string>('');
-  const [nptelEmailType, setNptelEmailType] = useState<'COLLEGE' | 'PERSONAL'>('COLLEGE');
+  const [, setNptelEmailType] = useState<'COLLEGE' | 'PERSONAL'>('COLLEGE');
   const [nptelConnection, setNptelConnection] = useState<any>(null);
-  const [nptelOauthError, setNptelOauthError] = useState<string>('');
+  const [, setNptelOauthError] = useState<string>('');
   const [nptelWeeklyProofs, setNptelWeeklyProofs] = useState<any[]>([]);
   const [showNptelProofModal, setShowNptelProofModal] = useState(false);
   const [showNptelVerifyModal, setShowNptelVerifyModal] = useState(false);
@@ -283,13 +260,9 @@ export const FacultyDashboard: React.FC = () => {
   const [attViewMode, setAttViewMode] = useState<'DAILY' | 'SUMMARY' | 'BULK_IMPORT'>('DAILY');
   const [monthlySummaryList, setMonthlySummaryList] = useState<any[]>([]);
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
-  const [attHistory, setAttHistory] = useState<any[]>([]);
+  const [, setAttHistory] = useState<any[]>([]);
   const [isAttSaving, setIsAttSaving] = useState(false);
   const [attSaveFeedback, setAttSaveFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-
-  // Academics Save status
-  const [acadSaveStatus, setAcadSaveStatus] = useState<'IDLE' | 'SAVING' | 'SUCCESS' | 'ERROR'>('IDLE');
-  const [acadSaveMsg, setAcadSaveMsg] = useState<string>('');
 
   // Bulk Import state
   const [bulkInputText, setBulkInputText] = useState('');
@@ -780,20 +753,13 @@ export const FacultyDashboard: React.FC = () => {
   };
 
   const handleViewCertificate = (certId: string) => {
-    const token = getValidSessionToken('FACULTY');
-    const url = `${API_BASE}/faculty/certificates/${certId}/view${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    void openAuthenticatedFile(`/faculty/certificates/${encodeURIComponent(certId)}/view`, 'FACULTY')
+      .catch(error => alert(error instanceof Error ? error.message : 'Attachment could not be loaded.'));
   };
 
   const handleDownloadCertificate = (certId: string, filename?: string) => {
-    const token = getValidSessionToken('FACULTY');
-    const url = `${API_BASE}/faculty/certificates/${certId}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-    const link = document.createElement('a');
-    link.href = url;
-    if (filename) link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    void openAuthenticatedFile(`/faculty/certificates/${encodeURIComponent(certId)}/download`, 'FACULTY', { download: true, filename })
+      .catch(error => alert(error instanceof Error ? error.message : 'Attachment could not be loaded.'));
   };
 
   const handleOpenPartModal = (part?: any) => {
@@ -909,20 +875,13 @@ export const FacultyDashboard: React.FC = () => {
   };
 
   const handleViewParticipation = (partId: string) => {
-    const token = getValidSessionToken('FACULTY');
-    const url = `${API_BASE}/faculty/participation/${partId}/view${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    void openAuthenticatedFile(`/faculty/participation/${encodeURIComponent(partId)}/view`, 'FACULTY')
+      .catch(error => alert(error instanceof Error ? error.message : 'Attachment could not be loaded.'));
   };
 
   const handleDownloadParticipation = (partId: string, filename?: string) => {
-    const token = getValidSessionToken('FACULTY');
-    const url = `${API_BASE}/faculty/participation/${partId}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-    const link = document.createElement('a');
-    link.href = url;
-    if (filename) link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    void openAuthenticatedFile(`/faculty/participation/${encodeURIComponent(partId)}/download`, 'FACULTY', { download: true, filename })
+      .catch(error => alert(error instanceof Error ? error.message : 'Attachment could not be loaded.'));
   };
 
   const fetchAttendanceHistory = React.useCallback(async () => {
@@ -1029,7 +988,7 @@ export const FacultyDashboard: React.FC = () => {
       setBulkPreviewResult(null);
       setBulkInputText('');
       setBulkFile(null);
-      
+
       fetchRoster();
       fetchMonthlySummary();
     } catch (err: any) {
@@ -1210,91 +1169,10 @@ export const FacultyDashboard: React.FC = () => {
     }
   };
 
-  const handleFacSelectCsvFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
 
-    setFacSelectedCsvFile(file);
-    setFacImportResult(null);
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const rows = results.data as any[];
-        let valid = 0; let dup = 0; let inv = 0;
-        const seen = new Set<string>();
 
-        const parsed = rows.map((r, i) => {
-          const regNo = (r['Register Number'] || r['registerNo'] || r['regNo'] || r['Register No'] || Object.values(r)[0] || '').toString().trim();
-          const name = (r['Student Name'] || r['Name'] || r['name'] || r['StudentName'] || Object.values(r)[1] || '').toString().trim();
-          const email = (r['College Email ID'] || r['College Mail ID'] || r['College Email'] || r['Email'] || r['email'] || r['collegeEmail'] || `${regNo.toLowerCase()}@aids.edu`).toString().trim();
-          const password = (r['College Portal Password'] || r['Portal Password'] || r['Password'] || r['password'] || r['portalPassword'] || r['collegePortalPassword'] || '').toString().trim();
-          const year = (r['Year'] || r['year'] || assignedYear || 'II').toString().trim();
-          const section = (r['Section'] || r['section'] || assignedSection || 'A').toString().trim();
 
-          let status = 'valid';
-          if (!regNo || !name) { status = 'invalid'; inv++; }
-          else if (seen.has(regNo.toLowerCase())) { status = 'duplicate'; dup++; }
-          else { seen.add(regNo.toLowerCase()); valid++; }
-
-          return { rowIndex: i + 1, registerNo: regNo, name, email, password, year, section, status };
-        });
-
-        setFacCsvRows(parsed);
-        setFacCsvStats({ total: rows.length, valid, duplicates: dup, invalid: inv });
-      }
-    });
-  };
-
-  const handleConfirmFacCsvImport = async () => {
-    const validStudents = facCsvRows.filter((r) => r.status === 'valid');
-    if (validStudents.length === 0) return;
-
-    setIsImportingFacCsv(true);
-    setFacCsvImportError('');
-    try {
-      const res = await API.importStudentsForFaculty(validStudents);
-      setFacImportResult(res);
-      setFacSelectedCsvFile(null);
-      setFacCsvRows([]);
-      setShowAddStudentModal(false);
-      await fetchRoster();
-    } catch (err: any) {
-      setFacCsvImportError(err.message || 'Failed to import CSV students.');
-    } finally {
-      setIsImportingFacCsv(false);
-    }
-  };
-
-  const handleGoogleSignIn = () => {
-    if (!selectedStudent) return;
-    window.location.href = `${API_BASE}/auth/google/start?studentId=${selectedStudent.id}&purpose=NPTEL&emailType=${nptelEmailType}`;
-  };
-
-  const handleSyncNptelConnection = async () => {
-    if (!selectedStudent) return;
-    try {
-      const res = await fetchWithResilience(`${API_BASE}/faculty/students/${selectedStudent.id}/nptel-connection/sync`, { method: 'POST' });
-      const data = await res.json();
-      if (data.connection) setNptelConnection(data.connection);
-      alert('NPTEL connection synchronized!');
-    } catch {
-      alert('Failed to sync NPTEL connection.');
-    }
-  };
-
-  const handleDisconnectNptelConnection = async () => {
-    if (!selectedStudent) return;
-    if (!confirm('Are you sure you want to disconnect this Google OAuth connection?')) return;
-    try {
-      await fetchWithResilience(`${API_BASE}/faculty/students/${selectedStudent.id}/nptel-connection`, { method: 'DELETE' });
-      setNptelConnection(null);
-      alert('Google OAuth connection disconnected.');
-    } catch {
-      alert('Failed to disconnect connection.');
-    }
-  };
 
   const handleVerifyNptel = async () => {
     if (!selectedStudent) return;
@@ -1386,25 +1264,6 @@ export const FacultyDashboard: React.FC = () => {
     }
   };
 
-  const handleSaveLeetCodeHandle = async () => {
-    if (!selectedStudent) return;
-    if (!editLeetCodeUsername.trim()) {
-      alert('Please enter a valid LeetCode username.');
-      return;
-    }
-    setStudent360Loading(true);
-    setStudent360Error('');
-    try {
-      const res = await API.connectAccountForFaculty(selectedStudent.id, 'leetcode', editLeetCodeUsername.trim());
-      alert(res.message || 'LeetCode profile saved and synchronized!');
-      await reloadStudent360();
-    } catch (err: any) {
-      alert(err.message || 'Failed to save LeetCode handle.');
-      setStudent360Error(err.message || 'Failed to save LeetCode handle.');
-    } finally {
-      setStudent360Loading(false);
-    }
-  };
 
   // --- SKILLEDGE AUTO-SYNC HANDLERS ---
   const [isSyncingSkillEdge, setIsSyncingSkillEdge] = useState(false);
@@ -1546,7 +1405,10 @@ export const FacultyDashboard: React.FC = () => {
   const handleLogout = async () => {
     try {
       await API.logout('FACULTY');
-    } catch {}
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Sign out could not be completed. Please try again.');
+      return;
+    }
     setStudents([]);
     setSelectedStudent(null);
     setStudent360Edit(null);
@@ -5054,7 +4916,7 @@ export const FacultyDashboard: React.FC = () => {
         )}
 
         {/* SECTION 15: DEDICATED BEST LEETCODE PERFORMER PAGE */}
-        
+
                 {activeTab === 'bes-skilledge-points' && (
           <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-6 space-y-6 shadow-xl">
             {renderSelectedStudentHeader()}

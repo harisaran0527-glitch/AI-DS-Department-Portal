@@ -2,7 +2,9 @@ import path from 'path';
 import fs from 'fs';
 import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
-import { isPostgresActive, queryOne, queryAll, executeRun, executeTransaction, sqliteDb } from './postgresAdapter.js';
+import { randomUUID } from 'node:crypto';
+import { generateSecureRandomPassword } from './services/security.js';
+import { isPostgresActive, queryOne, queryAll, executeRun, executeTransaction, sqliteDb as sqlite, sqliteReady } from './postgresAdapter.js';
 import { calculateCategoryScores, computeOverallScore } from './scoringEngine.js';
 
 dotenv.config();
@@ -45,9 +47,9 @@ export function normalizeYear(y?: string | null): string {
   return str;
 }
 
-const sqlite = sqliteDb;
-
 export async function initDatabaseSchema(): Promise<void> {
+  await sqliteReady;
+  if (!isPostgresActive() && !sqlite) throw new Error('Database initialization is unavailable.');
   const ddl = `
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -957,7 +959,7 @@ export interface AttachmentRecord {
   is_deleted: number;
   deleted_at?: string;
   deleted_by?: string;
-  file_data?: string | null;
+  file_data?: Buffer | string | null;
 }
 
 export interface ScoringConfig {
@@ -991,6 +993,7 @@ export class SQLiteDB {
   }
 
   public static async initSystemAccounts(): Promise<void> {
+    // Kept for existing callers: this initializes schema/configuration only, never users.
     await initDatabaseSchema();
   }
 
@@ -1008,6 +1011,15 @@ export class SQLiteDB {
 
   public async getUserById(id: string): Promise<UserRecord | undefined> {
     return (await queryOne<UserRecord>('SELECT * FROM users WHERE id = ?', [id])) || undefined;
+  }
+
+  public async isSessionRevoked(tokenDigest: string): Promise<boolean> {
+    return Boolean(await queryOne('SELECT token_id FROM sessions_revocation WHERE token_id = ?', [tokenDigest]));
+  }
+
+  public async revokeSessionToken(tokenDigest: string, userId: string): Promise<void> {
+    await executeRun(`INSERT INTO sessions_revocation (token_id, user_id, revoked_at)
+      VALUES (?, ?, ?) ON CONFLICT (token_id) DO NOTHING`, [tokenDigest, userId, new Date().toISOString()]);
   }
 
   public async getUsers(role?: string): Promise<UserRecord[]> {
@@ -1076,10 +1088,10 @@ export class SQLiteDB {
     }
   }
 
-  public async getFacultyAssignment(facultyId: string): Promise<FacultyAssignmentRecord | undefined> {
+  public async getFacultyAssignment(facultyId: string, { fresh = false } = {}): Promise<FacultyAssignmentRecord | undefined> {
     const now = Date.now();
     const cached = SQLiteDB.facultyAssignmentCache.get(facultyId);
-    if (cached && cached.expiry > now) {
+    if (!fresh && cached && cached.expiry > now) {
       return cached.data;
     }
     const result = (await queryOne<FacultyAssignmentRecord>('SELECT * FROM faculty_assignments WHERE faculty_id = ? AND is_active = 1', [facultyId])) || undefined;
@@ -1341,12 +1353,13 @@ export class SQLiteDB {
     }
 
     // AUTOMATIC STUDENT LOGIN ACCOUNT CREATION / SYNC IN users TABLE
-    // Login Email = College Mail ID, Initial Password = Register Number (bcrypt hashed)
+    // New roster accounts require an authorized password reset before first use.
+    // Existing users keep their original password hashes.
     const existingUser = await queryOne("SELECT id, password_hash FROM users WHERE (LOWER(email) = ? OR LOWER(identifier) = ?) AND UPPER(role) = 'STUDENT'", [cleanEmail, cleanRegNo.toLowerCase()]);
 
     if (!existingUser) {
       try {
-        const initialPasswordHash = await bcrypt.hash(cleanRegNo, 10);
+        const initialPasswordHash = await bcrypt.hash(generateSecureRandomPassword(32), 10);
         const userId = `usr-stu-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
         await executeRun(`
           INSERT INTO users (id, email, identifier, name, role, password_hash, year, section, is_active, created_at)
@@ -1465,7 +1478,7 @@ export class SQLiteDB {
       const upsertedStudents = await queryAll(stuSql, stuParams);
 
       // 2. Synchronize user login accounts concurrently with bcrypt
-      const hashes = await Promise.all(preparedList.map((s) => bcrypt.hash(s.registerNo, 10)));
+      const hashes = await Promise.all(preparedList.map(() => bcrypt.hash(generateSecureRandomPassword(32), 10)));
       const userPlaceholders: string[] = [];
       const userParams: any[] = [];
 
@@ -1495,7 +1508,7 @@ export class SQLiteDB {
           const item = preparedList[i];
           await executeRun(`
             UPDATE users SET name = ?, email = ?, year = ?, section = ?
-            WHERE LOWER(identifier) = LOWER(?) OR LOWER(email) = LOWER(?)
+            WHERE (LOWER(identifier) = LOWER(?) OR LOWER(email) = LOWER(?)) AND UPPER(role) = 'STUDENT'
           `, [item.name, item.email, item.year, item.section, item.registerNo, item.email]);
         }
       }
@@ -2329,6 +2342,7 @@ export class SQLiteDB {
     facultyId?: string;
     role?: string;
   }): Promise<any[]> {
+    if (!filters?.facultyId || !['FACULTY', 'HOD', 'ADMIN'].includes(filters.role || '')) return [];
     let sql = `
       SELECT 
         d.id,
@@ -2379,7 +2393,7 @@ export class SQLiteDB {
     }
 
     if (filters?.facultyId && filters.role === 'FACULTY') {
-      const assignment = await this.getFacultyAssignment(filters.facultyId);
+      const assignment = await this.getFacultyAssignment(filters.facultyId, { fresh: true });
       const assignedYear = assignment ? normalizeYear(assignment.year) : '';
       const assignedSection = assignment ? normalizeSection(assignment.section) : '';
 
@@ -2430,8 +2444,28 @@ export class SQLiteDB {
     }));
   }
 
-  public async deleteDisciplineIssue(id: string): Promise<boolean> {
-    const res = await executeRun('DELETE FROM discipline_records WHERE id = ?', [id]);
+  public async deleteDisciplineIssue(id: string, scope?: { facultyId: string; role: string }): Promise<boolean> {
+    if (!scope?.facultyId || !['FACULTY', 'HOD', 'ADMIN'].includes(scope.role)) return false;
+    let sql = 'DELETE FROM discipline_records WHERE id = ?';
+    const params: any[] = [id];
+    if (scope.role === 'FACULTY') {
+      // Check ownership in the DELETE itself, rather than trusting an earlier list result.
+      sql += ` AND id IN (
+        SELECT d.id FROM discipline_records d JOIN students s ON s.id = d.student_id
+        WHERE d.assigned_faculty_id = ? OR s.created_by_faculty_id = ? OR s.faculty_workspace_id = ?
+          OR EXISTS (SELECT 1 FROM faculty_assignments a WHERE a.faculty_id = ? AND a.is_active = 1
+            AND TRIM(a.year) <> '' AND UPPER(TRIM(a.year)) <> 'ALL'
+            AND TRIM(a.section) <> '' AND UPPER(TRIM(a.section)) <> 'ALL'
+            AND LOWER(TRIM(s.year)) = LOWER(TRIM(CASE TRIM(a.year)
+              WHEN 'I' THEN '1st Year' WHEN '1' THEN '1st Year' WHEN '1st' THEN '1st Year'
+              WHEN 'II' THEN '2nd Year' WHEN '2' THEN '2nd Year' WHEN '2nd' THEN '2nd Year'
+              WHEN 'III' THEN '3rd Year' WHEN '3' THEN '3rd Year' WHEN '3rd' THEN '3rd Year'
+              WHEN 'IV' THEN '4th Year' WHEN '4' THEN '4th Year' WHEN '4th' THEN '4th Year' ELSE a.year END))
+            AND UPPER(TRIM(s.section)) = UPPER(TRIM(REPLACE(REPLACE(REPLACE(UPPER(a.section), 'SECTION ', ''), 'SEC ', ''), 'SEC.', ''))))
+      )`;
+      params.push(scope.facultyId, scope.facultyId, scope.facultyId, scope.facultyId);
+    }
+    const res = await executeRun(sql, params);
     return res.changes > 0;
   }
 
@@ -3555,7 +3589,7 @@ export class SQLiteDB {
   }
 
   // FACULTY STUDENT CREATION
-  public async createStudentForFaculty(facultyUserId: string, studentData: any, defaultPassword = 'student123'): Promise<any> {
+  public async createStudentForFaculty(facultyUserId: string, studentData: any, defaultPassword?: string): Promise<any> {
     const assignment = await this.getFacultyAssignment(facultyUserId);
     const year = studentData.year || (assignment ? assignment.year : '2nd Year');
     const section = studentData.section || (assignment ? assignment.section : 'A');
@@ -3578,12 +3612,12 @@ export class SQLiteDB {
     }
 
     const rawPassword = studentData.password || studentData.portalPassword || studentData.collegePortalPassword || defaultPassword;
-    if (!rawPassword || String(rawPassword).trim().length === 0) {
-      throw new Error('College Portal Password is required.');
+    if (typeof rawPassword !== 'string' || rawPassword.length < 6) {
+      throw new Error('An explicit College Portal Password of at least 6 characters is required.');
     }
 
     const salt = bcrypt.genSaltSync(10);
-    const passwordHash = bcrypt.hashSync(String(rawPassword).trim(), salt);
+    const passwordHash = bcrypt.hashSync(rawPassword, salt);
     const userId = `user-stu-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const studentId = `stu-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const entryType = studentData.entryType || studentData.entry_type || 'Regular';
@@ -4474,12 +4508,11 @@ export class SQLiteDB {
     await executeRun(`
       INSERT INTO audit_logs (id, user_id, user_email, role, action, target_resource, timestamp)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [`aud-${Date.now()}`, userId, email, role, action, resource, new Date().toISOString()]);
+    `, [`aud-${randomUUID()}`, userId, email, role, action, resource, new Date().toISOString()]);
   }
 }
 
 export const db = new SQLiteDB();
 
-if (!process.env.VERCEL) {
-  SQLiteDB.initSystemAccounts().catch((err) => console.error('Error initializing system accounts:', err));
-}
+export const databaseReady: Promise<void> = process.env.VERCEL ? Promise.resolve() : SQLiteDB.initSystemAccounts();
+databaseReady.catch((err) => console.error('Error initializing database schema:', err));

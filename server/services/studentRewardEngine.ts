@@ -216,7 +216,7 @@ export async function evaluateStudentRewardPoints(studentId: string): Promise<St
   const evaluation: StudentRewardEvaluation = {
     studentId: student.id,
     studentName: student.name,
-    registerNo: student.register_no || student.registerNo,
+    registerNo: student.register_no || student.registerNo || '',
     year: student.year,
     section: student.section,
     totalRewardScore,

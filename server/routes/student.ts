@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { db } from '../db.js';
+import type { StudentRecord } from '../db.js';
 import { authenticateToken, requireRole, AuthRequest } from '../middleware/auth.js';
 import { calculateCategoryScores, computeOverallScore, generateAIExplanation } from '../scoringEngine.js';
 
@@ -14,7 +15,7 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
   const userStudentId = req.user?.studentId;
   const userEmail = req.user?.email || '';
 
-  let stuRecord = userStudentId ? await db.getStudentById(userStudentId) : undefined;
+  let stuRecord: StudentRecord | null | undefined = userStudentId ? await db.getStudentById(userStudentId) : undefined;
   if (!stuRecord && userId) stuRecord = await db.getStudentById(userId);
   if (!stuRecord && userRegNo) stuRecord = await db.getStudentByRegisterNo(userRegNo);
   if (!stuRecord && (req.user as any)?.identifier) stuRecord = await db.getStudentByRegisterNo((req.user as any).identifier);

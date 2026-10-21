@@ -4,23 +4,10 @@ import {
   Users,
   Search,
   ArrowLeft,
-  BookOpen,
-  Award,
-  Trophy,
-  CheckCircle,
   Clock,
-  Sparkles,
-  FileText,
-  Code,
   GraduationCap,
   ChevronRight,
-  ShieldCheck,
   AlertCircle,
-  Filter,
-  CheckCircle2,
-  XCircle,
-  Layers,
-  BarChart2,
   FileSpreadsheet
 } from 'lucide-react';
 import { ProofAttachmentControl } from '../common/ProofAttachmentControl';

@@ -15,8 +15,7 @@ import {
   RefreshCw,
   AlertCircle,
   CheckCircle2,
-  Lightbulb,
-  ShieldCheck
+  Lightbulb
 } from 'lucide-react';
 
 interface GeminiFullLeetCodeDashboardProps {

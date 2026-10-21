@@ -33,14 +33,8 @@ export const SimpleAdminLogin: React.FC = () => {
     setErrorMessage('');
     setAuthStatus('loading');
 
-    if (rememberMe) {
-      localStorage.setItem('remembered_email_admin', identifier);
-    } else {
-      localStorage.removeItem('remembered_email_admin');
-    }
-
     try {
-      const res = await API.login(identifier, password, 'ADMIN');
+      const res = await API.login(identifier, password, 'ADMIN', rememberMe);
 
       if (res && res.user) {
         setAuthenticatedName(res.user.name);
@@ -88,7 +82,7 @@ export const SimpleAdminLogin: React.FC = () => {
           </div>
         ) : (
           /* THE CLEAN MINIMAL ADMIN LOGIN FORM */
-          <form 
+          <form autoComplete="off"
             onSubmit={handleLoginSubmit} 
             className="w-full bg-[#1B205F]/95 border border-white/14 rounded-2xl p-6 sm:p-7 shadow-2xl backdrop-blur-xl flex flex-col space-y-4"
           >
@@ -132,6 +126,9 @@ export const SimpleAdminLogin: React.FC = () => {
                   disabled={authStatus === 'loading'}
                   placeholder="Enter admin email or ID"
                   value={identifier}
+                  name="admin-identifier"
+                  aria-label="Admin email or ID"
+                  autoComplete="off"
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="w-full bg-slate-900/90 border border-cyan-500/50 rounded-xl py-2.5 pl-12 pr-4 min-h-[44px] text-base sm:text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all disabled:opacity-75 disabled:cursor-not-allowed"
                 />
@@ -151,6 +148,9 @@ export const SimpleAdminLogin: React.FC = () => {
                   disabled={authStatus === 'loading'}
                   placeholder="Enter admin password"
                   value={password}
+                  name="admin-password"
+                  aria-label="Admin portal password"
+                  autoComplete="new-password"
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-slate-900/90 border border-cyan-500/50 rounded-xl py-2.5 pl-12 pr-12 min-h-[44px] text-base sm:text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/40 shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all disabled:opacity-75 disabled:cursor-not-allowed"
                 />

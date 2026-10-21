@@ -44,7 +44,10 @@ export const HODDashboard: React.FC = () => {
   const handleLogout = async () => {
     try {
       await API.logout('HOD');
-    } catch {}
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Sign out could not be completed. Please try again.');
+      return;
+    }
     navigate('/hod');
   };
 

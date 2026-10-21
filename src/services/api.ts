@@ -1,7 +1,7 @@
 import type { Student, UserSession, TeamHead, Subject, Role } from '../types';
 
 export function getApiBaseUrl(): string {
-  const envBase = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL;
+  const envBase = import.meta.env?.VITE_API_BASE_URL || import.meta.env?.VITE_API_URL;
   if (envBase && typeof envBase === 'string' && envBase.trim() !== '') {
     const trimmed = envBase.trim().replace(/\/$/, '');
     if (trimmed.includes('onrender.com')) {
@@ -13,6 +13,44 @@ export function getApiBaseUrl(): string {
 }
 
 export const API_BASE = getApiBaseUrl();
+
+/** Fetch proof content with headers so session tokens never enter URLs or browser history. */
+export async function openAuthenticatedFile(endpoint: string, role: Role, options: { download?: boolean; filename?: string } = {}): Promise<void> {
+  if (!/^\/faculty\/(?:certificates|participation|nptel-proofs)\/[^/]+\/(?:view|download)$/.test(endpoint)) {
+    throw new Error('Invalid proof endpoint.');
+  }
+  const preview = options.download ? null : window.open('about:blank', '_blank');
+  if (!options.download && !preview) throw new Error('Allow pop-ups to preview this attachment.');
+  if (preview) preview.opener = null;
+  try {
+    const token = getValidSessionToken(role);
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      cache: 'no-store',
+      headers: { 'X-Portal-Role': role, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      credentials: 'include'
+    });
+    if (!response.ok) throw new Error(`Attachment could not be loaded (${response.status}).`);
+    const blob = await response.blob();
+    if (!options.download && !/^(?:application\/pdf|image\/(?:jpeg|png|gif|webp))$/i.test(blob.type)) {
+      throw new Error('Preview is unavailable for this file type. Download the attachment instead.');
+    }
+    const objectUrl = URL.createObjectURL(blob);
+    if (options.download) {
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = options.filename || 'attachment';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } else if (preview) {
+      preview.location.replace(objectUrl);
+    }
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  } catch (error) {
+    preview?.close();
+    throw error;
+  }
+}
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -66,7 +104,7 @@ export function getValidSessionToken(roleHint?: Role): string | null {
   return null;
 }
 
-export function setSessionAuth(token: string, role?: string): void {
+export function setSessionAuth(token: string, role?: string, rememberDevice = false): void {
   const normRole = (role || getActivePortalRole() || 'STUDENT').toUpperCase() as Role;
   const roleKey = `aids_token_${normRole.toLowerCase()}`;
 
@@ -75,7 +113,8 @@ export function setSessionAuth(token: string, role?: string): void {
     sessionStorage.setItem(roleKey, token);
   }
   if (typeof localStorage !== 'undefined') {
-    localStorage.setItem(roleKey, token);
+    if (rememberDevice) localStorage.setItem(roleKey, token);
+    else localStorage.removeItem(roleKey);
     // Purge legacy shared keys to eliminate cross-portal session collisions
     localStorage.removeItem('aids_session_token');
     localStorage.removeItem('aids_token');
@@ -101,7 +140,9 @@ export function clearSessionAuth(role?: string): void {
   }
   if (typeof sessionStorage !== 'undefined') {
     sessionStorage.removeItem('aids_session_token');
-    sessionStorage.removeItem('aids_active_role');
+    if (!targetRole || sessionStorage.getItem('aids_active_role') === targetRole.toUpperCase()) {
+      sessionStorage.removeItem('aids_active_role');
+    }
   }
   if (typeof localStorage !== 'undefined') {
     localStorage.removeItem('aids_session_token');
@@ -133,7 +174,8 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   const isLoginRequest = url.includes('/auth/login');
   // Never automatically retry password submissions per security requirements
   const isDisciplineMutation = /\/discipline\/records(?:\/|$)/.test(endpoint) && !isGetOrIdempotent;
-  const maxAttempts = isLoginRequest || isDisciplineMutation ? 1 : 3;
+  const isAuthenticationMutation = /\/auth\/(?:login|logout|change-password)(?:\?|$)/.test(url);
+  const maxAttempts = isAuthenticationMutation || isDisciplineMutation ? 1 : 3;
   let lastError: any = null;
 
   // Resolve target role: explicit option header > endpoint URL path > current active portal role
@@ -204,7 +246,7 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
         const errorMsg = isLoginRequest
           ? (errorMessage || 'Invalid credentials. Please verify your email/ID and password.')
           : (errorMessage || 'Session expired. Please log in again.');
-        throw new Error(errorMsg);
+        throw Object.assign(new Error(errorMsg), { status: 401 });
       }
 
       // Handle 403 Forbidden
@@ -404,7 +446,7 @@ export async function fetchWithResilience(url: string, options: RequestInit = {}
 
 export const API = {
   // Auth
-  login: async (identifier: string, password: string, role: string) => {
+  login: async (identifier: string, password: string, role: string, rememberDevice = false) => {
     const cleanRole = role.trim().toUpperCase() as Role;
     // 1. Clear stale authentication state for this role only
     clearSessionAuth(cleanRole);
@@ -423,23 +465,26 @@ export const API = {
 
     // 2. Store authoritative token in role-isolated storage
     if (res && res.token) {
-      setSessionAuth(res.token, cleanRole);
+      setSessionAuth(res.token, cleanRole, rememberDevice);
     }
     return res;
   },
 
   logout: async (role?: string) => {
     const cleanRole = role || getActivePortalRole();
+    let result;
     try {
-      return await request<{ message: string }>('/auth/logout', {
+      result = await request<{ message: string }>('/auth/logout', {
         method: 'POST',
         headers: cleanRole ? { 'X-Portal-Role': cleanRole } : {}
       });
-    } catch {
-      return { message: 'Logged out' };
-    } finally {
-      clearSessionAuth(cleanRole || undefined);
+    } catch (error) {
+      if (!(error instanceof Error) || !('status' in error) || error.status !== 401) throw error;
+      // An expired/revoked session is already signed out; a 503 must remain retryable.
+      result = { message: 'Session has ended.' };
     }
+    clearSessionAuth(cleanRole || undefined);
+    return result;
   },
 
   getMe: async (roleHint?: Role) => {
@@ -552,10 +597,12 @@ export const API = {
   },
 
   changePassword: async (currentPassword: string, newPassword: string) => {
-    return request<{ message: string }>('/auth/change-password', {
+    const result = await request<{ message: string }>('/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({ currentPassword, newPassword })
     });
+    clearSessionAuth();
+    return result;
   },
 
   // Admin - HOD Management
@@ -726,6 +773,7 @@ export const API = {
 
     const res = await fetch(`${API_BASE}/files/${fileId}`, {
       method: 'GET',
+      cache: 'no-store',
       headers,
       credentials: 'include'
     });

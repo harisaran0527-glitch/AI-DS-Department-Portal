@@ -24,9 +24,10 @@ for (const [id, year, section, owner] of [['owned', '2nd Year', 'A', 'f1'], ['bl
 process.env.VERCEL = '1'; // Prevent schema initialization, SQLite file loading, listeners, and schedulers.
 process.env.USE_SQLITE = 'false';
 process.env.DATABASE_URL = 'postgresql://isolated.invalid/never-connected';
-globalThis.__pgPool = { query: async (sql, parameters) => ({
-  rows: memory.prepare(sql.replace(/\$\d+/g, '?')).all(...parameters)
-}) };
+globalThis.__pgPool = { query: async (sql, parameters) => {
+  const statement = memory.prepare(sql.replace(/\$\d+/g, '?'));
+  return statement.reader ? { rows: statement.all(...parameters) } : { rows: [], rowCount: statement.run(...parameters).changes };
+} };
 isolateServer(undefined, {}, { loadRealDatabase: true });
 const { db, SQLiteDB } = await import('../server/db.ts');
 async function visible(assignment) {
@@ -47,4 +48,29 @@ test('inactive and wildcard assignments grant no additional workspace records', 
 });
 test('Admin and HOD preserve their department-wide repository access', async () => {
   for (const role of ['HOD', 'ADMIN']) assert.equal((await db.getAllDisciplineIssues({ facultyId: 'lead', role })).length, 4);
+});
+
+test('repository reads deny missing identities and non-staff roles', async () => {
+  for (const scope of [undefined, {}, { role: 'ADMIN' }, { facultyId: 'f1' }, { facultyId: 'f1', role: 'STUDENT' }]) {
+    assert.deepEqual(await db.getAllDisciplineIssues(scope), []);
+  }
+});
+
+test('Discipline reads do not trust a cached assignment after it has been revoked', async () => {
+  await visible(['2nd Year', 'B', 1]);
+  memory.prepare('UPDATE faculty_assignments SET is_active = 0 WHERE faculty_id = ?').run('f1');
+  const records = await db.getAllDisciplineIssues({ facultyId: 'f1', role: 'FACULTY' });
+  assert.deepEqual(records.map(record => record.studentId), ['owned']);
+});
+
+test('deletion rechecks live ownership and assignment rather than an earlier visible-record list', async () => {
+  await visible(['2nd Year', 'B', 1]);
+  const scope = { facultyId: 'f1', role: 'FACULTY' };
+  assert.equal((await db.getAllDisciplineIssues(scope)).some(record => record.id === 'r-assigned'), true);
+  memory.prepare('UPDATE faculty_assignments SET is_active = 0 WHERE faculty_id = ?').run('f1');
+  assert.equal(await db.deleteDisciplineIssue('r-assigned', scope), false);
+  assert.ok(memory.prepare('SELECT id FROM discipline_records WHERE id = ?').get('r-assigned'));
+  assert.equal(await db.deleteDisciplineIssue('r-owned'), false);
+  assert.equal(await db.deleteDisciplineIssue('r-owned', { facultyId: 'f1', role: 'STUDENT' }), false);
+  assert.equal(await db.deleteDisciplineIssue('r-owned', scope), true);
 });

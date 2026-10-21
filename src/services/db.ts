@@ -95,26 +95,7 @@ export class DBService {
       this.setItem(KEYS.FINALIZED_AWARDS, []);
     }
 
-    // Default hashed password setup for Admin and HOD system accounts
-    if (!localStorage.getItem(KEYS.ADMIN_ACCOUNT)) {
-      const adminHash = await hashPassword('admin123');
-      this.setItem(KEYS.ADMIN_ACCOUNT, {
-        id: 'sys-admin-1',
-        name: 'System Administrator',
-        email: 'admin@aids.edu',
-        passwordHash: adminHash
-      });
-    }
-
-    if (!localStorage.getItem(KEYS.HOD_ACCOUNT)) {
-      const hodHash = await hashPassword('hod123');
-      this.setItem(KEYS.HOD_ACCOUNT, {
-        id: 'sys-hod-1',
-        name: 'Head of Department',
-        email: 'hod@aids.edu',
-        passwordHash: hodHash
-      });
-    }
+    // Account provisioning is explicit. Never seed accounts or rewrite stored credentials.
   }
 
   // --- Rate Limiting & Account Enumeration Defense ---
@@ -291,7 +272,10 @@ export class DBService {
     return targetStudent.year === facultySession.assignedYear && targetStudent.section === facultySession.assignedSection;
   }
 
-  public static async bulkImportStudents(newStudents: Omit<Student, 'id' | 'overallScore' | 'currentRank' | 'portalPasswordHash'>[], defaultPass = 'student123'): Promise<number> {
+  public static async bulkImportStudents(newStudents: Omit<Student, 'id' | 'overallScore' | 'currentRank' | 'portalPasswordHash'>[], defaultPass: string): Promise<number> {
+    if (typeof defaultPass !== 'string' || defaultPass.length < 6) {
+      throw new Error('An explicit portal password of at least 6 characters is required.');
+    }
     const list = this.getStudents();
     const defaultHash = await hashPassword(defaultPass);
     let imported = 0;
