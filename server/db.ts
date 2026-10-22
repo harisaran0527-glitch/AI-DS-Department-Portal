@@ -4058,7 +4058,11 @@ export class SQLiteDB {
             [...stuChunk, ...dateChunk]
           );
           for (const er of existingRows) {
-            existingDailyMap.set(`${er.student_id}_${er.date}`, { id: er.id, status: er.status });
+            const cleanDate = er.date instanceof Date
+              ? er.date.toISOString().split('T')[0]
+              : String(er.date || '').split('T')[0].trim();
+            existingDailyMap.set(`${er.student_id}_${cleanDate}`, { id: er.id, status: er.status });
+            existingDailyMap.set(`${er.student_id}_${String(er.date || '').trim()}`, { id: er.id, status: er.status });
           }
         }
       }
@@ -4416,7 +4420,11 @@ export class SQLiteDB {
           [...stuChunk, ...dateChunk]
         );
         for (const er of rows) {
-          existingMap.set(`${er.student_id}_${er.date}`, { id: er.id, status: er.status });
+          const cleanDate = er.date instanceof Date
+            ? er.date.toISOString().split('T')[0]
+            : String(er.date || '').split('T')[0].trim();
+          existingMap.set(`${er.student_id}_${cleanDate}`, { id: er.id, status: er.status });
+          existingMap.set(`${er.student_id}_${String(er.date || '').trim()}`, { id: er.id, status: er.status });
         }
       }
     }
@@ -4429,7 +4437,8 @@ export class SQLiteDB {
       const clean = r.status.trim().toUpperCase();
       const targetStatus = (clean === 'ON' || clean === 'OD' || clean === 'ON DUTY' || clean === 'ONDUTY' || clean === 'ON-DUTY') ? 'OD' : clean;
 
-      const existing = existingMap.get(`${r.studentId}_${r.date}`);
+      const cleanRDate = r.date.split('T')[0].trim();
+      const existing = existingMap.get(`${r.studentId}_${cleanRDate}`) || existingMap.get(`${r.studentId}_${r.date}`);
       if (existing) {
         const exClean = (existing.status || '').trim().toUpperCase();
         const existingStatus = (exClean === 'ON' || exClean === 'OD') ? 'OD' : exClean;
@@ -4442,24 +4451,23 @@ export class SQLiteDB {
       } else {
         importedCount++;
         const id = `attd-${Date.now()}-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 4)}`;
-        toInsert.push({ id, studentId: r.studentId, date: r.date, status: targetStatus });
+        toInsert.push({ id, studentId: r.studentId, date: cleanRDate, status: targetStatus });
       }
       affectedStudentIds.add(r.studentId);
     }
 
     // Atomically execute writes inside transaction
     await executeTransaction(async () => {
-      // Chunk multi-row inserts in batches of 50
-      for (let i = 0; i < toInsert.length; i += 50) {
-        const chunk = toInsert.slice(i, i + 50);
-        const valuePlaceholders = chunk.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
-        const flatParams: any[] = [];
-        for (const item of chunk) {
-          flatParams.push(item.id, item.studentId, item.date, item.status, recordedBy, now);
-        }
+      // Chunk multi-row inserts with ON CONFLICT DO UPDATE
+      for (const item of toInsert) {
         await executeRun(
-          `INSERT INTO daily_attendance_records (id, student_id, date, status, recorded_by, recorded_at) VALUES ${valuePlaceholders}`,
-          flatParams
+          `INSERT INTO daily_attendance_records (id, student_id, date, status, recorded_by, recorded_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT (student_id, date) DO UPDATE SET
+             status = EXCLUDED.status,
+             recorded_by = EXCLUDED.recorded_by,
+             recorded_at = EXCLUDED.recorded_at`,
+          [item.id, item.studentId, item.date, item.status, recordedBy, now]
         );
       }
 
