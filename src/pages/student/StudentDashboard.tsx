@@ -1018,7 +1018,7 @@ Register No: <strong className="text-white">{registerNoDisplay}</strong> | Batch
                       </div>
                       <div className="bg-amber-950/40 border border-amber-800/60 p-3.5 rounded-xl">
                         <div className="text-[10px] text-amber-400 font-mono uppercase font-bold flex items-center justify-between">
-                          <span>ON</span>
+                          <span>OD</span>
                           <Star className="w-3.5 h-3.5 text-amber-400" />
                         </div>
                         <div className="text-xl font-black text-amber-300 mt-1">{odDays}</div>
@@ -1045,7 +1045,7 @@ Register No: <strong className="text-white">{registerNoDisplay}</strong> | Batch
                       <div className="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden flex border border-slate-800">
                         <div style={{ width: `${(presentDays / totalWorking) * 100}%` }} className="bg-emerald-500 h-full" title={`P: ${presentDays}`} />
                         <div style={{ width: `${(absentDays / totalWorking) * 100}%` }} className="bg-red-500 h-full" title={`A: ${absentDays}`} />
-                        <div style={{ width: `${(odDays / totalWorking) * 100}%` }} className="bg-amber-500 h-full" title={`ON: ${odDays}`} />
+                        <div style={{ width: `${(odDays / totalWorking) * 100}%` }} className="bg-amber-500 h-full" title={`OD: ${odDays}`} />
                         <div style={{ width: `${(mlDays / totalWorking) * 100}%` }} className="bg-sky-500 h-full" title={`ML: ${mlDays}`} />
                       </div>
                     )}
@@ -1078,7 +1078,7 @@ Register No: <strong className="text-white">{registerNoDisplay}</strong> | Batch
                             const raw = (log.status || '').trim().toUpperCase();
                             const shortStatus = (raw === 'P' || raw === 'PRESENT') ? 'P' :
                                                 (raw === 'A' || raw === 'ABSENT') ? 'A' :
-                                                (raw === 'ON' || raw === 'OD' || raw === 'ON DUTY' || raw === 'ONDUTY') ? 'ON' :
+                                                (raw === 'ON' || raw === 'OD' || raw === 'ON DUTY' || raw === 'ONDUTY' || raw === 'DUTY') ? 'OD' :
                                                 (raw === 'ML' || raw === 'LEAVE' || raw === 'MEDICAL LEAVE') ? 'ML' : (raw || 'UNMARKED');
                             return (
                               <tr key={idx} className="hover:bg-slate-900/60">
@@ -1088,7 +1088,7 @@ Register No: <strong className="text-white">{registerNoDisplay}</strong> | Batch
                                   <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
                                     shortStatus === 'P' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
                                     shortStatus === 'A' ? 'bg-red-950 text-red-300 border border-red-800' :
-                                    shortStatus === 'ON' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                                    shortStatus === 'OD' || shortStatus === 'ON' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
                                     shortStatus === 'ML' ? 'bg-sky-950 text-sky-300 border border-sky-800' :
                                     'bg-slate-800 text-slate-400 border border-slate-700'
                                   }`}>
@@ -1109,7 +1109,7 @@ Register No: <strong className="text-white">{registerNoDisplay}</strong> | Batch
                         const raw = (log.status || '').trim().toUpperCase();
                         const shortStatus = (raw === 'P' || raw === 'PRESENT') ? 'P' :
                                             (raw === 'A' || raw === 'ABSENT') ? 'A' :
-                                            (raw === 'ON' || raw === 'OD' || raw === 'ON DUTY' || raw === 'ONDUTY') ? 'ON' :
+                                            (raw === 'ON' || raw === 'OD' || raw === 'ON DUTY' || raw === 'ONDUTY' || raw === 'DUTY') ? 'OD' :
                                             (raw === 'ML' || raw === 'LEAVE' || raw === 'MEDICAL LEAVE') ? 'ML' : (raw || 'UNMARKED');
                         return (
                           <div key={idx} className="bg-slate-950 border border-slate-800/80 rounded-xl p-2.5 flex items-center justify-between text-xs">
@@ -1123,7 +1123,7 @@ Register No: <strong className="text-white">{registerNoDisplay}</strong> | Batch
                             <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] font-mono ${
                               shortStatus === 'P' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
                               shortStatus === 'A' ? 'bg-red-950 text-red-300 border border-red-800' :
-                              shortStatus === 'ON' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                              shortStatus === 'OD' || shortStatus === 'ON' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
                               shortStatus === 'ML' ? 'bg-sky-950 text-sky-300 border border-sky-800' :
                               'bg-slate-800 text-slate-400 border border-slate-700'
                             }`}>

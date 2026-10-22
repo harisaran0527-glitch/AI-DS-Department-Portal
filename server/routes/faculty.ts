@@ -1452,23 +1452,33 @@ router.post('/attendance', async (req: AuthRequest, res: Response) => {
   }
 
   try {
-    // High-performance single-query batch workspace ownership check
-    const studentIds = records.map((r: any) => r.studentId).filter(Boolean);
-    if (studentIds.length > 0) {
-      const unauthorizedStudents = await queryAll<any>(`
-        SELECT id, name FROM students
-        WHERE id = ANY(?::text[])
-          AND created_by_faculty_id IS NOT NULL
-          AND created_by_faculty_id != ?
-          AND faculty_workspace_id IS NOT NULL
-          AND faculty_workspace_id != ?
-      `, [studentIds, req.user!.id, req.user!.id]);
+    // High-performance workspace or class section authorization check
+    if (req.user!.role !== 'ADMIN' && req.user!.role !== 'HOD') {
+      const studentIds = records.map((r: any) => r.studentId).filter(Boolean);
+      if (studentIds.length > 0) {
+        const assignment = await db.getFacultyAssignment(req.user!.id, { fresh: true });
+        const facultyUser = await db.getUserById(req.user!.id);
+        const assignedYear = assignment?.is_active ? assignment.year : (facultyUser?.year || req.user!.year);
+        const assignedSection = assignment?.is_active ? assignment.section : (facultyUser?.section || req.user!.section);
+        const cleanAssignedYear = normalizeYear(assignedYear);
+        const cleanAssignedSec = normalizeSection(assignedSection);
 
-      if (unauthorizedStudents && unauthorizedStudents.length > 0) {
-        return res.status(403).json({
-          success: false,
-          error: 'Forbidden: Attendance record contains student outside your assigned workspace.'
-        });
+        for (const sId of studentIds) {
+          const stu = await db.getStudentById(sId);
+          if (stu) {
+            const isOwner = stu.created_by_faculty_id === req.user!.id || stu.faculty_workspace_id === req.user!.id;
+            const cleanStudentYear = normalizeYear(stu.year);
+            const cleanStudentSec = normalizeSection(stu.section);
+            const isYearMatch = cleanAssignedYear === 'ALL' || (cleanAssignedYear && cleanStudentYear === cleanAssignedYear);
+            const isSecMatch = cleanAssignedSec === 'ALL' || (cleanAssignedSec && cleanStudentSec === cleanAssignedSec);
+            if (!isOwner && !(isYearMatch && isSecMatch)) {
+              return res.status(403).json({
+                success: false,
+                error: 'Forbidden: Attendance record contains student outside your assigned workspace.'
+              });
+            }
+          }
+        }
       }
     }
 
@@ -1510,11 +1520,27 @@ router.post('/attendance/import-confirm', async (req: AuthRequest, res: Response
       return res.status(400).json({ error: 'No valid attendance records to confirm.' });
     }
 
-    // Verify workspace ownership for every student in records
-    for (const r of records) {
-      const stu = await db.getStudentById(r.studentId);
-      if (stu && stu.created_by_faculty_id && stu.created_by_faculty_id !== req.user!.id && stu.faculty_workspace_id !== req.user!.id) {
-        return res.status(403).json({ error: 'Forbidden: Record contains student outside your assigned workspace.' });
+    // Verify workspace ownership or class section match for every student in records
+    if (req.user!.role !== 'ADMIN' && req.user!.role !== 'HOD') {
+      const assignment = await db.getFacultyAssignment(req.user!.id, { fresh: true });
+      const facultyUser = await db.getUserById(req.user!.id);
+      const assignedYear = assignment?.is_active ? assignment.year : (facultyUser?.year || req.user!.year);
+      const assignedSection = assignment?.is_active ? assignment.section : (facultyUser?.section || req.user!.section);
+      const cleanAssignedYear = normalizeYear(assignedYear);
+      const cleanAssignedSec = normalizeSection(assignedSection);
+
+      for (const r of records) {
+        const stu = await db.getStudentById(r.studentId);
+        if (stu) {
+          const isOwner = stu.created_by_faculty_id === req.user!.id || stu.faculty_workspace_id === req.user!.id;
+          const cleanStudentYear = normalizeYear(stu.year);
+          const cleanStudentSec = normalizeSection(stu.section);
+          const isYearMatch = cleanAssignedYear === 'ALL' || (cleanAssignedYear && cleanStudentYear === cleanAssignedYear);
+          const isSecMatch = cleanAssignedSec === 'ALL' || (cleanAssignedSec && cleanStudentSec === cleanAssignedSec);
+          if (!isOwner && !(isYearMatch && isSecMatch)) {
+            return res.status(403).json({ error: 'Forbidden: Record contains student outside your assigned workspace.' });
+          }
+        }
       }
     }
 

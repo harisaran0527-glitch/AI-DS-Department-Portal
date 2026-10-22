@@ -38,6 +38,34 @@ export function normalizeSection(s?: string | null): string {
   return str;
 }
 
+export function normalizePersonName(name: string): string {
+  return String(name || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function verifyStudentNameMatch(inputName: string, dbStudentName: string): boolean {
+  if (!inputName || !inputName.trim()) return true;
+  const normInput = normalizePersonName(inputName);
+  const normDb = normalizePersonName(dbStudentName);
+  if (!normInput || !normDb) return true;
+  if (normInput === normDb) return true;
+
+  const inputWords = normInput.split(' ').filter(Boolean).sort();
+  const dbWords = normDb.split(' ').filter(Boolean).sort();
+  if (inputWords.join(' ') === dbWords.join(' ')) return true;
+
+  const longInput = inputWords.filter((w) => w.length > 1);
+  const longDb = dbWords.filter((w) => w.length > 1);
+  if (longInput.length > 0 && longDb.length > 0 && longInput.join(' ') === longDb.join(' ')) {
+    return true;
+  }
+
+  return false;
+}
+
 export function normalizeYear(y?: string | null): string {
   if (!y) return '';
   const str = String(y).trim();
@@ -3326,27 +3354,57 @@ export class SQLiteDB {
       totalUnmatchedRegNos: number;
       totalDuplicateEntries: number;
       totalInvalidRows: number;
+      newCount: number;
+      updateCount: number;
+      skippedCount: number;
     };
-    validRecords: Array<{ studentId: string; registerNo: string; studentName: string; date: string; status: string; year: string; section: string }>;
-    unmatchedRegisterNumbers: Array<{ registerNo: string; row: number; date?: string; status?: string; reason: string }>;
-    duplicateRegisterNumbers: Array<{ registerNo: string; date: string; row: number; reason: string }>;
-    invalidRows: Array<{ row: number; registerNo?: string; date?: string; status?: string; reason: string }>;
+    validRecords: Array<{
+      studentId: string;
+      registerNo: string;
+      studentName: string;
+      date: string;
+      status: string;
+      action?: 'NEW' | 'UPDATE' | 'SKIPPED';
+      previousStatus?: string;
+      year: string;
+      section: string;
+    }>;
+    unmatchedRegisterNumbers: Array<{ registerNo: string; studentName?: string; row: number; date?: string; status?: string; reason: string }>;
+    duplicateRegisterNumbers: Array<{ registerNo: string; studentName?: string; date: string; row: number; reason: string }>;
+    invalidRows: Array<{ row: number; registerNo?: string; studentName?: string; date?: string; status?: string; reason: string }>;
   }> {
     if (!Array.isArray(rows) || rows.length === 0) {
       throw new Error('No attendance rows provided in input.');
     }
 
     let studentPool: any[] = [];
-    if (facultyId) {
-      studentPool = await queryAll(
-        'SELECT id, register_no, name, year, section FROM students WHERE created_by_faculty_id = ? OR faculty_workspace_id = ?',
-        [facultyId, facultyId]
-      );
+    const facultyUser = facultyId ? await this.getUserById(facultyId) : null;
+    const isSpecialRole = facultyUser && (facultyUser.role === 'ADMIN' || facultyUser.role === 'HOD');
+    const assignment = facultyId ? await this.getFacultyAssignment(facultyId) : null;
+    const assignedYear = assignment?.year || facultyUser?.year;
+    const assignedSection = assignment?.section || facultyUser?.section;
+
+    if (facultyId && !isSpecialRole && assignedYear && assignedSection) {
+      const yearNorm = normalizeYear(assignedYear);
+      const secNorm = normalizeSection(assignedSection);
+      if (yearNorm !== 'ALL' && secNorm !== 'ALL') {
+        studentPool = await queryAll(
+          'SELECT id, register_no, name, year, section, created_by_faculty_id, faculty_workspace_id FROM students WHERE (created_by_faculty_id = ? OR faculty_workspace_id = ? OR (year = ? AND section = ?))',
+          [facultyId, facultyId, assignedYear, assignedSection]
+        );
+      } else if (yearNorm !== 'ALL') {
+        studentPool = await queryAll(
+          'SELECT id, register_no, name, year, section, created_by_faculty_id, faculty_workspace_id FROM students WHERE (created_by_faculty_id = ? OR faculty_workspace_id = ? OR year = ?)',
+          [facultyId, facultyId, assignedYear]
+        );
+      } else {
+        studentPool = await queryAll('SELECT id, register_no, name, year, section, created_by_faculty_id, faculty_workspace_id FROM students');
+      }
     } else {
-      studentPool = await queryAll('SELECT id, register_no, name, year, section FROM students');
+      studentPool = await queryAll('SELECT id, register_no, name, year, section, created_by_faculty_id, faculty_workspace_id FROM students');
     }
 
-    // STRICT MATCHING KEY: REGISTER NUMBER ONLY (trimmed & uppercase)
+    // STRICT MATCHING KEY: REGISTER NUMBER (trimmed & uppercase)
     const dbStudentMap = new Map<string, any>();
     studentPool.forEach((s) => {
       if (s.register_no) {
@@ -3354,17 +3412,36 @@ export class SQLiteDB {
       }
     });
 
-    const validRecords: Array<{ studentId: string; registerNo: string; studentName: string; date: string; status: string; year: string; section: string }> = [];
-    const unmatchedRegisterNumbers: Array<{ registerNo: string; row: number; date?: string; status?: string; reason: string }> = [];
-    const duplicateRegisterNumbers: Array<{ registerNo: string; date: string; row: number; reason: string }> = [];
-    const invalidRows: Array<{ row: number; registerNo?: string; date?: string; status?: string; reason: string }> = [];
+    const validRecords: Array<{
+      studentId: string;
+      registerNo: string;
+      studentName: string;
+      date: string;
+      status: string;
+      action?: 'NEW' | 'UPDATE' | 'SKIPPED';
+      previousStatus?: string;
+      year: string;
+      section: string;
+    }> = [];
+    const unmatchedRegisterNumbers: Array<{ registerNo: string; studentName?: string; row: number; date?: string; status?: string; reason: string }> = [];
+    const duplicateRegisterNumbers: Array<{ registerNo: string; studentName?: string; date: string; row: number; reason: string }> = [];
+    const invalidRows: Array<{ row: number; registerNo?: string; studentName?: string; date?: string; status?: string; reason: string }> = [];
 
     const seenFileEntries = new Map<string, number>();
     const seenFileRegNosInMatrix = new Set<string>();
     const matchedStudentIds = new Set<string>();
 
-    const normalizeDate = (raw: string): string | null => {
-      if (!raw) return null;
+    let newCount = 0;
+    let updateCount = 0;
+    let skippedCount = 0;
+
+    const normalizeDate = (raw: any): string | null => {
+      if (raw === undefined || raw === null || raw === '') return null;
+      // Handle Excel serial date
+      if (typeof raw === 'number' && raw > 20000 && raw < 60000) {
+        const d = new Date(Math.round((raw - 25569) * 86400 * 1000));
+        return d.toISOString().split('T')[0];
+      }
       const cleaned = String(raw).trim();
       if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(cleaned)) {
         const parts = cleaned.split(/[-/]/);
@@ -3386,70 +3463,196 @@ export class SQLiteDB {
       const s = String(raw).trim().toUpperCase();
       if (['P', 'PRESENT', '1', 'YES'].includes(s)) return 'PRESENT';
       if (['A', 'ABSENT', '0', 'NO'].includes(s)) return 'ABSENT';
-      if (['OD', 'ON', 'ON DUTY', 'ON_DUTY', 'ONDUTY'].includes(s)) return 'OD';
-      if (['ML', 'LEAVE', 'MEDICAL LEAVE', 'L', 'MEDICAL_LEAVE'].includes(s)) return 'ML';
+      if (['OD', 'ON', 'ON DUTY', 'ON_DUTY', 'ONDUTY', 'ON-DUTY', 'DUTY'].includes(s)) return 'OD';
+      if (['ML', 'LEAVE', 'MEDICAL LEAVE', 'L', 'MEDICAL_LEAVE', 'MED LEAVE'].includes(s)) return 'ML';
       if (['LA', 'LONG ABSENT', 'LONG_ABSENT'].includes(s)) return 'LONG_ABSENT';
       return null;
     };
 
-    rows.forEach((r, idx) => {
+    // Helper to get row value case-insensitively with alias tolerance
+    const getRowVal = (row: any, ...aliases: string[]): string => {
+      if (!row || typeof row !== 'object') return '';
+      for (const a of aliases) {
+        if (row[a] !== undefined && row[a] !== null && String(row[a]).trim() !== '') {
+          return String(row[a]).trim();
+        }
+      }
+      const rowKeys = Object.keys(row);
+      for (const a of aliases) {
+        const cleanA = a.toLowerCase().replace(/[\s_\-]/g, '');
+        const found = rowKeys.find((k) => k.toLowerCase().replace(/[\s_\-]/g, '') === cleanA);
+        if (found && row[found] !== undefined && row[found] !== null && String(row[found]).trim() !== '') {
+          return String(row[found]).trim();
+        }
+      }
+      return '';
+    };
+
+    for (let idx = 0; idx < rows.length; idx++) {
+      const r = rows[idx];
       const rowNum = idx + 1;
       if (!r || typeof r !== 'object') {
         invalidRows.push({ row: rowNum, reason: 'Empty or invalid row object.' });
-        return;
+        continue;
       }
 
-      // STRICTLY USE REGISTER NUMBER ONLY
-      const rawRegNo = r['Register Number'] || r['Register No'] || r.registerNo || r.register_no || r.regNo || r['REG_NO'] || r['Reg No'];
-      if (!rawRegNo || String(rawRegNo).trim() === '') {
+      // PRIMARY KEY: REGISTER NUMBER
+      const rawRegNo = getRowVal(
+        r,
+        'Register Number',
+        'Register No',
+        'Register_No',
+        'Reg No',
+        'Reg_No',
+        'RegNo',
+        'RegisterNumber',
+        'Reg. No.',
+        'registerNo'
+      );
+      if (!rawRegNo) {
         invalidRows.push({ row: rowNum, reason: 'Missing Register Number column.' });
-        return;
+        continue;
       }
 
       const regNoClean = String(rawRegNo).trim();
       const regNoKey = regNoClean.toUpperCase();
       const matchedStudent = dbStudentMap.get(regNoKey);
 
-      const rawDate = r['Date'] || r['Attendance Date'] || r.date || r['DATE'];
-      const rawStatus = r['Status'] || r['Attendance Status'] || r.status || r['STATUS'];
+      const rawStudentName = getRowVal(
+        r,
+        'Student Name',
+        'StudentName',
+        'Name',
+        'Student_Name',
+        'Candidate Name',
+        'studentName'
+      );
 
-      if (rawDate !== undefined && rawStatus !== undefined) {
+      const rawDate = getRowVal(
+        r,
+        'Attendance Date',
+        'Date',
+        'Attendance_Date',
+        'date',
+        'attendanceDate'
+      );
+
+      const rawStatus = getRowVal(
+        r,
+        'Attendance Status',
+        'Status',
+        'Attendance_Status',
+        'status',
+        'attendanceStatus'
+      );
+
+      if (rawDate !== '' && rawStatus !== '') {
         // ROW-BASED FORMAT
-        const normDate = normalizeDate(String(rawDate));
-        const normStatus = normalizeStatus(String(rawStatus));
+        const normDate = normalizeDate(rawDate);
+        const normStatus = normalizeStatus(rawStatus);
 
         if (!normDate) {
-          invalidRows.push({ row: rowNum, registerNo: regNoClean, date: String(rawDate), status: String(rawStatus), reason: `Invalid date format: ${rawDate}` });
-          return;
+          invalidRows.push({
+            row: rowNum,
+            registerNo: regNoClean,
+            studentName: rawStudentName,
+            date: rawDate,
+            status: rawStatus,
+            reason: `Invalid date format "${rawDate}". Expected YYYY-MM-DD or DD-MM-YYYY.`
+          });
+          continue;
         }
 
         if (!normStatus) {
-          invalidRows.push({ row: rowNum, registerNo: regNoClean, date: normDate, status: String(rawStatus), reason: `Invalid attendance status: ${rawStatus}` });
-          return;
+          invalidRows.push({
+            row: rowNum,
+            registerNo: regNoClean,
+            studentName: rawStudentName,
+            date: normDate,
+            status: rawStatus,
+            reason: `Invalid attendance status "${rawStatus}". Accepted values are PRESENT (P), ABSENT (A), OD (On Duty), or ML.`
+          });
+          continue;
         }
 
         if (!matchedStudent) {
           unmatchedRegisterNumbers.push({
             registerNo: regNoClean,
+            studentName: rawStudentName,
             row: rowNum,
             date: normDate,
             status: normStatus,
             reason: facultyId ? 'Register Number not found in your assigned workspace/class.' : 'Register Number does not exist in student database.'
           });
-          return;
+          invalidRows.push({
+            row: rowNum,
+            registerNo: regNoClean,
+            studentName: rawStudentName,
+            date: normDate,
+            status: normStatus,
+            reason: facultyId ? `Student with Register Number "${regNoClean}" not found in your assigned class workspace.` : `Student with Register Number "${regNoClean}" does not exist in student database.`
+          });
+          continue;
+        }
+
+        // VERIFY STUDENT NAME MATCH (WHEN PROVIDED)
+        if (rawStudentName && !verifyStudentNameMatch(rawStudentName, matchedStudent.name)) {
+          invalidRows.push({
+            row: rowNum,
+            registerNo: regNoClean,
+            studentName: rawStudentName,
+            date: normDate,
+            status: normStatus,
+            reason: `Name mismatch for Register Number "${regNoClean}". Uploaded name "${rawStudentName}" does not match registered student "${matchedStudent.name}".`
+          });
+          continue;
         }
 
         const comboKey = `${regNoKey}_${normDate}`;
         if (seenFileEntries.has(comboKey)) {
           duplicateRegisterNumbers.push({
             registerNo: regNoClean,
+            studentName: matchedStudent.name,
             date: normDate,
             row: rowNum,
             reason: `Duplicate entry for Register Number ${regNoClean} on date ${normDate} (First seen at row ${seenFileEntries.get(comboKey)}).`
           });
-          return;
+          invalidRows.push({
+            row: rowNum,
+            registerNo: regNoClean,
+            studentName: matchedStudent.name,
+            date: normDate,
+            status: normStatus,
+            reason: `Duplicate entry for Register Number ${regNoClean} on date ${normDate} in uploaded file.`
+          });
+          continue;
         }
         seenFileEntries.set(comboKey, rowNum);
+
+        // Check existing record in DB to classify action
+        const existing = await queryOne(
+          'SELECT id, status FROM daily_attendance_records WHERE student_id = ? AND date = ?',
+          [matchedStudent.id, normDate]
+        );
+
+        let rowAction: 'NEW' | 'UPDATE' | 'SKIPPED' = 'NEW';
+        let previousStatus: string | undefined;
+
+        if (existing) {
+          const exClean = (existing.status || '').trim().toUpperCase();
+          const existingNorm = (exClean === 'ON' || exClean === 'OD') ? 'OD' : exClean;
+          previousStatus = existingNorm;
+          if (existingNorm === normStatus) {
+            rowAction = 'SKIPPED';
+            skippedCount++;
+          } else {
+            rowAction = 'UPDATE';
+            updateCount++;
+          }
+        } else {
+          rowAction = 'NEW';
+          newCount++;
+        }
 
         matchedStudentIds.add(matchedStudent.id);
         validRecords.push({
@@ -3458,19 +3661,29 @@ export class SQLiteDB {
           studentName: matchedStudent.name,
           date: normDate,
           status: normStatus,
+          action: rowAction,
+          previousStatus,
           year: matchedStudent.year,
           section: matchedStudent.section
         });
 
       } else {
-        // MATRIX FORMAT
+        // MATRIX FORMAT (COLUMNS AS DATES)
         if (seenFileRegNosInMatrix.has(regNoKey)) {
           duplicateRegisterNumbers.push({
             registerNo: regNoClean,
+            studentName: rawStudentName || (matchedStudent ? matchedStudent.name : ''),
             date: 'ALL',
             row: rowNum,
             reason: `Duplicate Register Number ${regNoClean} row in matrix upload file.`
           });
+          invalidRows.push({
+            row: rowNum,
+            registerNo: regNoClean,
+            studentName: rawStudentName,
+            reason: `Duplicate Register Number ${regNoClean} row in matrix upload file.`
+          });
+          continue;
         } else {
           seenFileRegNosInMatrix.add(regNoKey);
         }
@@ -3478,14 +3691,32 @@ export class SQLiteDB {
         if (!matchedStudent) {
           unmatchedRegisterNumbers.push({
             registerNo: regNoClean,
+            studentName: rawStudentName,
             row: rowNum,
             reason: facultyId ? 'Register Number not found in your assigned workspace/class.' : 'Register Number does not exist in student database.'
           });
-          return;
+          invalidRows.push({
+            row: rowNum,
+            registerNo: regNoClean,
+            studentName: rawStudentName,
+            reason: facultyId ? `Student with Register Number "${regNoClean}" not found in your assigned class workspace.` : `Student with Register Number "${regNoClean}" does not exist in student database.`
+          });
+          continue;
+        }
+
+        if (rawStudentName && !verifyStudentNameMatch(rawStudentName, matchedStudent.name)) {
+          invalidRows.push({
+            row: rowNum,
+            registerNo: regNoClean,
+            studentName: rawStudentName,
+            reason: `Name mismatch for Register Number "${regNoClean}". Uploaded name "${rawStudentName}" does not match registered student "${matchedStudent.name}".`
+          });
+          continue;
         }
 
         let dateCountInRow = 0;
-        Object.keys(r).forEach((colName) => {
+        const rowKeys = Object.keys(r);
+        for (const colName of rowKeys) {
           const colDateNorm = normalizeDate(colName);
           if (colDateNorm) {
             const colStatusNorm = normalizeStatus(String(r[colName]));
@@ -3495,6 +3726,7 @@ export class SQLiteDB {
               if (seenFileEntries.has(comboKey)) {
                 duplicateRegisterNumbers.push({
                   registerNo: regNoClean,
+                  studentName: matchedStudent.name,
                   date: colDateNorm,
                   row: rowNum,
                   reason: `Duplicate attendance value for Register Number ${regNoClean} on date ${colDateNorm}.`
@@ -3502,29 +3734,57 @@ export class SQLiteDB {
               } else {
                 seenFileEntries.set(comboKey, rowNum);
                 matchedStudentIds.add(matchedStudent.id);
+
+                const existing = await queryOne(
+                  'SELECT id, status FROM daily_attendance_records WHERE student_id = ? AND date = ?',
+                  [matchedStudent.id, colDateNorm]
+                );
+
+                let rowAction: 'NEW' | 'UPDATE' | 'SKIPPED' = 'NEW';
+                let previousStatus: string | undefined;
+
+                if (existing) {
+                  const exClean = (existing.status || '').trim().toUpperCase();
+                  const existingNorm = (exClean === 'ON' || exClean === 'OD') ? 'OD' : exClean;
+                  previousStatus = existingNorm;
+                  if (existingNorm === colStatusNorm) {
+                    rowAction = 'SKIPPED';
+                    skippedCount++;
+                  } else {
+                    rowAction = 'UPDATE';
+                    updateCount++;
+                  }
+                } else {
+                  rowAction = 'NEW';
+                  newCount++;
+                }
+
                 validRecords.push({
                   studentId: matchedStudent.id,
                   registerNo: matchedStudent.register_no,
                   studentName: matchedStudent.name,
                   date: colDateNorm,
                   status: colStatusNorm,
+                  action: rowAction,
+                  previousStatus,
                   year: matchedStudent.year,
                   section: matchedStudent.section
                 });
               }
             }
           }
-        });
+        }
 
         if (dateCountInRow === 0 && !seenFileRegNosInMatrix.has(regNoKey)) {
           invalidRows.push({
             row: rowNum,
             registerNo: regNoClean,
+            studentName: rawStudentName,
             reason: 'No valid date columns or daily statuses found in row.'
           });
         }
       }
-    });
+    }
 
     return {
       summary: {
@@ -3533,7 +3793,10 @@ export class SQLiteDB {
         totalMatchedStudents: matchedStudentIds.size,
         totalUnmatchedRegNos: unmatchedRegisterNumbers.length,
         totalDuplicateEntries: duplicateRegisterNumbers.length,
-        totalInvalidRows: invalidRows.length
+        totalInvalidRows: invalidRows.length,
+        newCount,
+        updateCount,
+        skippedCount
       },
       validRecords,
       unmatchedRegisterNumbers,
@@ -3545,45 +3808,98 @@ export class SQLiteDB {
   public async confirmBulkAttendanceImport(
     records: Array<{ studentId: string; date: string; status: string }>,
     recordedBy: string
-  ): Promise<{ importedCount: number; updatedStudentsCount: number }> {
+  ): Promise<{
+    message: string;
+    importedCount: number;
+    updatedCount: number;
+    skippedCount: number;
+    failedCount: number;
+    failedRows: any[];
+    updatedStudentsCount: number;
+  }> {
     if (!Array.isArray(records) || records.length === 0) {
       throw new Error('No valid records to import.');
     }
 
     const now = new Date().toISOString();
     const affectedStudentIds = new Set<string>();
+    let importedCount = 0;
+    let updatedCount = 0;
+    let skippedCount = 0;
+    let failedCount = 0;
+    const failedRows: any[] = [];
 
     for (const r of records) {
       if (!r.studentId || !r.date || !r.status) continue;
+      const clean = r.status.trim().toUpperCase();
+      const targetStatus = (clean === 'ON' || clean === 'OD' || clean === 'ON DUTY' || clean === 'ONDUTY' || clean === 'ON-DUTY') ? 'OD' : clean;
 
-      const existing = await queryOne('SELECT id FROM daily_attendance_records WHERE student_id = ? AND date = ?', [r.studentId, r.date]);
-      if (existing) {
-        await executeRun(
-          'UPDATE daily_attendance_records SET status = ?, recorded_by = ?, recorded_at = ? WHERE id = ?',
-          [r.status, recordedBy, now, existing.id]
+      try {
+        const existing = await queryOne(
+          'SELECT id, status FROM daily_attendance_records WHERE student_id = ? AND date = ?',
+          [r.studentId, r.date]
         );
-      } else {
-        const id = `attd-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-        await executeRun(
-          'INSERT INTO daily_attendance_records (id, student_id, date, status, recorded_by, recorded_at) VALUES (?, ?, ?, ?, ?, ?)',
-          [id, r.studentId, r.date, r.status, recordedBy, now]
-        );
+
+        if (existing) {
+          const exClean = (existing.status || '').trim().toUpperCase();
+          const existingStatus = (exClean === 'ON' || exClean === 'OD') ? 'OD' : exClean;
+          if (existingStatus === targetStatus) {
+            skippedCount++;
+          } else {
+            updatedCount++;
+            await executeRun(
+              'UPDATE daily_attendance_records SET status = ?, recorded_by = ?, recorded_at = ? WHERE id = ?',
+              [targetStatus, recordedBy, now, existing.id]
+            );
+          }
+        } else {
+          importedCount++;
+          const id = `attd-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+          await executeRun(
+            'INSERT INTO daily_attendance_records (id, student_id, date, status, recorded_by, recorded_at) VALUES (?, ?, ?, ?, ?, ?)',
+            [id, r.studentId, r.date, targetStatus, recordedBy, now]
+          );
+        }
+        affectedStudentIds.add(r.studentId);
+      } catch (err: any) {
+        failedCount++;
+        failedRows.push({
+          studentId: r.studentId,
+          date: r.date,
+          status: r.status,
+          reason: err.message || 'Database write error'
+        });
       }
-      affectedStudentIds.add(r.studentId);
     }
 
-    for (const stuId of affectedStudentIds) {
-      await this.recalculateStudentAttendancePercentage(stuId);
+    const affectedArr = Array.from(affectedStudentIds);
+    for (let i = 0; i < affectedArr.length; i += 5) {
+      const batch = affectedArr.slice(i, i + 5);
+      await Promise.all(batch.map(async (stuId) => {
+        try {
+          await this.recalculateStudentAttendancePercentage(stuId);
+        } catch (_e) {}
+      }));
     }
 
     return {
-      importedCount: records.length,
+      message: `Monthly bulk attendance imported successfully! ${importedCount} created, ${updatedCount} updated, ${skippedCount} unchanged across ${affectedStudentIds.size} students.`,
+      importedCount,
+      updatedCount,
+      skippedCount,
+      failedCount,
+      failedRows,
       updatedStudentsCount: affectedStudentIds.size
     };
   }
 
   public async getAttendanceHistoryForFaculty(facultyId: string): Promise<any[]> {
-    const query = `
+    const assignment = await this.getFacultyAssignment(facultyId);
+    const facultyUser = await this.getUserById(facultyId);
+    const assignedYear = assignment?.year || facultyUser?.year;
+    const assignedSection = assignment?.section || facultyUser?.section;
+
+    let query = `
       SELECT d.date,
         SUM(CASE WHEN d.status = 'PRESENT' OR d.status = 'P' THEN 1 ELSE 0 END) as presentCount,
         SUM(CASE WHEN d.status = 'ABSENT' OR d.status = 'A' THEN 1 ELSE 0 END) as absentCount,
@@ -3593,10 +3909,18 @@ export class SQLiteDB {
         COUNT(d.id) as totalMarked
       FROM daily_attendance_records d
       JOIN students s ON d.student_id = s.id
-      WHERE d.date >= '2026-07-13' AND (s.created_by_faculty_id = ? OR s.faculty_workspace_id = ?)
-      GROUP BY d.date ORDER BY d.date DESC
+      WHERE d.date >= '2026-07-13'
     `;
-    return await queryAll(query, [facultyId, facultyId]);
+    const params: any[] = [];
+    if (assignedYear && assignedSection) {
+      query += ` AND (s.created_by_faculty_id = ? OR s.faculty_workspace_id = ? OR (s.year = ? AND s.section = ?))`;
+      params.push(facultyId, facultyId, assignedYear, assignedSection);
+    } else {
+      query += ` AND (s.created_by_faculty_id = ? OR s.faculty_workspace_id = ?)`;
+      params.push(facultyId, facultyId);
+    }
+    query += ` GROUP BY d.date ORDER BY d.date DESC`;
+    return await queryAll(query, params);
   }
 
   public async getAttendanceHistory(year?: string, section?: string): Promise<any[]> {
@@ -3621,19 +3945,32 @@ export class SQLiteDB {
   }
 
   public async getAttendanceHistoryByDateForFaculty(facultyId: string, date: string): Promise<any> {
-    const query = `
+    const assignment = await this.getFacultyAssignment(facultyId);
+    const facultyUser = await this.getUserById(facultyId);
+    const assignedYear = assignment?.year || facultyUser?.year;
+    const assignedSection = assignment?.section || facultyUser?.section;
+
+    let query = `
       SELECT d.status, s.id, s.register_no, s.name, s.year, s.section
       FROM daily_attendance_records d
       JOIN students s ON d.student_id = s.id
-      WHERE d.date = ? AND (s.created_by_faculty_id = ? OR s.faculty_workspace_id = ?)
+      WHERE d.date = ?
     `;
-    const rows = await queryAll(query, [date, facultyId, facultyId]);
+    const params: any[] = [date];
+    if (assignedYear && assignedSection) {
+      query += ` AND (s.created_by_faculty_id = ? OR s.faculty_workspace_id = ? OR (s.year = ? AND s.section = ?))`;
+      params.push(facultyId, facultyId, assignedYear, assignedSection);
+    } else {
+      query += ` AND (s.created_by_faculty_id = ? OR s.faculty_workspace_id = ?)`;
+      params.push(facultyId, facultyId);
+    }
+    const rows = await queryAll(query, params);
     return {
       date,
-      presentStudents: rows.filter((r) => r.status === 'PRESENT'),
-      absentStudents: rows.filter((r) => r.status === 'ABSENT'),
-      odStudents: rows.filter((r) => r.status === 'OD'),
-      mlStudents: rows.filter((r) => r.status === 'ML'),
+      presentStudents: rows.filter((r) => r.status === 'PRESENT' || r.status === 'P'),
+      absentStudents: rows.filter((r) => r.status === 'ABSENT' || r.status === 'A'),
+      odStudents: rows.filter((r) => r.status === 'OD' || r.status === 'ON'),
+      mlStudents: rows.filter((r) => r.status === 'ML' || r.status === 'LEAVE'),
       longAbsentStudents: rows.filter((r) => r.status === 'LONG_ABSENT')
     };
   }
@@ -3648,14 +3985,13 @@ export class SQLiteDB {
     const params: any[] = [date];
     if (year) { query += ' AND s.year = ?'; params.push(year); }
     if (section) { query += ' AND s.section = ?'; params.push(section); }
-
     const rows = await queryAll(query, params);
     return {
       date,
-      presentStudents: rows.filter((r) => r.status === 'PRESENT'),
-      absentStudents: rows.filter((r) => r.status === 'ABSENT'),
-      odStudents: rows.filter((r) => r.status === 'OD'),
-      mlStudents: rows.filter((r) => r.status === 'ML'),
+      presentStudents: rows.filter((r) => r.status === 'PRESENT' || r.status === 'P'),
+      absentStudents: rows.filter((r) => r.status === 'ABSENT' || r.status === 'A'),
+      odStudents: rows.filter((r) => r.status === 'OD' || r.status === 'ON'),
+      mlStudents: rows.filter((r) => r.status === 'ML' || r.status === 'LEAVE'),
       longAbsentStudents: rows.filter((r) => r.status === 'LONG_ABSENT')
     };
   }

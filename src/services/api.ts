@@ -1339,11 +1339,24 @@ export const API = {
         totalUnmatchedRegNos: number;
         totalDuplicateEntries: number;
         totalInvalidRows: number;
+        newCount?: number;
+        updateCount?: number;
+        skippedCount?: number;
       };
-      validRecords: Array<{ studentId: string; registerNo: string; studentName: string; date: string; status: string; year: string; section: string }>;
-      unmatchedRegisterNumbers: Array<{ registerNo: string; row: number; date?: string; status?: string; reason: string }>;
-      duplicateRegisterNumbers: Array<{ registerNo: string; date: string; row: number; reason: string }>;
-      invalidRows: Array<{ row: number; registerNo?: string; date?: string; status?: string; reason: string }>;
+      validRecords: Array<{
+        studentId: string;
+        registerNo: string;
+        studentName: string;
+        date: string;
+        status: string;
+        action?: 'NEW' | 'UPDATE' | 'SKIPPED';
+        previousStatus?: string;
+        year: string;
+        section: string;
+      }>;
+      unmatchedRegisterNumbers: Array<{ registerNo: string; studentName?: string; row: number; date?: string; status?: string; reason: string }>;
+      duplicateRegisterNumbers: Array<{ registerNo: string; studentName?: string; date: string; row: number; reason: string }>;
+      invalidRows: Array<{ row: number; registerNo?: string; studentName?: string; date?: string; status?: string; reason: string }>;
     }>(endpoint, {
       method: 'POST',
       body: JSON.stringify({ rows })
@@ -1352,7 +1365,15 @@ export const API = {
 
   confirmAttendanceImport: async (records: Array<{ studentId: string; date: string; status: string }>, role: 'FACULTY' | 'ADMIN' = 'FACULTY') => {
     const endpoint = role === 'ADMIN' ? '/admin/attendance/import-confirm' : '/faculty/attendance/import-confirm';
-    return request<{ message: string; importedCount: number; updatedStudentsCount: number }>(endpoint, {
+    return request<{
+      message: string;
+      importedCount: number;
+      updatedCount?: number;
+      skippedCount?: number;
+      failedCount?: number;
+      failedRows?: any[];
+      updatedStudentsCount: number;
+    }>(endpoint, {
       method: 'POST',
       body: JSON.stringify({ records })
     });

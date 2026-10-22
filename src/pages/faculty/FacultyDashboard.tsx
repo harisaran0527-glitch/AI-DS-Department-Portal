@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import { API, API_BASE, fetchWithResilience, openAuthenticatedFile, clearSessionAuth } from '../../services/api';
 import type { UserSession, Student, TeamHead } from '../../types';
 import { DashboardLayout, type MenuItem } from '../../components/layout/DashboardLayout';
@@ -237,13 +238,13 @@ export const FacultyDashboard: React.FC = () => {
   const [nptelProofWeek, setNptelProofWeek] = useState('Week 1');
   const [nptelProofFile, setNptelProofFile] = useState<File | null>(null);
 
-  // Helper to normalize attendance status to 4 short-form options
-  const toShortAttendanceStatus = (status: string | null | undefined): 'P' | 'A' | 'ON' | 'ML' | 'UNMARKED' => {
+  // Helper to normalize attendance status to 4 short-form options (OD replaces ON)
+  const toShortAttendanceStatus = (status: string | null | undefined): 'P' | 'A' | 'OD' | 'ML' | 'UNMARKED' => {
     if (!status) return 'UNMARKED';
     const clean = status.trim().toUpperCase();
     if (clean === 'P' || clean === 'PRESENT') return 'P';
     if (clean === 'A' || clean === 'ABSENT') return 'A';
-    if (clean === 'ON' || clean === 'OD' || clean === 'ON DUTY' || clean === 'ONDUTY') return 'ON';
+    if (clean === 'ON' || clean === 'OD' || clean === 'ON DUTY' || clean === 'ONDUTY' || clean === 'DUTY') return 'OD';
     if (clean === 'ML' || clean === 'LEAVE' || clean === 'MEDICAL LEAVE') return 'ML';
     return 'UNMARKED';
   };
@@ -924,6 +925,53 @@ export const FacultyDashboard: React.FC = () => {
     }
   };
 
+  const downloadAttendanceCsvTemplate = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const templateRows = (students && students.length > 0)
+      ? students.slice(0, 15).map((s) => ({
+          'Register Number': s.registerNo || (s as any).register_no || '',
+          'Student Name': s.name || '',
+          'Attendance Date': today,
+          'Attendance Status': 'PRESENT'
+        }))
+      : [
+          { 'Register Number': '23AD001', 'Student Name': 'AARAV S', 'Attendance Date': today, 'Attendance Status': 'PRESENT' },
+          { 'Register Number': '23AD002', 'Student Name': 'BHAVANA R', 'Attendance Date': today, 'Attendance Status': 'ABSENT' },
+          { 'Register Number': '23AD003', 'Student Name': 'CHANDRAN M', 'Attendance Date': today, 'Attendance Status': 'OD' },
+          { 'Register Number': '23AD004', 'Student Name': 'DEEPIKA K', 'Attendance Date': today, 'Attendance Status': 'ML' }
+        ];
+
+    const csvContent = Papa.unparse(templateRows);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `attendance_template_${currentYear ? currentYear.replace(/\s+/g, '_') : 'class'}_Sec_${currentSection || 'A'}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  const downloadAttendanceExcelTemplate = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const templateRows = (students && students.length > 0)
+      ? students.slice(0, 15).map((s) => ({
+          'Register Number': s.registerNo || (s as any).register_no || '',
+          'Student Name': s.name || '',
+          'Attendance Date': today,
+          'Attendance Status': 'PRESENT'
+        }))
+      : [
+          { 'Register Number': '23AD001', 'Student Name': 'AARAV S', 'Attendance Date': today, 'Attendance Status': 'PRESENT' },
+          { 'Register Number': '23AD002', 'Student Name': 'BHAVANA R', 'Attendance Date': today, 'Attendance Status': 'ABSENT' },
+          { 'Register Number': '23AD003', 'Student Name': 'CHANDRAN M', 'Attendance Date': today, 'Attendance Status': 'OD' },
+          { 'Register Number': '23AD004', 'Student Name': 'DEEPIKA K', 'Attendance Date': today, 'Attendance Status': 'ML' }
+        ];
+
+    const worksheet = XLSX.utils.json_to_sheet(templateRows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Attendance');
+    XLSX.writeFile(workbook, `attendance_template_${currentYear ? currentYear.replace(/\s+/g, '_') : 'class'}_Sec_${currentSection || 'A'}.xlsx`);
+  };
+
   const handleBulkFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -940,22 +988,40 @@ export const FacultyDashboard: React.FC = () => {
       return;
     }
 
-    if (!fileName.endsWith('.csv') && !fileName.endsWith('.txt')) {
-      alert('Invalid file format. Only CSV (.csv) files are allowed.');
+    if (!fileName.endsWith('.csv') && !fileName.endsWith('.xlsx') && !fileName.endsWith('.xls') && !fileName.endsWith('.txt')) {
+      alert('Invalid file format. Only Excel (.xlsx, .xls) and CSV (.csv) files are allowed.');
       return;
     }
 
     setBulkFile(file);
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        handleBulkPreview(results.data);
-      },
-      error: (err) => {
-        setBulkImportError(`CSV parsing error: ${err.message}`);
-      }
-    });
+
+    if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const buffer = evt.target?.result;
+          const workbook = XLSX.read(buffer, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const rawRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+          handleBulkPreview(rawRows);
+        } catch (err: any) {
+          setBulkImportError(`Excel parsing error: ${err.message}`);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          handleBulkPreview(results.data);
+        },
+        error: (err) => {
+          setBulkImportError(`CSV parsing error: ${err.message}`);
+        }
+      });
+    }
   };
 
   const handleBulkTextParse = () => {
@@ -982,7 +1048,7 @@ export const FacultyDashboard: React.FC = () => {
 
     try {
       const res = await API.confirmAttendanceImport(bulkPreviewResult.validRecords, 'FACULTY');
-      setBulkImportSuccess(`Imported ${res.importedCount} daily attendance records for ${res.updatedStudentsCount} students!`);
+      setBulkImportSuccess(`Import completed successfully! ${res.importedCount} created, ${res.updatedCount || 0} updated, ${res.skippedCount || 0} unchanged across ${res.updatedStudentsCount} students!`);
       setBulkPreviewResult(null);
       setBulkInputText('');
       setBulkFile(null);
@@ -1328,7 +1394,7 @@ export const FacultyDashboard: React.FC = () => {
         let normStatus = 'UNMARKED';
         if (short === 'P') normStatus = 'PRESENT';
         else if (short === 'A') normStatus = 'ABSENT';
-        else if (short === 'ON') normStatus = 'OD';
+        else if (short === 'OD' || short === 'ON') normStatus = 'OD';
         else if (short === 'ML') normStatus = 'ML';
         return {
           studentId: s.id,
@@ -2997,7 +3063,7 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                     const st = toShortAttendanceStatus(attStudentStatuses[stu.id]);
                     if (st === 'P') present++;
                     else if (st === 'A') absent++;
-                    else if (st === 'ON') od++;
+                    else if (st === 'OD' || st === 'ON') od++;
                     else if (st === 'ML') ml++;
                     else unmarked++;
                   });
@@ -3036,7 +3102,7 @@ console.warn('Backend logout unavailable, clearing local session:', error);
 
                         <div className="bg-amber-950/40 border border-amber-800/60 p-3.5 rounded-xl">
                           <div className="text-[10px] text-amber-400 font-mono uppercase font-bold flex items-center justify-between">
-                            <span>ON</span>
+                            <span>OD</span>
                             <Star className="w-3.5 h-3.5 text-amber-400" />
                           </div>
                           <div className="text-xl font-black text-amber-300 font-mono mt-1">{od}</div>
@@ -3064,7 +3130,7 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                         <div className="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden flex border border-slate-800">
                           <div style={{ width: `${(present / total) * 100}%` }} className="bg-emerald-500 h-full transition-all" title={`P: ${present}`} />
                           <div style={{ width: `${(absent / total) * 100}%` }} className="bg-red-500 h-full transition-all" title={`A: ${absent}`} />
-                          <div style={{ width: `${(od / total) * 100}%` }} className="bg-amber-500 h-full transition-all" title={`ON: ${od}`} />
+                          <div style={{ width: `${(od / total) * 100}%` }} className="bg-amber-500 h-full transition-all" title={`OD: ${od}`} />
                           <div style={{ width: `${(ml / total) * 100}%` }} className="bg-sky-500 h-full transition-all" title={`ML: ${ml}`} />
                           <div style={{ width: `${(unmarked / total) * 100}%` }} className="bg-slate-800 h-full transition-all" title={`Unmarked: ${unmarked}`} />
                         </div>
@@ -3187,10 +3253,10 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                                   <span>A</span>
                                 </span>
                               )}
-                              {currentStatus === 'ON' && (
+                              {currentStatus === 'OD' && (
                                 <span className="inline-flex items-center space-x-1 bg-amber-950 border border-amber-700 text-amber-300 text-[10px] font-mono px-2 py-0.5 rounded-full font-bold">
                                   <Star className="w-3 h-3 text-amber-400" />
-                                  <span>ON</span>
+                                  <span>OD</span>
                                 </span>
                               )}
                               {currentStatus === 'ML' && (
@@ -3212,7 +3278,7 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                             {[
                               { key: 'P', label: 'P', color: 'bg-emerald-600 text-white shadow-emerald-900/50' },
                               { key: 'A', label: 'A', color: 'bg-red-600 text-white shadow-red-900/50' },
-                              { key: 'ON', label: 'ON', color: 'bg-amber-600 text-white shadow-amber-900/50' },
+                              { key: 'OD', label: 'OD', color: 'bg-amber-600 text-white shadow-amber-900/50' },
                               { key: 'ML', label: 'ML', color: 'bg-sky-600 text-white shadow-sky-900/50' }
                             ].map((opt) => {
                               const isActive = currentStatus === opt.key;
@@ -3327,7 +3393,7 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                                     {[
                                       { key: 'P', label: 'P', color: 'bg-emerald-600 text-white shadow-emerald-900/50' },
                                       { key: 'A', label: 'A', color: 'bg-red-600 text-white shadow-red-900/50' },
-                                      { key: 'ON', label: 'ON', color: 'bg-amber-600 text-white shadow-amber-900/50' },
+                                      { key: 'OD', label: 'OD', color: 'bg-amber-600 text-white shadow-amber-900/50' },
                                       { key: 'ML', label: 'ML', color: 'bg-sky-600 text-white shadow-sky-900/50' }
                                     ].map((opt) => {
                                       const isActive = currentStatus === opt.key;
@@ -3361,10 +3427,10 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                                       <span>A</span>
                                     </span>
                                   )}
-                                  {currentStatus === 'ON' && (
+                                  {currentStatus === 'OD' && (
                                     <span className="inline-flex items-center space-x-1 bg-amber-950 border border-amber-700 text-amber-300 text-[11px] font-mono px-2.5 py-1 rounded-full font-bold">
                                       <Star className="w-3.5 h-3.5 text-amber-400" />
-                                      <span>ON</span>
+                                      <span>OD</span>
                                     </span>
                                   )}
                                   {currentStatus === 'ML' && (
@@ -3503,7 +3569,7 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                               <span className="text-red-300 font-bold">{stu.absentDays || 0}</span>
                             </div>
                             <div className="bg-amber-950/40 p-1.5 rounded">
-                              <span className="text-amber-500 block text-[9px]">ON</span>
+                              <span className="text-amber-500 block text-[9px]">OD</span>
                               <span className="text-amber-300 font-bold">{stu.odDays || 0}</span>
                             </div>
                             <div className="bg-sky-950/40 p-1.5 rounded">
@@ -3529,7 +3595,7 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                           <th className="py-3.5 px-4 font-bold text-center">Working Days</th>
                           <th className="py-3.5 px-4 font-bold text-center">P</th>
                           <th className="py-3.5 px-4 font-bold text-center">A</th>
-                          <th className="py-3.5 px-4 font-bold text-center">ON</th>
+                          <th className="py-3.5 px-4 font-bold text-center">OD</th>
                           <th className="py-3.5 px-4 font-bold text-center">ML</th>
                           <th className="py-3.5 px-4 font-bold text-center">Attendance %</th>
                         </tr>
@@ -3596,24 +3662,55 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                   </ul>
                 </div>
 
-                {/* FILE UPLOAD & TEXT PASTE INPUTS */}
+                                {/* DOWNLOAD ATTENDANCE TEMPLATES BAR */}
+                <div className="bg-slate-950 border border-amber-900/40 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div>
+                    <h4 className="font-bold text-amber-400 text-xs font-sans uppercase flex items-center space-x-1.5">
+                      <FileSpreadsheet className="w-4 h-4 text-amber-400" />
+                      <span>Download Sample Attendance Templates</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Columns: <code className="text-cyan-300">Register Number</code>, <code className="text-cyan-300">Student Name</code>, <code className="text-cyan-300">Attendance Date</code>, <code className="text-cyan-300">Attendance Status (P, A, OD, ML)</code>
+                    </p>
+                  </div>
+                  <div className="flex items-center space-x-2 shrink-0 w-full sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={downloadAttendanceCsvTemplate}
+                      className="flex-1 sm:flex-initial bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-800/80 font-bold text-xs px-3.5 py-2 rounded-lg transition-all flex items-center justify-center space-x-1.5 cursor-pointer font-sans"
+                    >
+                      <FileText className="w-4 h-4 text-cyan-400" />
+                      <span>Download CSV</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={downloadAttendanceExcelTemplate}
+                      className="flex-1 sm:flex-initial bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/80 font-bold text-xs px-3.5 py-2 rounded-lg transition-all flex items-center justify-center space-x-1.5 cursor-pointer font-sans"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                      <span>Download Excel (.xlsx)</span>
+                    </button>
+                  </div>
+                </div>
+
+{/* FILE UPLOAD & TEXT PASTE INPUTS */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {/* CSV File Upload Dropzone */}
+                  {/* Excel & CSV File Upload Dropzone */}
                   <div className="bg-slate-950 border border-slate-800 p-5 rounded-xl space-y-3 flex flex-col justify-between">
                     <div>
-                      <h4 className="font-bold text-white text-xs font-sans uppercase mb-1">Option 1: Upload CSV File</h4>
-                      <p className="text-[11px] text-slate-400">Select or drop a `.csv` file containing monthly attendance data.</p>
+                      <h4 className="font-bold text-white text-xs font-sans uppercase mb-1">Option 1: Upload Excel or CSV File</h4>
+                      <p className="text-[11px] text-slate-400">Select or drop an Excel (`.xlsx`, `.xls`) or CSV (`.csv`) file.</p>
                       <p className="text-[11px] text-cyan-400 font-mono font-semibold">Maximum file size: 10 MB</p>
                     </div>
 
                     <div className="border-2 border-dashed border-slate-800 hover:border-amber-500/50 p-6 rounded-xl text-center transition-all bg-slate-900/30 space-y-2">
                       <Upload className="w-8 h-8 text-amber-400 mx-auto" />
                       <div className="text-xs text-slate-300 font-bold font-sans">
-                        {bulkFile ? bulkFile.name : 'Choose CSV File or drag and drop'}
+                        {bulkFile ? bulkFile.name : 'Choose Excel / CSV File or drag and drop'}
                       </div>
                       <input
                         type="file"
-                        accept=".csv,.txt"
+                        accept=".csv,.xlsx,.xls,.txt"
                         onChange={handleBulkFileChange}
                         className="hidden"
                         id="bulk-att-csv-input"
@@ -3622,7 +3719,7 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                         htmlFor="bulk-att-csv-input"
                         className="inline-block bg-amber-950 text-amber-300 border border-amber-800 hover:bg-amber-900 font-bold text-xs px-4 py-2 rounded-lg cursor-pointer transition-all font-sans"
                       >
-                        {bulkFile ? 'Change CSV File' : 'Browse CSV File'}
+                        {bulkFile ? 'Change File' : 'Browse Excel / CSV File'}
                       </label>
                     </div>
                   </div>
@@ -3698,10 +3795,20 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                       <div className="bg-emerald-950/40 border border-emerald-800/60 p-3.5 rounded-xl">
                         <div className="text-[10px] text-emerald-400 uppercase font-bold">Valid Records</div>
                         <div className="text-xl font-black text-emerald-300 mt-1">{bulkPreviewResult.summary.totalValidDailyRecords}</div>
+                        {bulkPreviewResult.summary.newCount !== undefined && (
+                          <div className="text-[10px] text-emerald-400/80 font-mono mt-0.5">
+                            {bulkPreviewResult.summary.newCount} New | {bulkPreviewResult.summary.updateCount || 0} Update
+                          </div>
+                        )}
                       </div>
                       <div className="bg-cyan-950/40 border border-cyan-800/60 p-3.5 rounded-xl">
                         <div className="text-[10px] text-cyan-400 uppercase font-bold">Matched Students</div>
                         <div className="text-xl font-black text-cyan-300 mt-1">{bulkPreviewResult.summary.totalMatchedStudents}</div>
+                        {bulkPreviewResult.summary.skippedCount !== undefined && (
+                          <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                            {bulkPreviewResult.summary.skippedCount} Unchanged
+                          </div>
+                        )}
                       </div>
                       <div className="bg-red-950/40 border border-red-800/60 p-3.5 rounded-xl">
                         <div className="text-[10px] text-red-400 uppercase font-bold">Unmatched Reg Nos</div>
@@ -3790,7 +3897,42 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                       </div>
                     )}
 
-                    {/* VALID RECORDS PREVIEW TABLE */}
+                                        {/* VALIDATION ALERT 3: ROW-LEVEL INVALID / REJECTED ROWS */}
+                    {Array.isArray(bulkPreviewResult.invalidRows) && bulkPreviewResult.invalidRows.length > 0 && (
+                      <div className="bg-red-950/40 border border-red-800/80 p-5 rounded-xl space-y-3">
+                        <div className="flex items-center space-x-2 text-red-400 font-sans font-bold text-sm">
+                          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+                          <span>Invalid Rows Validation List ({bulkPreviewResult.invalidRows.length})</span>
+                        </div>
+                        <p className="text-xs text-red-300/90 font-mono">
+                          The following records could not be validated due to format issues, name mismatch, or unauthorized access. These will <strong>NOT</strong> be imported.
+                        </p>
+                        <div className="bg-slate-950 border border-red-900/60 rounded-xl overflow-hidden max-h-56 overflow-y-auto">
+                          <table className="w-full text-left text-xs font-mono">
+                            <thead className="bg-red-950/80 text-red-300 border-b border-red-900/60 text-[10px] uppercase">
+                              <tr>
+                                <th className="py-2 px-3">Row #</th>
+                                <th className="py-2 px-3">Register Number</th>
+                                <th className="py-2 px-3">Student Name</th>
+                                <th className="py-2 px-3">Validation Reason</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-red-900/40 text-[11px]">
+                              {bulkPreviewResult.invalidRows.map((inv: any, i: number) => (
+                                <tr key={i} className="hover:bg-red-950/20">
+                                  <td className="py-2 px-3 text-slate-400">Row {inv.row}</td>
+                                  <td className="py-2 px-3 font-bold text-red-300">{inv.registerNo || 'N/A'}</td>
+                                  <td className="py-2 px-3 text-slate-300">{inv.studentName || 'N/A'}</td>
+                                  <td className="py-2 px-3 text-red-400">{inv.reason}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+{/* VALID RECORDS PREVIEW TABLE */}
                     <div className="space-y-3">
                       <div className="flex justify-between items-center">
                         <h4 className="font-bold text-emerald-400 font-sans text-sm flex items-center space-x-2">
@@ -3809,6 +3951,7 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                               <th className="py-3 px-4 font-bold">Student Name</th>
                               <th className="py-3 px-4 font-bold text-center">Attendance Date</th>
                               <th className="py-3 px-4 font-bold text-center">Status</th>
+                              <th className="py-3 px-4 font-bold text-center">Action</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
@@ -3825,11 +3968,25 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                                       <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
                                         short === 'P' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
                                         short === 'A' ? 'bg-red-950 text-red-300 border border-red-800' :
-                                        short === 'ON' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                                        short === 'OD' || short === 'ON' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
                                         short === 'ML' ? 'bg-sky-950 text-sky-300 border border-sky-800' :
                                         'bg-slate-800 text-slate-400 border border-slate-700'
                                       }`}>
                                         {short}
+                                      </span>
+                                    );
+                                  })()}
+                                </td>
+                                <td className="py-2.5 px-4 text-center">
+                                  {(() => {
+                                    const act = r.action || 'NEW';
+                                    return (
+                                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${
+                                        act === 'NEW' ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-700/60' :
+                                        act === 'UPDATE' ? 'bg-sky-900/60 text-sky-300 border border-sky-700/60' :
+                                        'bg-slate-800 text-slate-400 border border-slate-700'
+                                      }`}>
+                                        {act}
                                       </span>
                                     );
                                   })()}
