@@ -1379,6 +1379,38 @@ export const API = {
     });
   },
 
+  extractAttendanceFromImage: async (formDataOrPayload: FormData | { imageBase64: string; mimeType: string; date?: string }) => {
+    if (formDataOrPayload instanceof FormData) {
+      const res = await fetchWithResilience(`${API_BASE}/faculty/attendance/ocr-extract`, {
+        method: 'POST',
+        body: formDataOrPayload
+      });
+      return res.json();
+    }
+    return request<{
+      success: boolean;
+      extractedRows: Array<{
+        id: string;
+        registerNo: string;
+        studentName: string;
+        date: string;
+        status: 'PRESENT' | 'ABSENT' | 'OD' | 'ML';
+        confidence?: 'HIGH' | 'MEDIUM' | 'LOW';
+        matchedInRoster?: boolean;
+        nameMatch?: boolean;
+        suggestedName?: string;
+        warning?: string;
+      }>;
+      unparsed: Array<{ lineIndex: number; text: string; reason: string }>;
+      rawText?: string;
+      method: string;
+      warnings: string[];
+    }>('/faculty/attendance/ocr-extract', {
+      method: 'POST',
+      body: JSON.stringify(formDataOrPayload)
+    });
+  },
+
   getDailyAttendance: async (date: string, role: 'FACULTY' | 'ADMIN' = 'FACULTY', year?: string, section?: string) => {
     const params = new URLSearchParams();
     params.append('date', date);

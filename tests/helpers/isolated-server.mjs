@@ -68,6 +68,17 @@ export function isolateServer(database, modules = {}, { loadRealDatabase = false
           if (cleanYr === '4th Year') return 7;
           return 3;
         };
+        export const normalizePersonName = name => String(name || '').toUpperCase().replace(/[^A-Z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+        export const verifyStudentNameMatch = (input, dbName) => {
+          if (!input || !input.trim()) return true;
+          const n1 = normalizePersonName(input);
+          const n2 = normalizePersonName(dbName);
+          if (!n1 || !n2) return true;
+          if (n1 === n2) return true;
+          const w1 = n1.split(' ').filter(Boolean).sort().join(' ');
+          const w2 = n2.split(' ').filter(Boolean).sort().join(' ');
+          return w1 === w2;
+        };
         export const normalizeStudentRecord = stu => stu ? ({
           ...stu,
           registerNo: (stu.register_no || stu.registerNo || '').trim(),

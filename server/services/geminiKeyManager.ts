@@ -25,6 +25,10 @@ export interface GeminiGenerationOptions {
   maxOutputTokens?: number;
   temperature?: number;
   timeoutMs?: number;
+  image?: {
+    mimeType: string;
+    dataBase64: string;
+  };
 }
 
 export interface GeminiGenerationResult {
@@ -453,8 +457,18 @@ class GeminiKeyManager {
           const timerId = setTimeout(() => controller.abort(), timeoutMs);
 
           const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${activeKey.key}`;
+          const parts: any[] = [{ text: prompt }];
+          if (options.image && options.image.dataBase64) {
+            parts.push({
+              inlineData: {
+                mimeType: options.image.mimeType || 'image/png',
+                data: options.image.dataBase64
+              }
+            });
+          }
+
           const bodyPayload: any = {
-            contents: [{ parts: [{ text: prompt }] }]
+            contents: [{ parts }]
           };
 
           if (options.temperature !== undefined || options.maxOutputTokens !== undefined) {

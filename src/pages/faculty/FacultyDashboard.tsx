@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
+import { parseAttendanceOcrText, recognizeAttendanceImageWithTesseract, type ExtractedAttendanceRow } from '../../services/attendanceOcr';
 import { API, API_BASE, fetchWithResilience, openAuthenticatedFile, clearSessionAuth } from '../../services/api';
 import type { UserSession, Student, TeamHead } from '../../types';
 import { DashboardLayout, type MenuItem } from '../../components/layout/DashboardLayout';
@@ -271,6 +272,14 @@ export const FacultyDashboard: React.FC = () => {
   const [bulkPreviewResult, setBulkPreviewResult] = useState<any | null>(null);
   const [bulkImportError, setBulkImportError] = useState('');
   const [bulkImportSuccess, setBulkImportSuccess] = useState('');
+
+  // OCR Attendance State (.png upload)
+  const [ocrImageFile, setOcrImageFile] = useState<File | null>(null);
+  const [ocrImagePreviewUrl, setOcrImagePreviewUrl] = useState<string | null>(null);
+  const [isOcrProcessing, setIsOcrProcessing] = useState(false);
+  const [ocrStatusMessage, setOcrStatusMessage] = useState('');
+  const [editableOcrRows, setEditableOcrRows] = useState<ExtractedAttendanceRow[]>([]);
+  const [ocrWarnings, setOcrWarnings] = useState<string[]>([]);
 
   // --- CERTIFICATE FORM & UPLOAD MODAL STATE ---
   const [showCertModal, setShowCertModal] = useState(false);
@@ -988,12 +997,83 @@ export const FacultyDashboard: React.FC = () => {
       return;
     }
 
-    if (!fileName.endsWith('.csv') && !fileName.endsWith('.xlsx') && !fileName.endsWith('.xls') && !fileName.endsWith('.txt')) {
-      alert('Invalid file format. Only Excel (.xlsx, .xls) and CSV (.csv) files are allowed.');
+    if (!fileName.endsWith('.csv') && !fileName.endsWith('.xlsx') && !fileName.endsWith('.xls') && !fileName.endsWith('.png') && !fileName.endsWith('.txt')) {
+      alert('Invalid file format. Only Excel (.xlsx, .xls), CSV (.csv), or PNG (.png) image files are allowed.');
       return;
     }
 
     setBulkFile(file);
+
+    if (fileName.endsWith('.png')) {
+      // PNG ATTENDANCE OCR PROCESSING
+      setOcrImageFile(file);
+      const previewUrl = URL.createObjectURL(file);
+      setOcrImagePreviewUrl(previewUrl);
+      setIsOcrProcessing(true);
+      setOcrStatusMessage('Reading attendance sheet image with OCR...');
+      setBulkImportError('');
+      setBulkImportSuccess('');
+      setBulkPreviewResult(null);
+      setEditableOcrRows([]);
+      setOcrWarnings([]);
+
+      const handleImageOcr = async () => {
+        try {
+          // 1. Try Backend OCR extraction
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('date', attDate || new Date().toISOString().split('T')[0]);
+
+          const res = await API.extractAttendanceFromImage(formData);
+          if (res && res.success && Array.isArray(res.extractedRows) && res.extractedRows.length > 0) {
+            setEditableOcrRows(res.extractedRows);
+            if (Array.isArray(res.warnings) && res.warnings.length > 0) {
+              setOcrWarnings(res.warnings);
+            }
+            return;
+          }
+          throw new Error(res?.error || 'Backend OCR returned no rows, trying client-side OCR...');
+        } catch (serverOcrErr: any) {
+          console.warn('Backend OCR fallback to browser Tesseract:', serverOcrErr);
+          setOcrStatusMessage('Extracting text locally via browser OCR engine...');
+
+          try {
+            const rawText = await recognizeAttendanceImageWithTesseract(file, (pct, status) => {
+              setOcrStatusMessage(`Running OCR: ${status} (${pct}%)...`);
+            });
+
+            if (!rawText || !rawText.trim()) {
+              throw new Error('No text could be recognized from the uploaded image. Please check image quality and lighting.');
+            }
+
+            const parsed = parseAttendanceOcrText(rawText, attDate, students);
+            if (!parsed.rows || parsed.rows.length === 0) {
+              throw new Error('No recognizable student register numbers found in the image. Please verify it is an attendance sheet.');
+            }
+
+            setEditableOcrRows(parsed.rows);
+            if (parsed.unparsed.length > 0) {
+              setOcrWarnings([`${parsed.unparsed.length} line(s) in the image could not be matched to a student record.`]);
+            }
+          } catch (clientOcrErr: any) {
+            setBulkImportError(`OCR Error: ${clientOcrErr.message || 'Failed to extract text from attendance image.'}`);
+            setEditableOcrRows([]);
+          }
+        } finally {
+          setIsOcrProcessing(false);
+          setOcrStatusMessage('');
+        }
+      };
+
+      handleImageOcr();
+      return;
+    }
+
+    // Reset OCR states for spreadsheet or CSV files
+    setOcrImageFile(null);
+    setOcrImagePreviewUrl(null);
+    setEditableOcrRows([]);
+    setOcrWarnings([]);
 
     if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
       const reader = new FileReader();
@@ -3695,22 +3775,22 @@ console.warn('Backend logout unavailable, clearing local session:', error);
 
 {/* FILE UPLOAD & TEXT PASTE INPUTS */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {/* Excel & CSV File Upload Dropzone */}
+                  {/* Excel, CSV & PNG File Upload Dropzone */}
                   <div className="bg-slate-950 border border-slate-800 p-5 rounded-xl space-y-3 flex flex-col justify-between">
                     <div>
-                      <h4 className="font-bold text-white text-xs font-sans uppercase mb-1">Option 1: Upload Excel or CSV File</h4>
-                      <p className="text-[11px] text-slate-400">Select or drop an Excel (`.xlsx`, `.xls`) or CSV (`.csv`) file.</p>
-                      <p className="text-[11px] text-cyan-400 font-mono font-semibold">Maximum file size: 10 MB</p>
+                      <h4 className="font-bold text-white text-xs font-sans uppercase mb-1">Option 1: Upload Excel, CSV or PNG Image</h4>
+                      <p className="text-[11px] text-slate-400">Select or drop an Excel (`.xlsx`, `.xls`), CSV (`.csv`), or PNG Image (`.png`).</p>
+                      <p className="text-[11px] text-cyan-400 font-mono font-semibold">OCR enabled for PNG attendance sheets • Max size: 10 MB</p>
                     </div>
 
                     <div className="border-2 border-dashed border-slate-800 hover:border-amber-500/50 p-6 rounded-xl text-center transition-all bg-slate-900/30 space-y-2">
                       <Upload className="w-8 h-8 text-amber-400 mx-auto" />
                       <div className="text-xs text-slate-300 font-bold font-sans">
-                        {bulkFile ? bulkFile.name : 'Choose Excel / CSV File or drag and drop'}
+                        {bulkFile ? bulkFile.name : 'Choose Excel / CSV / PNG File or drag and drop'}
                       </div>
                       <input
                         type="file"
-                        accept=".csv,.xlsx,.xls,.txt"
+                        accept=".csv,.xlsx,.xls,.png,.txt"
                         onChange={handleBulkFileChange}
                         className="hidden"
                         id="bulk-att-csv-input"
@@ -3719,7 +3799,7 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                         htmlFor="bulk-att-csv-input"
                         className="inline-block bg-amber-950 text-amber-300 border border-amber-800 hover:bg-amber-900 font-bold text-xs px-4 py-2 rounded-lg cursor-pointer transition-all font-sans"
                       >
-                        {bulkFile ? 'Change File' : 'Browse Excel / CSV File'}
+                        {bulkFile ? 'Change File' : 'Browse File (Excel, CSV, PNG)'}
                       </label>
                     </div>
                   </div>
@@ -3761,6 +3841,227 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                     </div>
                   </div>
                 </div>
+
+                
+                {/* OCR PROCESSING LOADING BANNER */}
+                {isOcrProcessing && (
+                  <div className="bg-cyan-950/70 border border-cyan-800 text-cyan-300 p-5 rounded-xl flex items-center space-x-3 text-xs">
+                    <Loader2 className="w-6 h-6 animate-spin text-cyan-400 shrink-0" />
+                    <div>
+                      <strong className="font-bold text-sm block font-sans">Extracting Attendance Data with OCR...</strong>
+                      <p className="mt-0.5 font-mono text-[11px]">{ocrStatusMessage || 'Processing image file and detecting student register numbers...'}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* EDITABLE OCR ATTENDANCE REVIEW CARD */}
+                {editableOcrRows.length > 0 && (
+                  <div className="bg-slate-950 border border-cyan-800/80 p-5 rounded-xl space-y-4 shadow-xl">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                      <div className="flex items-center space-x-2.5">
+                        <FileSpreadsheet className="w-5 h-5 text-cyan-400 shrink-0" />
+                        <div>
+                          <h4 className="text-white font-sans font-bold text-sm flex items-center space-x-2">
+                            <span>Editable OCR Attendance Records</span>
+                            <span className="bg-cyan-950 text-cyan-300 border border-cyan-800 text-[10px] px-2 py-0.5 rounded-full font-mono">
+                              {editableOcrRows.length} Records Extracted
+                            </span>
+                          </h4>
+                          <p className="text-[11px] text-slate-400">
+                            Verify and correct any OCR recognized fields below before validating against the student database.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const today = attDate || new Date().toISOString().split('T')[0];
+                            setEditableOcrRows([
+                              ...editableOcrRows,
+                              {
+                                id: `manual-${Date.now()}`,
+                                registerNo: '',
+                                studentName: '',
+                                date: today,
+                                status: 'PRESENT'
+                              }
+                            ]);
+                          }}
+                          className="bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-800/80 font-bold text-xs px-3 py-1.5 rounded-lg flex items-center space-x-1 font-sans cursor-pointer"
+                        >
+                          <UserPlus className="w-3.5 h-3.5 text-cyan-400" />
+                          <span>+ Add Row</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditableOcrRows([]);
+                            setOcrImagePreviewUrl(null);
+                            setOcrImageFile(null);
+                          }}
+                          className="bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 font-bold text-xs px-3 py-1.5 rounded-lg font-sans cursor-pointer"
+                        >
+                          Discard
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Image Preview Thumbnail */}
+                    {ocrImagePreviewUrl && (
+                      <div className="flex items-center space-x-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800 text-xs">
+                        <img
+                          src={ocrImagePreviewUrl}
+                          alt="Uploaded Sheet Preview"
+                          className="w-16 h-16 object-cover rounded-lg border border-slate-700 shrink-0 cursor-pointer"
+                          onClick={() => window.open(ocrImagePreviewUrl, '_blank')}
+                          title="Click to view full image in new tab"
+                        />
+                        <div className="space-y-1">
+                          <div className="font-bold text-white font-sans">{ocrImageFile?.name || 'Attendance Sheet Image'}</div>
+                          <p className="text-slate-400 text-[11px]">
+                            Showing side-by-side OCR review. Click thumbnail to view full image in a new tab.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Editable Table */}
+                    <div className="border border-slate-800 rounded-xl overflow-hidden max-h-96 overflow-y-auto">
+                      <table className="w-full text-left font-sans text-xs">
+                        <thead className="bg-slate-900 text-slate-400 font-mono text-[10px] uppercase sticky top-0 border-b border-slate-800">
+                          <tr>
+                            <th className="py-2.5 px-3 w-10 text-center">#</th>
+                            <th className="py-2.5 px-3">Register Number</th>
+                            <th className="py-2.5 px-3">Student Name</th>
+                            <th className="py-2.5 px-3 text-center">Date</th>
+                            <th className="py-2.5 px-3 text-center">Status</th>
+                            <th className="py-2.5 px-3 text-center w-12">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
+                          {editableOcrRows.map((row, idx) => (
+                            <tr key={row.id} className="hover:bg-slate-900/40">
+                              <td className="py-2 px-3 text-center text-slate-500">{idx + 1}</td>
+                              <td className="py-2 px-3">
+                                <input
+                                  type="text"
+                                  value={row.registerNo}
+                                  onChange={(e) => {
+                                    const val = e.target.value.toUpperCase();
+                                    setEditableOcrRows(
+                                      editableOcrRows.map((r, i) => (i === idx ? { ...r, registerNo: val } : r))
+                                    );
+                                  }}
+                                  placeholder="e.g. 620125243146"
+                                  className="w-full bg-slate-900 border border-slate-700 focus:border-cyan-500 rounded px-2.5 py-1 text-cyan-300 font-mono font-bold text-xs"
+                                />
+                              </td>
+                              <td className="py-2 px-3">
+                                <input
+                                  type="text"
+                                  value={row.studentName}
+                                  onChange={(e) => {
+                                    const val = e.target.value.toUpperCase();
+                                    setEditableOcrRows(
+                                      editableOcrRows.map((r, i) => (i === idx ? { ...r, studentName: val } : r))
+                                    );
+                                  }}
+                                  placeholder="Student Name"
+                                  className="w-full bg-slate-900 border border-slate-700 focus:border-cyan-500 rounded px-2.5 py-1 text-white font-sans text-xs"
+                                />
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                <input
+                                  type="date"
+                                  value={row.date}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setEditableOcrRows(
+                                      editableOcrRows.map((r, i) => (i === idx ? { ...r, date: val } : r))
+                                    );
+                                  }}
+                                  className="bg-slate-900 border border-slate-700 focus:border-cyan-500 rounded px-2 py-1 text-slate-300 font-mono text-xs"
+                                />
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                <div className="flex items-center justify-center space-x-1">
+                                  {(['PRESENT', 'ABSENT', 'OD', 'ML'] as const).map((st) => {
+                                    const shortSt = st === 'PRESENT' ? 'P' : st === 'ABSENT' ? 'A' : st;
+                                    const isSelected = row.status === st || (st === 'OD' && (row.status as string) === 'ON');
+                                    return (
+                                      <button
+                                        key={st}
+                                        type="button"
+                                        onClick={() => {
+                                          setEditableOcrRows(
+                                            editableOcrRows.map((r, i) => (i === idx ? { ...r, status: st } : r))
+                                          );
+                                        }}
+                                        className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono transition-all ${
+                                          isSelected
+                                            ? st === 'PRESENT'
+                                              ? 'bg-emerald-600 text-white shadow'
+                                              : st === 'ABSENT'
+                                              ? 'bg-red-600 text-white shadow'
+                                              : st === 'OD'
+                                              ? 'bg-amber-600 text-white shadow'
+                                              : 'bg-sky-600 text-white shadow'
+                                            : 'bg-slate-900 text-slate-500 hover:text-white border border-slate-800'
+                                        }`}
+                                      >
+                                        {shortSt}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditableOcrRows(editableOcrRows.filter((_, i) => i !== idx));
+                                  }}
+                                  className="text-slate-500 hover:text-red-400 p-1 rounded transition-colors"
+                                  title="Remove Row"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Validation Trigger Button */}
+                    <div className="flex justify-end pt-2">
+                      <button
+                        type="button"
+                        disabled={isBulkPreviewing || editableOcrRows.length === 0}
+                        onClick={() => {
+                          const formattedRows = editableOcrRows
+                            .filter((r) => r.registerNo.trim() !== '')
+                            .map((r) => ({
+                              'Register Number': r.registerNo.trim(),
+                              'Student Name': r.studentName.trim(),
+                              'Attendance Date': r.date,
+                              'Attendance Status': r.status
+                            }));
+                          if (formattedRows.length === 0) {
+                            setBulkImportError('Please enter at least one valid Register Number.');
+                            return;
+                          }
+                          handleBulkPreview(formattedRows);
+                        }}
+                        className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold font-sans text-xs px-6 py-2.5 rounded-xl shadow-lg flex items-center space-x-2 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        <FileCheck className="w-4 h-4 text-white" />
+                        <span>Validate & Preview {editableOcrRows.length} OCR Records</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* ERROR & SUCCESS MESSAGES */}
                 {bulkImportError && (

@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { extractAttendanceFromImage } from '../services/attendanceOcr.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -1565,6 +1566,45 @@ router.get('/attendance/history/:date', async (req: AuthRequest, res: Response) 
   const date = getRouteParam(req, 'date');
   const historyDetails = await db.getAttendanceHistoryByDateForFaculty(req.user!.id, date);
   return res.json({ details: historyDetails });
+});
+
+const attendanceOcrUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }
+});
+
+router.post('/attendance/ocr-extract', attendanceOcrUpload.single('file'), async (req: AuthRequest, res: Response) => {
+  try {
+    let buffer: Buffer | null = null;
+    let mimeType = 'image/png';
+    const defaultDate = (req.body?.date as string) || new Date().toISOString().split('T')[0];
+
+    if (req.file) {
+      buffer = req.file.buffer;
+      mimeType = req.file.mimetype || 'image/png';
+    } else if (req.body?.imageBase64) {
+      const cleanBase64 = String(req.body.imageBase64).replace(/^data:image\/[a-z]+;base64,/, '');
+      buffer = Buffer.from(cleanBase64, 'base64');
+      mimeType = req.body.mimeType || 'image/png';
+    }
+
+    if (!buffer || buffer.length === 0) {
+      return res.status(400).json({ success: false, error: 'No image file or base64 data provided.' });
+    }
+
+    // Fetch assigned roster for name verification and auto-matching
+    const assignment = await db.getFacultyAssignment(req.user!.id);
+    const facultyUser = await db.getUserById(req.user!.id);
+    const assignedYear = assignment ? assignment.year : req.user!.assignedYear || facultyUser?.year || '2nd Year';
+    const assignedSection = assignment ? assignment.section : req.user!.assignedSection || facultyUser?.section || 'A';
+    const roster = await db.getStudentsForFaculty(req.user!.id, assignedYear, assignedSection);
+
+    const result = await extractAttendanceFromImage(buffer, mimeType, defaultDate, roster);
+    return res.json(result);
+  } catch (err: any) {
+    console.error('[Attendance OCR Extraction Error]', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to extract attendance from image.' });
+  }
 });
 
 // TEAMS MODULE ENDPOINTS
