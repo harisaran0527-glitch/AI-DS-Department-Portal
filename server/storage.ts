@@ -15,13 +15,14 @@ export const DANGEROUS_EXTENSIONS = new Set([
 ]);
 
 // MODULE-SPECIFIC ALLOWED EXTENSIONS & MIME TYPES
-export const BULK_ALLOWED_EXTENSIONS = new Set(['.xlsx', '.xls', '.csv']);
+export const BULK_ALLOWED_EXTENSIONS = new Set(['.xlsx', '.xls', '.csv', '.png']);
 export const BULK_ALLOWED_MIME_TYPES = new Set([
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.ms-excel',
   'text/csv',
   'text/plain',
-  'application/csv'
+  'application/csv',
+  'image/png'
 ]);
 
 export const PROOF_ALLOWED_EXTENSIONS = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
@@ -107,8 +108,8 @@ export function validateUploadedFile(
 
   // 3. Module-Specific Format Enforcement
   if (moduleType === 'bulk') {
-    if (!BULK_ALLOWED_EXTENSIONS.has(ext)) {
-      return { valid: false, error: 'Invalid file format. Only Excel (.xlsx, .xls) and CSV (.csv) files are allowed for bulk import.' };
+    if (!BULK_ALLOWED_EXTENSIONS.has(ext) && mime !== 'image/png') {
+      return { valid: false, error: 'Invalid file format. Only Excel (.xlsx, .xls), CSV (.csv), or PNG (.png) files are allowed for bulk import.' };
     }
   } else if (moduleType === 'project') {
     if (!PROJECT_ALLOWED_EXTENSIONS.has(ext)) {

@@ -1573,6 +1573,20 @@ const attendanceOcrUpload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }
 });
 
+export function isValidPngSignature(buf: Buffer | null | undefined): boolean {
+  if (!buf || buf.length < 8) return false;
+  return (
+    buf[0] === 0x89 &&
+    buf[1] === 0x50 && // P
+    buf[2] === 0x4e && // N
+    buf[3] === 0x47 && // G
+    buf[4] === 0x0d && // \r
+    buf[5] === 0x0a && // \n
+    buf[6] === 0x1a && // SUB
+    buf[7] === 0x0a    // \n
+  );
+}
+
 router.post('/attendance/ocr-extract', attendanceOcrUpload.single('file'), async (req: AuthRequest, res: Response) => {
   try {
     let buffer: Buffer | null = null;
@@ -1580,6 +1594,11 @@ router.post('/attendance/ocr-extract', attendanceOcrUpload.single('file'), async
     const defaultDate = (req.body?.date as string) || new Date().toISOString().split('T')[0];
 
     if (req.file) {
+      const ext = path.extname(req.file.originalname || '').toLowerCase();
+      const dangerousExts = ['.exe', '.bat', '.cmd', '.sh', '.bash', '.php', '.pl', '.py', '.cgi', '.jar', '.vbs', '.js', '.ts', '.msi'];
+      if (dangerousExts.includes(ext)) {
+        return res.status(400).json({ success: false, error: 'Executable or script files are strictly prohibited.' });
+      }
       buffer = req.file.buffer;
       mimeType = req.file.mimetype || 'image/png';
     } else if (req.body?.imageBase64) {
@@ -1590,6 +1609,14 @@ router.post('/attendance/ocr-extract', attendanceOcrUpload.single('file'), async
 
     if (!buffer || buffer.length === 0) {
       return res.status(400).json({ success: false, error: 'No image file or base64 data provided.' });
+    }
+
+    // Server-Side PNG Magic Bytes Verification [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+    if (!isValidPngSignature(buffer)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Security verification failed: File signature does not match a valid PNG image format.'
+      });
     }
 
     // Fetch assigned roster for name verification and auto-matching

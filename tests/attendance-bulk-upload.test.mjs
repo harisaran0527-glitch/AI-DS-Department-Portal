@@ -144,3 +144,36 @@ Note: End of attendance sheet
   // Unparsed line flagged
   assert.ok(unparsed.some((u) => u.text.includes('End of attendance sheet')));
 });
+
+test('PNG file signature and format validation rejects invalid files and accepts genuine PNGs', async () => {
+  const { isValidPngSignature } = await import('../server/routes/faculty.js');
+  const { validateUploadedFile, BULK_ALLOWED_EXTENSIONS, BULK_ALLOWED_MIME_TYPES } = await import('../server/storage.js');
+
+  // Verify bulk allowed extensions & mime types include PNG
+  assert.equal(BULK_ALLOWED_EXTENSIONS.has('.png'), true);
+  assert.equal(BULK_ALLOWED_MIME_TYPES.has('image/png'), true);
+
+  // Test validateUploadedFile for bulk module
+  const validPngFile = { originalname: 'attendance_sheet.PNG', mimetype: 'image/png', size: 1024 };
+  const validCheck = validateUploadedFile(validPngFile, 'bulk');
+  assert.equal(validCheck.valid, true);
+
+  const scriptFile = { originalname: 'payload.exe', mimetype: 'application/x-msdownload', size: 1024 };
+  const scriptCheck = validateUploadedFile(scriptFile, 'bulk');
+  assert.equal(scriptCheck.valid, false);
+
+  // Test PNG signature verification (8 magic bytes)
+  const realPngHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]);
+  assert.equal(isValidPngSignature(realPngHeader), true);
+
+  const fakePngHeader = Buffer.from('NOT A REAL PNG FILE AT ALL');
+  assert.equal(isValidPngSignature(fakePngHeader), false);
+
+  const jpegHeader = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46]);
+  assert.equal(isValidPngSignature(jpegHeader), false);
+
+  assert.equal(isValidPngSignature(Buffer.from([0x89, 0x50])), false);
+  assert.equal(isValidPngSignature(null), false);
+  assert.equal(isValidPngSignature(undefined), false);
+});
+

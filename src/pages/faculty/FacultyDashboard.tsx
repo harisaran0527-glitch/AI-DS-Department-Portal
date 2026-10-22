@@ -280,6 +280,7 @@ export const FacultyDashboard: React.FC = () => {
   const [ocrStatusMessage, setOcrStatusMessage] = useState('');
   const [editableOcrRows, setEditableOcrRows] = useState<ExtractedAttendanceRow[]>([]);
   const [ocrWarnings, setOcrWarnings] = useState<string[]>([]);
+  const [isDraggingBulk, setIsDraggingBulk] = useState(false);
 
   // --- CERTIFICATE FORM & UPLOAD MODAL STATE ---
   const [showCertModal, setShowCertModal] = useState(false);
@@ -981,30 +982,79 @@ export const FacultyDashboard: React.FC = () => {
     XLSX.writeFile(workbook, `attendance_template_${currentYear ? currentYear.replace(/\s+/g, '_') : 'class'}_Sec_${currentSection || 'A'}.xlsx`);
   };
 
-  const handleBulkFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const processAttendanceBulkFile = async (file: File) => {
     if (!file) return;
 
     if (file.size > 10 * 1024 * 1024) {
+      setBulkImportError('File size exceeds 10 MB. Please upload a smaller file.');
       alert('File size exceeds 10 MB. Please upload a smaller file.');
       return;
     }
 
-    const fileName = file.name.toLowerCase();
+    const rawName = (file.name || '').trim();
+    const fileName = rawName.toLowerCase();
+    const mimeType = (file.type || '').trim().toLowerCase();
+
     const dangerousExts = ['.exe', '.bat', '.cmd', '.sh', '.bash', '.php', '.pl', '.py', '.cgi', '.jar', '.vbs', '.js', '.ts', '.msi'];
     if (dangerousExts.some(ext => fileName.endsWith(ext))) {
+      setBulkImportError('Executable or script files are strictly prohibited.');
       alert('Executable or script files are strictly prohibited.');
       return;
     }
 
-    if (!fileName.endsWith('.csv') && !fileName.endsWith('.xlsx') && !fileName.endsWith('.xls') && !fileName.endsWith('.png') && !fileName.endsWith('.txt')) {
+    // Comprehensive format detection: extension OR mime type
+    const isPng =
+      mimeType === 'image/png' ||
+      mimeType.startsWith('image/png') ||
+      fileName.endsWith('.png') ||
+      /\.png$/i.test(rawName);
+
+    const isExcel =
+      fileName.endsWith('.xlsx') ||
+      fileName.endsWith('.xls') ||
+      mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      mimeType === 'application/vnd.ms-excel';
+
+    const isCsvOrText =
+      fileName.endsWith('.csv') ||
+      fileName.endsWith('.txt') ||
+      mimeType === 'text/csv' ||
+      mimeType === 'text/plain' ||
+      mimeType === 'application/csv';
+
+    if (!isPng && !isExcel && !isCsvOrText) {
+      setBulkImportError('Invalid file format. Only Excel (.xlsx, .xls), CSV (.csv), or PNG (.png) image files are allowed.');
       alert('Invalid file format. Only Excel (.xlsx, .xls), CSV (.csv), or PNG (.png) image files are allowed.');
       return;
     }
 
     setBulkFile(file);
 
-    if (fileName.endsWith('.png')) {
+    if (isPng) {
+      // Client-Side PNG Magic Bytes Verification [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+      try {
+        const slice = await file.slice(0, 8).arrayBuffer();
+        const bytes = new Uint8Array(slice);
+        const isRealPng =
+          bytes.length >= 8 &&
+          bytes[0] === 0x89 &&
+          bytes[1] === 0x50 && // P
+          bytes[2] === 0x4e && // N
+          bytes[3] === 0x47 && // G
+          bytes[4] === 0x0d && // \r
+          bytes[5] === 0x0a && // \n
+          bytes[6] === 0x1a && // SUB
+          bytes[7] === 0x0a;   // \n
+
+        if (!isRealPng && bytes.length >= 8) {
+          setBulkImportError('Invalid PNG file signature: The selected file does not contain a valid PNG image binary signature.');
+          alert('Invalid PNG file signature: The selected file does not contain a valid PNG image binary signature.');
+          return;
+        }
+      } catch (sigErr) {
+        console.warn('[Attendance Bulk] Signature verification warning:', sigErr);
+      }
+
       // PNG ATTENDANCE OCR PROCESSING
       setOcrImageFile(file);
       const previewUrl = URL.createObjectURL(file);
@@ -1017,55 +1067,51 @@ export const FacultyDashboard: React.FC = () => {
       setEditableOcrRows([]);
       setOcrWarnings([]);
 
-      const handleImageOcr = async () => {
-        try {
-          // 1. Try Backend OCR extraction
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('date', attDate || new Date().toISOString().split('T')[0]);
+      try {
+        // 1. Try Backend OCR extraction
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('date', attDate || new Date().toISOString().split('T')[0]);
 
-          const res = await API.extractAttendanceFromImage(formData);
-          if (res && res.success && Array.isArray(res.extractedRows) && res.extractedRows.length > 0) {
-            setEditableOcrRows(res.extractedRows);
-            if (Array.isArray(res.warnings) && res.warnings.length > 0) {
-              setOcrWarnings(res.warnings);
-            }
-            return;
+        const res = await API.extractAttendanceFromImage(formData);
+        if (res && res.success && Array.isArray(res.extractedRows) && res.extractedRows.length > 0) {
+          setEditableOcrRows(res.extractedRows);
+          if (Array.isArray(res.warnings) && res.warnings.length > 0) {
+            setOcrWarnings(res.warnings);
           }
-          throw new Error(res?.error || 'Backend OCR returned no rows, trying client-side OCR...');
-        } catch (serverOcrErr: any) {
-          console.warn('Backend OCR fallback to browser Tesseract:', serverOcrErr);
-          setOcrStatusMessage('Extracting text locally via browser OCR engine...');
-
-          try {
-            const rawText = await recognizeAttendanceImageWithTesseract(file, (pct, status) => {
-              setOcrStatusMessage(`Running OCR: ${status} (${pct}%)...`);
-            });
-
-            if (!rawText || !rawText.trim()) {
-              throw new Error('No text could be recognized from the uploaded image. Please check image quality and lighting.');
-            }
-
-            const parsed = parseAttendanceOcrText(rawText, attDate, students);
-            if (!parsed.rows || parsed.rows.length === 0) {
-              throw new Error('No recognizable student register numbers found in the image. Please verify it is an attendance sheet.');
-            }
-
-            setEditableOcrRows(parsed.rows);
-            if (parsed.unparsed.length > 0) {
-              setOcrWarnings([`${parsed.unparsed.length} line(s) in the image could not be matched to a student record.`]);
-            }
-          } catch (clientOcrErr: any) {
-            setBulkImportError(`OCR Error: ${clientOcrErr.message || 'Failed to extract text from attendance image.'}`);
-            setEditableOcrRows([]);
-          }
-        } finally {
-          setIsOcrProcessing(false);
-          setOcrStatusMessage('');
+          return;
         }
-      };
+        throw new Error(res?.error || 'Backend OCR returned no rows, trying client-side OCR...');
+      } catch (serverOcrErr: any) {
+        console.warn('Backend OCR fallback to browser Tesseract:', serverOcrErr);
+        setOcrStatusMessage('Extracting text locally via browser OCR engine...');
 
-      handleImageOcr();
+        try {
+          const rawText = await recognizeAttendanceImageWithTesseract(file, (pct, status) => {
+            setOcrStatusMessage(`Running OCR: ${status} (${pct}%)...`);
+          });
+
+          if (!rawText || !rawText.trim()) {
+            throw new Error('No text could be recognized from the uploaded image. Please ensure the image is clear and well-lit.');
+          }
+
+          const parsed = parseAttendanceOcrText(rawText, attDate, students);
+          if (!parsed.rows || parsed.rows.length === 0) {
+            throw new Error('No recognizable student register numbers found in the image. Please verify it is an attendance sheet.');
+          }
+
+          setEditableOcrRows(parsed.rows);
+          if (parsed.unparsed.length > 0) {
+            setOcrWarnings([`${parsed.unparsed.length} line(s) in the image could not be matched to a student record.`]);
+          }
+        } catch (clientOcrErr: any) {
+          setBulkImportError(`OCR Processing Failed: ${clientOcrErr.message || 'Failed to extract text from attendance image.'}`);
+          setEditableOcrRows([]);
+        }
+      } finally {
+        setIsOcrProcessing(false);
+        setOcrStatusMessage('');
+      }
       return;
     }
 
@@ -1075,7 +1121,7 @@ export const FacultyDashboard: React.FC = () => {
     setEditableOcrRows([]);
     setOcrWarnings([]);
 
-    if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+    if (isExcel) {
       const reader = new FileReader();
       reader.onload = (evt) => {
         try {
@@ -1102,6 +1148,15 @@ export const FacultyDashboard: React.FC = () => {
         }
       });
     }
+  };
+
+  const handleBulkFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (e.target) {
+      e.target.value = '';
+    }
+    if (!file) return;
+    processAttendanceBulkFile(file);
   };
 
   const handleBulkTextParse = () => {
@@ -3783,14 +3838,42 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                       <p className="text-[11px] text-cyan-400 font-mono font-semibold">OCR enabled for PNG attendance sheets • Max size: 10 MB</p>
                     </div>
 
-                    <div className="border-2 border-dashed border-slate-800 hover:border-amber-500/50 p-6 rounded-xl text-center transition-all bg-slate-900/30 space-y-2">
-                      <Upload className="w-8 h-8 text-amber-400 mx-auto" />
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setIsDraggingBulk(true);
+                      }}
+                      onDragEnter={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setIsDraggingBulk(true);
+                      }}
+                      onDragLeave={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setIsDraggingBulk(false);
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setIsDraggingBulk(false);
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) {
+                          processAttendanceBulkFile(file);
+                        }
+                      }}
+                      className={`border-2 border-dashed p-6 rounded-xl text-center transition-all bg-slate-900/30 space-y-2 ${
+                        isDraggingBulk ? 'border-amber-400 bg-amber-950/40' : 'border-slate-800 hover:border-amber-500/50'
+                      }`}
+                    >
+                      <Upload className={`w-8 h-8 mx-auto transition-colors ${isDraggingBulk ? 'text-amber-300' : 'text-amber-400'}`} />
                       <div className="text-xs text-slate-300 font-bold font-sans">
                         {bulkFile ? bulkFile.name : 'Choose Excel / CSV / PNG File or drag and drop'}
                       </div>
                       <input
                         type="file"
-                        accept=".csv,.xlsx,.xls,.png,.txt"
+                        accept=".csv,.xlsx,.xls,.png,.txt,image/png,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                         onChange={handleBulkFileChange}
                         className="hidden"
                         id="bulk-att-csv-input"
@@ -4065,12 +4148,23 @@ console.warn('Backend logout unavailable, clearing local session:', error);
 
                 {/* ERROR & SUCCESS MESSAGES */}
                 {bulkImportError && (
-                  <div className="bg-red-950/80 border border-red-800 text-red-300 p-4 rounded-xl flex items-start space-x-2 text-xs">
-                    <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-                    <div>
-                      <strong className="font-bold block text-sm font-sans">Import Validation Error</strong>
-                      <p className="mt-0.5">{bulkImportError}</p>
+                  <div className="bg-red-950/80 border border-red-800 text-red-300 p-4 rounded-xl flex items-start justify-between gap-3 text-xs">
+                    <div className="flex items-start space-x-2">
+                      <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="font-bold block text-sm font-sans">Import Validation Error</strong>
+                        <p className="mt-0.5">{bulkImportError}</p>
+                      </div>
                     </div>
+                    {ocrImageFile && (
+                      <button
+                        type="button"
+                        onClick={() => processAttendanceBulkFile(ocrImageFile)}
+                        className="bg-red-900 hover:bg-red-800 text-white font-bold font-sans text-xs px-3 py-1.5 rounded-lg shrink-0 cursor-pointer transition-all border border-red-700"
+                      >
+                        Retry OCR
+                      </button>
+                    )}
                   </div>
                 )}
 

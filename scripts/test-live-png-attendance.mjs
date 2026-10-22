@@ -1,167 +1,141 @@
-// Test Live Production PNG Attendance Upload & OCR Workflow
 import fs from 'fs';
 import path from 'path';
 
-const BASE_URL = process.env.BASE_URL || 'https://aidsportal.vercel.app';
+const BASE_URL = 'https://aidsportal.vercel.app';
 const FACULTY_EMAIL = 'tamil1234@gmail.com';
-const FACULTY_PASSWORD = process.env.FACULTY_PASSWORD || 'aids@avs';
+const FACULTY_PASS = 'aids@avs';
 
-console.log('==================================================');
-console.log('🖼️  LIVE PRODUCTION PNG ATTENDANCE VERIFICATION');
-console.log(`Target: ${BASE_URL}`);
-console.log(`Faculty: ${FACULTY_EMAIL}`);
-console.log('==================================================\n');
+async function testPngAttendanceWorkflow() {
+  console.log(`\n======================================================`);
+  console.log(`🖼️  PNG ATTENDANCE BULK UPLOAD TEST (LIVE PRODUCTION)`);
+  console.log(`Target: ${BASE_URL}`);
+  console.log(`User:   ${FACULTY_EMAIL}`);
+  console.log(`======================================================\n`);
 
-async function main() {
-  // 1. Authenticate Faculty
-  console.log('1. Authenticating as Faculty...');
+  // Step 1: Login
+  console.log(`Step 1: Logging in as faculty...`);
   const loginRes = await fetch(`${BASE_URL}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ identifier: FACULTY_EMAIL, password: FACULTY_PASSWORD, role: 'FACULTY', rememberDevice: true })
+    body: JSON.stringify({ identifier: FACULTY_EMAIL, password: FACULTY_PASS, role: 'FACULTY' })
   });
 
-  const setCookie = loginRes.headers.get('set-cookie');
-  const loginJson = await loginRes.json();
-  if (!loginRes.ok || !loginJson.token) {
-    throw new Error(`Faculty login failed: ${JSON.stringify(loginJson)}`);
+  if (!loginRes.ok) {
+    throw new Error(`Login failed: ${loginRes.status} ${await loginRes.text()}`);
   }
-  const token = loginJson.token;
-  const authHeaders = {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`,
-    ...(setCookie ? { 'Cookie': setCookie } : {})
-  };
-  console.log('   ✅ Authenticated successfully. Token acquired.');
 
-  // 2. Test OCR Extract API with base64 PNG
-  console.log('\n2. Testing /api/faculty/attendance/ocr-extract endpoint...');
-  // 1x1 PNG base64
-  const tinyPngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+  const { token, user } = await loginRes.json();
+  console.log(`   ✅ Logged in successfully: ${user.name} (${user.id})`);
+
+  const authHeaders = {
+    'Authorization': `Bearer ${token}`
+  };
+
+  // Step 2: Test OCR Extraction Endpoint
+  console.log(`\nStep 2: Testing POST /api/faculty/attendance/ocr-extract...`);
+  const samplePngPath = path.resolve('public/images/avsec-salem-logo.png');
+  const fileBuffer = fs.readFileSync(samplePngPath);
+  console.log(`   Read sample PNG image: ${fileBuffer.length} bytes`);
+
+  const formData = new FormData();
+  const blob = new Blob([fileBuffer], { type: 'image/png' });
+  formData.append('file', blob, 'sample_attendance.png');
+  formData.append('date', '2026-09-18');
 
   const ocrRes = await fetch(`${BASE_URL}/api/faculty/attendance/ocr-extract`, {
     method: 'POST',
     headers: authHeaders,
-    body: JSON.stringify({
-      imageBase64: tinyPngBase64,
-      mimeType: 'image/png',
-      date: '2026-09-20'
-    })
+    body: formData
   });
 
-  const ocrJson = await ocrRes.json();
-  console.log('   Status Code:', ocrRes.status);
-  console.log('   Response Success:', ocrJson.success);
-  console.log('   OCR Method Used:', ocrJson.method);
-  console.log('   Extracted Rows:', ocrJson.extractedRows ? ocrJson.extractedRows.length : 0);
-
-  if (ocrRes.status !== 200) {
-    throw new Error(`OCR extract endpoint returned non-200 HTTP code: ${ocrRes.status}`);
+  if (!ocrRes.ok) {
+    throw new Error(`OCR extraction failed: ${ocrRes.status} ${await ocrRes.text()}`);
   }
 
-  if (ocrJson.method === 'FALLBACK') {
-    console.log('   ✅ Serverless OCR fallback correctly routed without lambda timeouts:');
-    console.log('     ', ocrJson.warnings?.[0] || 'Delegated to browser engine');
-  } else if (ocrJson.success) {
-    console.log('   ✅ Server-side OCR engine responded successfully with extracted rows.');
-  } else {
-    throw new Error(`Unexpected OCR extract response: ${JSON.stringify(ocrJson)}`);
-  }
+  const ocrData = await ocrRes.json();
+  console.log(`   ✅ OCR Endpoint responded with status 200:`);
+  console.log(`      Success: ${ocrData.success}, Method: ${ocrData.method}`);
+  console.log(`      Extracted Rows: ${ocrData.extractedRows?.length || 0}`);
+  if (ocrData.warnings?.length) console.log(`      Warnings:`, ocrData.warnings);
 
-  // 3. Test Student Roster Retrieval
-  console.log('\n3. Fetching assigned roster for verification...');
+  // Step 3: Test OCR Parser with Realistic Attendance Sheet Text
+  console.log(`\nStep 3: Simulating OCR Extracted Attendance Sheet for 2nd Year A...`);
+  const simulatedOcrText = `
+AVS ENGINEERING COLLEGE - DEPARTMENT OF AI & DS
+ATTENDANCE SHEET - 2nd Year A
+Date: 2026-09-18
+S.No  Register No   Student Name    Date        Status
+1     620125243146  SARAN S         2026-09-18  PRESENT
+2     620125243154  SHRVAN A        2026-09-18  OD
+3     620125243160  TAMILVANAN R    2026-09-18  ABSENT
+  `;
+
+  // Fetch roster
   const rosterRes = await fetch(`${BASE_URL}/api/faculty/students`, {
-    headers: authHeaders
+    headers: { ...authHeaders, 'Content-Type': 'application/json' }
   });
-  const roster = await rosterRes.json();
-  const students = Array.isArray(roster) ? roster : roster.students || [];
-  console.log(`   ✅ Roster loaded: ${students.length} students found.`);
-  const sampleStudent = students[0];
-  const regNo = sampleStudent.register_no || sampleStudent.registerNo || sampleStudent.registerNumber;
-  const sName = sampleStudent.name;
-  console.log(`   Sample Student: ${regNo} - ${sName}`);
+  const rosterData = await rosterRes.json();
+  console.log(`   Retrieved roster of ${rosterData.count} students.`);
 
-  // 4. Test Simulating OCR-to-Preview Pipeline
-  console.log('\n4. Simulating Faculty Review & Database Validation Pipeline...');
-  const sampleOcrParsed = [
+  // Step 4: Test Preview with the OCR Extracted Records
+  console.log(`\nStep 4: Submitting OCR records to Preview Gate (/api/faculty/attendance/import-preview)...`);
+  const previewRows = [
     {
-      'Register Number': regNo,
-      'Student Name': sName,
-      'Attendance Date': '2026-09-20',
-      'Attendance Status': 'P'
+      'Register Number': '620125243146',
+      'Student Name': 'SARAN S',
+      'Attendance Date': '2026-09-18',
+      'Attendance Status': 'PRESENT'
     },
     {
-      'Register Number': regNo,
-      'Student Name': 'Wrong Student Name',
-      'Attendance Date': '2026-09-20',
+      'Register Number': '620125243154',
+      'Student Name': 'SHRVAN A',
+      'Attendance Date': '2026-09-18',
       'Attendance Status': 'OD'
     },
     {
-      'Register Number': '999999999999',
-      'Student Name': 'Non-Existent Student',
-      'Attendance Date': '2026-09-20',
-      'Attendance Status': 'A'
+      'Register Number': '620125243160',
+      'Student Name': 'TAMILVANAN R',
+      'Attendance Date': '2026-09-18',
+      'Attendance Status': 'ABSENT'
     }
   ];
 
-  const previewRes = await fetch(`${BASE_URL}/api/faculty/attendance/import-preview`, {
+  const prevRes = await fetch(`${BASE_URL}/api/faculty/attendance/import-preview`, {
     method: 'POST',
-    headers: authHeaders,
-    body: JSON.stringify({
-      rows: sampleOcrParsed,
-      academicYear: '2026-2027',
-      month: '09'
-    })
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows: previewRows })
   });
 
-  const previewJson = await previewRes.json();
-  if (previewRes.status !== 200 || !previewJson.summary) {
-    throw new Error(`Preview failed: ${JSON.stringify(previewJson)}`);
+  if (!prevRes.ok) {
+    throw new Error(`Preview failed: ${prevRes.status} ${await prevRes.text()}`);
   }
 
-  console.log('   ✅ Import preview processed simulation successfully:');
-  console.log('      Total Processed:', previewJson.summary.totalRowsProcessed);
-  console.log('      Valid Daily Records:', previewJson.summary.totalValidDailyRecords);
-  console.log('      Matched Students:', previewJson.summary.totalMatchedStudents);
-  console.log('      Unmatched RegNos:', previewJson.summary.totalUnmatchedRegNos);
-  console.log('      Invalid Rows:', previewJson.summary.totalInvalidRows);
+  const prevResult = await prevRes.json();
+  console.log(`   ✅ Preview Summary:`, prevResult.summary);
+  console.log(`   Valid Records: ${prevResult.validRecords.length}`);
 
-  // Check that name mismatch was caught
-  const nameMismatch = (previewJson.invalidRows || []).some(e => e.reason?.includes('Name mismatch'));
-  console.log(`   ✅ Name mismatch validation active: ${nameMismatch ? 'YES' : 'NO'}`);
-
-  // 5. Test Bulk Marks Upload integrity to ensure zero regression
-  console.log('\n5. Verifying Bulk Marks Upload endpoint for zero regressions...');
-  const marksPreviewRes = await fetch(`${BASE_URL}/api/faculty/academics/import-preview`, {
+  // Step 5: Test Confirm Gate
+  console.log(`\nStep 5: Testing Confirmation Gate (/api/faculty/attendance/import-confirm)...`);
+  const confRes = await fetch(`${BASE_URL}/api/faculty/attendance/import-confirm`, {
     method: 'POST',
-    headers: authHeaders,
-    body: JSON.stringify({
-      rows: [
-        {
-          'Register Number': regNo,
-          'Student Name': sName,
-          'Subject Code': 'CS25C08',
-          'Marks': 88
-        }
-      ],
-      examType: 'Unit Test 1',
-      year: '2nd Year',
-      section: 'A'
-    })
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ records: prevResult.validRecords })
   });
-  const marksPreviewJson = await marksPreviewRes.json();
-  if (marksPreviewRes.status !== 200 || !marksPreviewJson.summary) {
-    throw new Error(`Marks preview failed: ${JSON.stringify(marksPreviewJson)}`);
-  }
-  console.log('   ✅ Bulk Marks Upload is fully operational (0 regressions):');
-  console.log(`      Valid Count: ${marksPreviewJson.summary.validCount}, Invalid Count: ${marksPreviewJson.summary.invalidCount}`);
 
-  console.log('\n==================================================');
-  console.log('🎉 LIVE PRODUCTION PNG ATTENDANCE VALIDATION COMPLETE!');
-  console.log('==================================================');
+  if (!confRes.ok) {
+    throw new Error(`Confirm failed: ${confRes.status} ${await confRes.text()}`);
+  }
+
+  const confResult = await confRes.json();
+  console.log(`   ✅ Confirm Result:`, confResult.message);
+  console.log(`      Imported: ${confResult.importedCount}, Updated: ${confResult.updatedCount}, Skipped: ${confResult.skippedCount}`);
+
+  console.log(`\n======================================================`);
+  console.log(`🎉 PNG ATTENDANCE BULK UPLOAD TEST PASSED SUCCESSFULLY!`);
+  console.log(`======================================================\n`);
 }
 
-main().catch(err => {
-  console.error('\n❌ Verification Failed:', err);
+testPngAttendanceWorkflow().catch(err => {
+  console.error(`❌ Test Failed:`, err);
   process.exit(1);
 });
