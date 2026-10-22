@@ -231,7 +231,8 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   // Never automatically retry password submissions per security requirements
   const isDisciplineMutation = /\/discipline\/records(?:\/|$)/.test(endpoint) && !isGetOrIdempotent;
   const isAuthenticationMutation = /\/auth\/(?:login|logout|change-password)(?:\?|$)/.test(url);
-  const maxAttempts = isAuthenticationMutation || isDisciplineMutation ? 1 : 3;
+  const isImportConfirmMutation = /\/import-confirm(?:\?|$)/.test(endpoint);
+  const maxAttempts = isAuthenticationMutation || isDisciplineMutation || isImportConfirmMutation ? 1 : 3;
   let lastError: any = null;
 
   // Resolve target role: explicit option header > endpoint URL path > current active portal role
@@ -1202,23 +1203,34 @@ export const API = {
       invalidRows: Array<{ rowNumber: number; rawData: any; reason: string }>;
     }>('/faculty/academics/import-preview', {
       method: 'POST',
+      timeoutMs: 30000,
       body: JSON.stringify({ rows, examType, year, section, semester })
     });
   },
 
-  confirmAcademicMarksImport: async (marks: any[], examType?: string, year?: string, section?: string) => {
-    return request<{
-      message: string;
-      importedCount: number;
-      updatedCount: number;
-      skippedCount: number;
-      failedCount: number;
-      failedRows: any[];
-      updatedStudentsCount: number;
-    }>('/faculty/academics/import-confirm', {
-      method: 'POST',
-      body: JSON.stringify({ marks, examType, year, section })
-    });
+  confirmAcademicMarksImport: async (marks: any[], examType?: string, year?: string, section?: string, existingImportId?: string) => {
+    const importId = existingImportId || `marks-imp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    try {
+      return await request<{
+        message: string;
+        importedCount: number;
+        updatedCount: number;
+        skippedCount: number;
+        failedCount: number;
+        failedRows: any[];
+        updatedStudentsCount: number;
+      }>('/faculty/academics/import-confirm', {
+        method: 'POST',
+        timeoutMs: 45000,
+        body: JSON.stringify({ marks, examType, year, section, importId })
+      });
+    } catch (err: any) {
+      const status = await API.checkImportStatus(importId);
+      if (status.completed && status.result) {
+        return status.result;
+      }
+      throw err;
+    }
   },
 
   getAcademicRecords: async (filters: { year?: string; section?: string; examType?: string; studentId?: string; subjectCode?: string } = {}) => {
@@ -1329,6 +1341,16 @@ export const API = {
   },
 
   // Attendance API Methods
+  checkImportStatus: async (importId: string) => {
+    try {
+      return await request<{ completed: boolean; result?: any }>(`/faculty/import-status?importId=${encodeURIComponent(importId)}`, {
+        timeoutMs: 10000
+      });
+    } catch {
+      return { completed: false };
+    }
+  },
+
   previewAttendanceImport: async (rows: any[], role: 'FACULTY' | 'ADMIN' = 'FACULTY') => {
     const endpoint = role === 'ADMIN' ? '/admin/attendance/import-preview' : '/faculty/attendance/import-preview';
     return request<{
@@ -1359,24 +1381,39 @@ export const API = {
       invalidRows: Array<{ row: number; registerNo?: string; studentName?: string; date?: string; status?: string; reason: string }>;
     }>(endpoint, {
       method: 'POST',
+      timeoutMs: 30000,
       body: JSON.stringify({ rows })
     });
   },
 
-  confirmAttendanceImport: async (records: Array<{ studentId: string; date: string; status: string }>, role: 'FACULTY' | 'ADMIN' = 'FACULTY') => {
+  confirmAttendanceImport: async (
+    records: Array<{ studentId: string; date: string; status: string }>,
+    role: 'FACULTY' | 'ADMIN' = 'FACULTY',
+    existingImportId?: string
+  ) => {
+    const importId = existingImportId || `attd-imp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     const endpoint = role === 'ADMIN' ? '/admin/attendance/import-confirm' : '/faculty/attendance/import-confirm';
-    return request<{
-      message: string;
-      importedCount: number;
-      updatedCount?: number;
-      skippedCount?: number;
-      failedCount?: number;
-      failedRows?: any[];
-      updatedStudentsCount: number;
-    }>(endpoint, {
-      method: 'POST',
-      body: JSON.stringify({ records })
-    });
+    try {
+      return await request<{
+        message: string;
+        importedCount: number;
+        updatedCount?: number;
+        skippedCount?: number;
+        failedCount?: number;
+        failedRows?: any[];
+        updatedStudentsCount: number;
+      }>(endpoint, {
+        method: 'POST',
+        timeoutMs: 45000,
+        body: JSON.stringify({ records, importId })
+      });
+    } catch (err: any) {
+      const status = await API.checkImportStatus(importId);
+      if (status.completed && status.result) {
+        return status.result;
+      }
+      throw err;
+    }
   },
 
   extractAttendanceFromImage: async (formDataOrPayload: FormData | { imageBase64: string; mimeType: string; date?: string }) => {

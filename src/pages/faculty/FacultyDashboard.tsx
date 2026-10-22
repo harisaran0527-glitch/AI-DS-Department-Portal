@@ -271,6 +271,7 @@ export const FacultyDashboard: React.FC = () => {
   const [isBulkConfirming, setIsBulkConfirming] = useState(false);
   const [bulkPreviewResult, setBulkPreviewResult] = useState<any | null>(null);
   const [bulkImportError, setBulkImportError] = useState('');
+  const [bulkImportErrorStage, setBulkImportErrorStage] = useState<'OCR' | 'PREVIEW' | 'CONFIRM' | 'VALIDATION'>('VALIDATION');
   const [bulkImportSuccess, setBulkImportSuccess] = useState('');
 
   // OCR Attendance State (.png upload)
@@ -929,6 +930,7 @@ export const FacultyDashboard: React.FC = () => {
       const res = await API.previewAttendanceImport(parsedRows, 'FACULTY');
       setBulkPreviewResult(res);
     } catch (err: any) {
+      setBulkImportErrorStage('PREVIEW');
       setBulkImportError(err.message || 'Failed to preview attendance import.');
     } finally {
       setIsBulkPreviewing(false);
@@ -1105,6 +1107,7 @@ export const FacultyDashboard: React.FC = () => {
             setOcrWarnings([`${parsed.unparsed.length} line(s) in the image could not be matched to a student record.`]);
           }
         } catch (clientOcrErr: any) {
+          setBulkImportErrorStage('OCR');
           setBulkImportError(`OCR Processing Failed: ${clientOcrErr.message || 'Failed to extract text from attendance image.'}`);
           setEditableOcrRows([]);
         }
@@ -1181,9 +1184,14 @@ export const FacultyDashboard: React.FC = () => {
     setBulkImportError('');
     setBulkImportSuccess('');
 
+    const clientImportId = `attd-imp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
     try {
-      const res = await API.confirmAttendanceImport(bulkPreviewResult.validRecords, 'FACULTY');
-      setBulkImportSuccess(`Import completed successfully! ${res.importedCount} created, ${res.updatedCount || 0} updated, ${res.skippedCount || 0} unchanged across ${res.updatedStudentsCount} students!`);
+      const res = await API.confirmAttendanceImport(bulkPreviewResult.validRecords, 'FACULTY', clientImportId);
+      const msg = res.importedCount === 0 && (res.updatedCount || 0) === 0 && (res.skippedCount || 0) > 0
+        ? `All ${res.skippedCount} attendance records are already up to date in the database (0 new, 0 updated, ${res.skippedCount} unchanged across ${res.updatedStudentsCount} students).`
+        : `Import completed successfully! ${res.importedCount} created, ${res.updatedCount || 0} updated, ${res.skippedCount || 0} unchanged across ${res.updatedStudentsCount} students!`;
+      setBulkImportSuccess(msg);
       setBulkPreviewResult(null);
       setBulkInputText('');
       setBulkFile(null);
@@ -1191,7 +1199,23 @@ export const FacultyDashboard: React.FC = () => {
       fetchRoster();
       fetchMonthlySummary();
     } catch (err: any) {
-      setBulkImportError(err.message || 'Failed to confirm bulk attendance import.');
+      // Check if the import completed on server before showing error
+      const status = await API.checkImportStatus(clientImportId);
+      if (status.completed && status.result) {
+        const res = status.result;
+        const msg = res.importedCount === 0 && (res.updatedCount || 0) === 0 && (res.skippedCount || 0) > 0
+          ? `All ${res.skippedCount} attendance records are already up to date in the database (0 new, 0 updated, ${res.skippedCount} unchanged across ${res.updatedStudentsCount} students).`
+          : `Import completed successfully! ${res.importedCount} created, ${res.updatedCount || 0} updated, ${res.skippedCount || 0} unchanged across ${res.updatedStudentsCount} students!`;
+        setBulkImportSuccess(msg);
+        setBulkPreviewResult(null);
+        setBulkInputText('');
+        setBulkFile(null);
+        fetchRoster();
+        fetchMonthlySummary();
+      } else {
+        setBulkImportErrorStage('CONFIRM');
+        setBulkImportError(err.message || 'Failed to confirm bulk attendance import.');
+      }
     } finally {
       setIsBulkConfirming(false);
     }
@@ -4152,19 +4176,36 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                     <div className="flex items-start space-x-2">
                       <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
                       <div>
-                        <strong className="font-bold block text-sm font-sans">Import Validation Error</strong>
+                        <strong className="font-bold block text-sm font-sans">
+                          {bulkImportErrorStage === 'OCR' && 'OCR Extraction Error'}
+                          {bulkImportErrorStage === 'PREVIEW' && 'Import Preview Error'}
+                          {bulkImportErrorStage === 'CONFIRM' && 'Import Confirmation Error'}
+                          {bulkImportErrorStage === 'VALIDATION' && 'Import Validation Error'}
+                        </strong>
                         <p className="mt-0.5">{bulkImportError}</p>
                       </div>
                     </div>
-                    {ocrImageFile && (
-                      <button
-                        type="button"
-                        onClick={() => processAttendanceBulkFile(ocrImageFile)}
-                        className="bg-red-900 hover:bg-red-800 text-white font-bold font-sans text-xs px-3 py-1.5 rounded-lg shrink-0 cursor-pointer transition-all border border-red-700"
-                      >
-                        Retry OCR
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {bulkImportErrorStage === 'OCR' && ocrImageFile && (
+                        <button
+                          type="button"
+                          onClick={() => processAttendanceBulkFile(ocrImageFile)}
+                          className="bg-red-900 hover:bg-red-800 text-white font-bold font-sans text-xs px-3 py-1.5 rounded-lg shrink-0 cursor-pointer transition-all border border-red-700"
+                        >
+                          Retry OCR
+                        </button>
+                      )}
+                      {bulkImportErrorStage === 'CONFIRM' && bulkPreviewResult && (
+                        <button
+                          type="button"
+                          onClick={handleConfirmBulkImport}
+                          disabled={isBulkConfirming}
+                          className="bg-red-900 hover:bg-red-800 text-white font-bold font-sans text-xs px-3 py-1.5 rounded-lg shrink-0 cursor-pointer transition-all border border-red-700 disabled:opacity-50"
+                        >
+                          {isBulkConfirming ? 'Retrying...' : 'Retry Confirmation'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
 

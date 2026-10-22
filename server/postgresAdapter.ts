@@ -43,12 +43,12 @@ if (isPgConfigured) {
         ssl: resolved.ssl,
         max: 10,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 5000,
+        connectionTimeoutMillis: 15000,
         allowExitOnIdle: true,
         keepAlive: true,
         keepAliveInitialDelayMillis: 10000,
-        statement_timeout: 10000,
-        query_timeout: 10000
+        statement_timeout: 25000,
+        query_timeout: 25000
       });
 
       pgPool.on('error', (err) => {

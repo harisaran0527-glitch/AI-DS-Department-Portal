@@ -1501,6 +1501,7 @@ router.post('/attendance', async (req: AuthRequest, res: Response) => {
 });
 
 router.post('/attendance/import-preview', async (req: AuthRequest, res: Response) => {
+  const t0 = Date.now();
   try {
     const { rows } = req.body || {};
     if (!Array.isArray(rows) || rows.length === 0) {
@@ -1508,6 +1509,8 @@ router.post('/attendance/import-preview', async (req: AuthRequest, res: Response
     }
 
     const preview = await db.previewBulkAttendanceImport(rows, req.user!.id);
+    const durationMs = Date.now() - t0;
+    console.log(`[Import Timing] type=BULK_ATTENDANCE_PREVIEW rows=${rows.length} durationMs=${durationMs}`);
     return res.json(preview);
   } catch (err: any) {
     return res.status(400).json({ error: err.message || 'Failed to preview bulk attendance import.' });
@@ -1515,10 +1518,55 @@ router.post('/attendance/import-preview', async (req: AuthRequest, res: Response
 });
 
 router.post('/attendance/import-confirm', async (req: AuthRequest, res: Response) => {
+  const t0 = Date.now();
+  const { records, importId } = req.body || {};
+  let lockAcquired = false;
+
   try {
-    const { records } = req.body || {};
     if (!Array.isArray(records) || records.length === 0) {
       return res.status(400).json({ error: 'No valid attendance records to confirm.' });
+    }
+
+    if (importId) {
+      const lock = await db.beginIdempotentImport(importId, 'ATTENDANCE_IMPORT', req.user!.id);
+      if (!lock.acquired) {
+        if (lock.existing) {
+          // Scope authorization check
+          if (req.user!.role !== 'ADMIN' && req.user!.role !== 'HOD' && lock.existing.userId && lock.existing.userId !== req.user!.id) {
+            return res.status(403).json({ error: 'Forbidden: You do not have permission to access or retry this import.' });
+          }
+          if (lock.existing.status === 'COMPLETED') {
+            return res.json({
+              message: 'Monthly bulk attendance imported successfully.',
+              ...lock.existing.result,
+              cached: true
+            });
+          }
+          if (lock.existing.status === 'PROCESSING') {
+            for (let i = 0; i < 40; i++) {
+              await new Promise((r) => setTimeout(r, 250));
+              const updated = await db.getIdempotentImportRecord(importId);
+              if (updated?.status === 'COMPLETED') {
+                return res.json({
+                  message: 'Monthly bulk attendance imported successfully.',
+                  ...updated.result,
+                  cached: true
+                });
+              }
+              if (updated?.status === 'FAILED') {
+                return res.status(400).json({ error: updated.result?.error || 'Concurrent import attempt failed.' });
+              }
+            }
+            return res.status(202).json({
+              message: 'Import is currently being processed. Please check status.',
+              status: 'PROCESSING',
+              importId
+            });
+          }
+        }
+      } else {
+        lockAcquired = true;
+      }
     }
 
     // Verify workspace ownership or class section match for every student in records
@@ -1530,8 +1578,11 @@ router.post('/attendance/import-confirm', async (req: AuthRequest, res: Response
       const cleanAssignedYear = normalizeYear(assignedYear);
       const cleanAssignedSec = normalizeSection(assignedSection);
 
+      const uniqueStudentIds = Array.from(new Set(records.map((r: any) => r.studentId).filter(Boolean))) as string[];
+      const studentMap = await db.getStudentsByIds(uniqueStudentIds);
+
       for (const r of records) {
-        const stu = await db.getStudentById(r.studentId);
+        const stu = studentMap.get(r.studentId);
         if (stu) {
           const isOwner = stu.created_by_faculty_id === req.user!.id || stu.faculty_workspace_id === req.user!.id;
           const cleanStudentYear = normalizeYear(stu.year);
@@ -1539,6 +1590,7 @@ router.post('/attendance/import-confirm', async (req: AuthRequest, res: Response
           const isYearMatch = cleanAssignedYear === 'ALL' || (cleanAssignedYear && cleanStudentYear === cleanAssignedYear);
           const isSecMatch = cleanAssignedSec === 'ALL' || (cleanAssignedSec && cleanStudentSec === cleanAssignedSec);
           if (!isOwner && !(isYearMatch && isSecMatch)) {
+            if (importId && lockAcquired) await db.failIdempotentImport(importId, req.user!.id, 'Record contains student outside your assigned workspace.');
             return res.status(403).json({ error: 'Forbidden: Record contains student outside your assigned workspace.' });
           }
         }
@@ -1548,12 +1600,52 @@ router.post('/attendance/import-confirm', async (req: AuthRequest, res: Response
     const result = await db.confirmBulkAttendanceImport(records, req.user!.email);
     await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'BULK_IMPORT_ATTENDANCE', `RECORDS:${result.importedCount}:STUDENTS:${result.updatedStudentsCount}`);
 
-    return res.json({
+    const resultPayload = {
       message: 'Monthly bulk attendance imported successfully.',
       ...result
-    });
+    };
+
+    if (importId && lockAcquired) {
+      await db.completeIdempotentImport(importId, req.user!.id, resultPayload);
+    }
+
+    const durationMs = Date.now() - t0;
+    console.log(`[Import Timing] type=BULK_ATTENDANCE_CONFIRM records=${records.length} durationMs=${durationMs}`);
+
+    return res.json(resultPayload);
   } catch (err: any) {
+    if (importId && lockAcquired) {
+      await db.failIdempotentImport(importId, req.user!.id, err.message || 'Failed to import bulk attendance.');
+    }
     return res.status(400).json({ error: err.message || 'Failed to import bulk attendance.' });
+  }
+});
+
+router.get('/import-status', async (req: AuthRequest, res: Response) => {
+  try {
+    const importId = (req.query.importId as string)?.trim();
+    if (!importId) {
+      return res.status(400).json({ error: 'importId query parameter is required.' });
+    }
+    const record = await db.getIdempotentImportRecord(importId);
+    if (!record) {
+      return res.json({ completed: false });
+    }
+
+    // Enforce same user or ADMIN/HOD authorization scope
+    if (req.user!.role !== 'ADMIN' && req.user!.role !== 'HOD' && record.userId && record.userId !== req.user!.id) {
+      return res.status(403).json({ error: 'Forbidden: You do not have permission to view this import status.' });
+    }
+
+    if (record.status === 'COMPLETED') {
+      return res.json({ completed: true, result: record.result });
+    }
+    if (record.status === 'FAILED') {
+      return res.json({ completed: false, status: 'FAILED', error: record.result?.error || 'Import failed.' });
+    }
+    return res.json({ completed: false, status: 'PROCESSING' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to check import status.' });
   }
 });
 
@@ -2096,6 +2188,7 @@ function verifyStudentNameMatch(inputName: string, dbStudentName: string): boole
 
 // POST /api/faculty/academics/import-preview - Preview and validate bulk mark Excel upload
 router.post('/academics/import-preview', requireRole('FACULTY', 'ADMIN'), async (req: AuthRequest, res: Response) => {
+  const t0 = Date.now();
   try {
     const { rows, examType = 'Unit Test 1', year: selectedYear, section: selectedSection, semester: selectedSemester } = req.body;
     if (!Array.isArray(rows) || rows.length === 0) {
@@ -2120,6 +2213,18 @@ router.post('/academics/import-preview', requireRole('FACULTY', 'ADMIN'), async 
 
     const allSubjects = await db.getSubjects({});
     const subjectCodeMap = new Map(allSubjects.map((s) => [s.subjectCode.trim().toUpperCase(), s]));
+
+    // Pre-extract matched student IDs to batch fetch existing academic records
+    const preMatchedStudentIds = new Set<string>();
+    for (const r of rows) {
+      if (!r || typeof r !== 'object') continue;
+      const reg = getRowValue(r, 'Register Number', 'Register No', 'Register_No', 'Reg No', 'Reg_No', 'RegNo', 'RegisterNumber', 'Reg. No.', 'registerNo');
+      if (reg) {
+        const s = studentRegMap.get(String(reg).trim().toUpperCase());
+        if (s) preMatchedStudentIds.add(s.id);
+      }
+    }
+    const preloadedAcadMap = await db.batchFindStudentAcademicRecords(Array.from(preMatchedStudentIds));
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -2290,8 +2395,21 @@ router.post('/academics/import-preview', requireRole('FACULTY', 'ADMIN'), async 
         rowSemester = stuYearNorm.includes('1st') ? 1 : stuYearNorm.includes('2nd') ? 3 : stuYearNorm.includes('3rd') ? 5 : 7;
       }
 
-      // 9. Inspect existing marks in database to classify as NEW, UPDATE, or IDENTICAL
-      const existingRecord = await db.findStudentSubjectMark(student.id, masterSubject.subjectCode, rowSemester, examType);
+      // 9. Inspect existing marks from preloaded map to classify as NEW, UPDATE, or IDENTICAL
+      const studentAcadList = preloadedAcadMap.get(student.id) || [];
+      const semRecord = studentAcadList.find((r) =>
+        Number(r.semester_no) === rowSemester &&
+        (r.exam_type || 'Internal').trim().toLowerCase() === String(examType || 'Unit Test 1').trim().toLowerCase()
+      );
+      let existingRecord: { exists: boolean; marks?: number; grade?: string } | null = null;
+      if (semRecord && semRecord.subjects_json) {
+        const subjectsList: any[] = safeParseJson(semRecord.subjects_json, []);
+        const match = subjectsList.find((s) => String(s.subjectCode || s.code).trim().toUpperCase() === masterSubject.subjectCode.trim().toUpperCase());
+        if (match) {
+          existingRecord = { exists: true, marks: Number(match.marks), grade: match.grade };
+        }
+      }
+
       let rowStatus: 'NEW_MARK' | 'UPDATE_MARK' | 'IDENTICAL_MARK' = 'NEW_MARK';
       let previousMarks: number | undefined;
 
@@ -2327,6 +2445,9 @@ router.post('/academics/import-preview', requireRole('FACULTY', 'ADMIN'), async 
       });
     }
 
+    const durationMs = Date.now() - t0;
+    console.log(`[Import Timing] type=BULK_MARKS_PREVIEW rows=${rows.length} durationMs=${durationMs}`);
+
     return res.json({
       summary: {
         totalRowsProcessed: rows.length,
@@ -2347,13 +2468,56 @@ router.post('/academics/import-preview', requireRole('FACULTY', 'ADMIN'), async 
 
 // POST /api/faculty/academics/import-confirm - Confirm bulk mark upload
 router.post('/academics/import-confirm', requireRole('FACULTY', 'ADMIN'), async (req: AuthRequest, res: Response) => {
+  const t0 = Date.now();
+  const { marks, examType = 'Unit Test 1', year: selectedYear, section: selectedSection, importId } = req.body || {};
+  let lockAcquired = false;
+
   try {
-    const { marks, examType = 'Unit Test 1', year: selectedYear, section: selectedSection } = req.body;
     if (!Array.isArray(marks) || marks.length === 0) {
       return res.status(400).json({ error: 'No valid marks provided for confirmation.' });
     }
 
-    const { evaluateStudentRewardPoints } = await import('../services/studentRewardEngine.js');
+    if (importId) {
+      const lock = await db.beginIdempotentImport(importId, 'ACADEMIC_MARKS_IMPORT', req.user!.id);
+      if (!lock.acquired) {
+        if (lock.existing) {
+          if (req.user!.role !== 'ADMIN' && req.user!.role !== 'HOD' && lock.existing.userId && lock.existing.userId !== req.user!.id) {
+            return res.status(403).json({ error: 'Forbidden: You do not have permission to access or retry this import.' });
+          }
+          if (lock.existing.status === 'COMPLETED') {
+            return res.json({
+              ...lock.existing.result,
+              cached: true
+            });
+          }
+          if (lock.existing.status === 'PROCESSING') {
+            for (let i = 0; i < 40; i++) {
+              await new Promise((r) => setTimeout(r, 250));
+              const updated = await db.getIdempotentImportRecord(importId);
+              if (updated?.status === 'COMPLETED') {
+                return res.json({
+                  ...updated.result,
+                  cached: true
+                });
+              }
+              if (updated?.status === 'FAILED') {
+                return res.status(400).json({ error: updated.result?.error || 'Concurrent import attempt failed.' });
+              }
+            }
+            return res.status(202).json({
+              message: 'Import is currently being processed. Please check status.',
+              status: 'PROCESSING',
+              importId
+            });
+          }
+        }
+      } else {
+        lockAcquired = true;
+      }
+    }
+
+    const studentIds = Array.from(new Set(marks.map((m: any) => m.studentId).filter(Boolean))) as string[];
+    const preloadedAcadMap = await db.batchFindStudentAcademicRecords(studentIds);
 
     const affectedStudentIds = new Set<string>();
     let importedCount = 0; // newly created
@@ -2362,48 +2526,138 @@ router.post('/academics/import-confirm', requireRole('FACULTY', 'ADMIN'), async 
     let failedCount = 0;
     const failedRows: any[] = [];
 
+    // Group incoming marks by studentId + semesterNo + targetExam
+    type GroupKey = string;
+    const studentSemMap = new Map<GroupKey, {
+      studentId: string;
+      semesterNo: number;
+      examType: string;
+      items: any[];
+    }>();
+
     for (const item of marks) {
-      const { studentId, subjectCode, subjectTitle, marks: scoreVal, semester, examType: rowExamType } = item;
-      const targetExam = rowExamType || examType || 'Unit Test 1';
+      const { studentId, subjectCode, semester, examType: rowExamType } = item;
+      if (!studentId || !subjectCode) continue;
+      const targetExam = String(rowExamType || examType || 'Unit Test 1').trim();
       const targetSem = Number(semester) || 3;
-      try {
-        const result = await db.upsertStudentSubjectMark(
-          studentId,
-          subjectCode,
-          subjectTitle || subjectCode,
-          Number(scoreVal),
-          targetSem,
-          targetExam
-        );
-        if (result.action === 'CREATED') {
-          importedCount++;
-        } else if (result.action === 'UPDATED') {
-          updatedCount++;
+      const key = `${studentId}_${targetSem}_${targetExam.toLowerCase()}`;
+      if (!studentSemMap.has(key)) {
+        studentSemMap.set(key, { studentId, semesterNo: targetSem, examType: targetExam, items: [] });
+      }
+      studentSemMap.get(key)!.items.push(item);
+    }
+
+    const acadToUpdate: Array<{ id: string; subjects_json: string; sgpa: number; cgpa: number }> = [];
+    const acadToInsert: Array<{ id: string; studentId: string; semesterNo: number; sgpa: number; cgpa: number; totalCredits: number; subjects_json: string; examType: string; createdAt: string }> = [];
+    const studentCgpaUpdates = new Map<string, number>();
+
+    const now = new Date().toISOString();
+
+    for (const group of studentSemMap.values()) {
+      const { studentId, semesterNo, examType: cleanExamType, items } = group;
+      const studentAcadList = preloadedAcadMap.get(studentId) || [];
+      const semRecord = studentAcadList.find((r) =>
+        Number(r.semester_no) === semesterNo &&
+        (r.exam_type || 'Internal').trim().toLowerCase() === cleanExamType.toLowerCase()
+      );
+
+      let subjectsList: any[] = [];
+      if (semRecord && semRecord.subjects_json) {
+        subjectsList = safeParseJson(semRecord.subjects_json, []);
+      }
+
+      let groupHasChanges = false;
+
+      for (const item of items) {
+        const { subjectCode, subjectTitle, marks: scoreVal } = item;
+        const cleanCode = String(subjectCode).trim().toUpperCase();
+        const cleanTitle = String(subjectTitle || subjectCode).trim();
+        const numMarks = Number(scoreVal);
+
+        const idx = subjectsList.findIndex((s) => String(s.subjectCode || s.code).trim().toUpperCase() === cleanCode);
+        const markEntry = {
+          subjectCode: cleanCode,
+          code: cleanCode,
+          subjectTitle: cleanTitle,
+          title: cleanTitle,
+          marks: numMarks,
+          maxMarks: 100,
+          grade: numMarks >= 90 ? 'O' : (numMarks >= 80 ? 'A+' : (numMarks >= 70 ? 'A' : (numMarks >= 60 ? 'B+' : (numMarks >= 50 ? 'B' : 'U')))),
+          credits: 3
+        };
+
+        if (idx >= 0) {
+          const prevMarks = Number(subjectsList[idx].marks);
+          if (prevMarks === numMarks) {
+            skippedCount++;
+          } else {
+            updatedCount++;
+            subjectsList[idx] = markEntry;
+            groupHasChanges = true;
+          }
         } else {
-          skippedCount++;
+          importedCount++;
+          subjectsList.push(markEntry);
+          groupHasChanges = true;
         }
         affectedStudentIds.add(studentId);
-      } catch (rowErr: any) {
-        failedCount++;
-        failedRows.push({
-          studentId,
-          subjectCode,
-          marks: scoreVal,
-          reason: rowErr.message || 'Database write error'
-        });
+      }
+
+      if (groupHasChanges) {
+        const totalMarksSum = subjectsList.reduce((acc, s) => acc + (Number(s.marks) || 0), 0);
+        const avgScore = subjectsList.length > 0 ? totalMarksSum / subjectsList.length : 0;
+        const computedSgpa = Math.min(10.0, Math.round((avgScore / 10) * 100) / 100);
+
+        if (semRecord) {
+          acadToUpdate.push({
+            id: semRecord.id,
+            subjects_json: JSON.stringify(subjectsList),
+            sgpa: computedSgpa,
+            cgpa: computedSgpa
+          });
+        } else {
+          const recordId = `acad-${studentId}-sem${semesterNo}-${cleanExamType.replace(/\s+/g, '')}-${Date.now()}`;
+          acadToInsert.push({
+            id: recordId,
+            studentId,
+            semesterNo,
+            sgpa: computedSgpa,
+            cgpa: computedSgpa,
+            totalCredits: subjectsList.length * 3,
+            subjects_json: JSON.stringify(subjectsList),
+            examType: cleanExamType,
+            createdAt: now
+          });
+        }
+        studentCgpaUpdates.set(studentId, computedSgpa);
       }
     }
 
-    // Trigger score recalculation & reward evaluation for affected students with controlled concurrency
-    const affectedArr = Array.from(affectedStudentIds);
-    for (let i = 0; i < affectedArr.length; i += 5) {
-      const batch = affectedArr.slice(i, i + 5);
-      await Promise.all(batch.map(async (sId) => {
-        try {
-          await recalculateAffectedStudentScore(sId);
-          await evaluateStudentRewardPoints(sId);
-        } catch (_e) {}
-      }));
+    // Persist all changes atomically inside a transaction
+    await executeTransaction(async () => {
+      for (const rec of acadToUpdate) {
+        await executeRun(
+          'UPDATE academic_records SET subjects_json = ?, sgpa = ?, cgpa = ? WHERE id = ?',
+          [rec.subjects_json, rec.sgpa, rec.cgpa, rec.id]
+        );
+      }
+      for (const ins of acadToInsert) {
+        await executeRun(
+          'INSERT INTO academic_records (id, student_id, semester_no, sgpa, cgpa, total_credits, subjects_json, exam_type, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [ins.id, ins.studentId, ins.semesterNo, ins.sgpa, ins.cgpa, ins.totalCredits, ins.subjects_json, ins.examType, ins.createdAt]
+        );
+      }
+      for (const [sId, cgpa] of studentCgpaUpdates.entries()) {
+        await executeRun('UPDATE students SET cgpa = ? WHERE id = ?', [cgpa, sId]);
+      }
+    });
+
+    // Score recalculation & reward evaluation for affected students
+    // Reliably awaited inside the request within serverless execution limits
+    if (affectedStudentIds.size > 0) {
+      const tRecalc = Date.now();
+      await db.batchRecalculateStudentScoresAndRewards(Array.from(affectedStudentIds));
+      console.log(`[Score Recalc Timing] students=${affectedStudentIds.size} durationMs=${Date.now() - tRecalc}`);
     }
 
     const totalProcessed = importedCount + updatedCount + skippedCount;
@@ -2434,7 +2688,7 @@ router.post('/academics/import-confirm', requireRole('FACULTY', 'ADMIN'), async 
       `STUDENTS:${affectedStudentIds.size}, CREATED:${importedCount}, UPDATED:${updatedCount}, SKIPPED:${skippedCount}, FAILED:${failedCount}, EXAM:${examType}`
     );
 
-    return res.json({
+    const resultPayload = {
       message: `Academic marks imported successfully! ${importedCount} created, ${updatedCount} updated, ${skippedCount} unchanged across ${affectedStudentIds.size} students.`,
       importedCount,
       updatedCount,
@@ -2442,8 +2696,20 @@ router.post('/academics/import-confirm', requireRole('FACULTY', 'ADMIN'), async 
       failedCount,
       failedRows,
       updatedStudentsCount: affectedStudentIds.size
-    });
+    };
+
+    if (importId && lockAcquired) {
+      await db.completeIdempotentImport(importId, req.user!.id, resultPayload);
+    }
+
+    const durationMs = Date.now() - t0;
+    console.log(`[Import Timing] type=BULK_MARKS_CONFIRM records=${marks.length} durationMs=${durationMs}`);
+
+    return res.json(resultPayload);
   } catch (error: any) {
+    if (importId && lockAcquired) {
+      await db.failIdempotentImport(importId, req.user!.id, error.message || 'Failed to confirm academic marks import.');
+    }
     console.error('Error in academic marks import confirm:', error);
     return res.status(500).json({ error: error.message || 'Failed to confirm academic marks import.' });
   }

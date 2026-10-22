@@ -639,19 +639,96 @@ router.post('/attendance/import-preview', async (req: AuthRequest, res: Response
 });
 
 router.post('/attendance/import-confirm', async (req: AuthRequest, res: Response) => {
+  const t0 = Date.now();
+  const { records, importId } = req.body || {};
+  let lockAcquired = false;
+
   try {
-    const { records } = req.body || {};
     if (!Array.isArray(records) || records.length === 0) {
       return res.status(400).json({ error: 'No valid attendance records to confirm.' });
     }
+
+    if (importId) {
+      const lock = await db.beginIdempotentImport(importId, 'ADMIN_ATTENDANCE_IMPORT', req.user!.id);
+      if (!lock.acquired) {
+        if (lock.existing) {
+          if (lock.existing.status === 'COMPLETED') {
+            return res.json({
+              message: 'Monthly bulk attendance imported successfully by Admin.',
+              ...lock.existing.result,
+              cached: true
+            });
+          }
+          if (lock.existing.status === 'PROCESSING') {
+            for (let i = 0; i < 40; i++) {
+              await new Promise((r) => setTimeout(r, 250));
+              const updated = await db.getIdempotentImportRecord(importId);
+              if (updated?.status === 'COMPLETED') {
+                return res.json({
+                  message: 'Monthly bulk attendance imported successfully by Admin.',
+                  ...updated.result,
+                  cached: true
+                });
+              }
+              if (updated?.status === 'FAILED') {
+                return res.status(400).json({ error: updated.result?.error || 'Concurrent import attempt failed.' });
+              }
+            }
+            return res.status(202).json({
+              message: 'Import is currently being processed. Please check status.',
+              status: 'PROCESSING',
+              importId
+            });
+          }
+        }
+      } else {
+        lockAcquired = true;
+      }
+    }
+
     const result = await db.confirmBulkAttendanceImport(records, req.user!.email);
     await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'ADMIN_BULK_IMPORT_ATTENDANCE', `RECORDS:${result.importedCount}:STUDENTS:${result.updatedStudentsCount}`);
-    return res.json({
+
+    const resultPayload = {
       message: 'Monthly bulk attendance imported successfully by Admin.',
       ...result
-    });
+    };
+
+    if (importId && lockAcquired) {
+      await db.completeIdempotentImport(importId, req.user!.id, resultPayload);
+    }
+
+    const durationMs = Date.now() - t0;
+    console.log(`[Import Timing] type=ADMIN_BULK_ATTENDANCE_CONFIRM records=${records.length} durationMs=${durationMs}`);
+
+    return res.json(resultPayload);
   } catch (err: any) {
+    if (importId && lockAcquired) {
+      await db.failIdempotentImport(importId, req.user!.id, err.message || 'Failed to import bulk attendance.');
+    }
     return res.status(400).json({ error: err.message || 'Failed to import bulk attendance.' });
+  }
+});
+
+router.get('/import-status', async (req: AuthRequest, res: Response) => {
+  try {
+    const importId = (req.query.importId as string)?.trim();
+    if (!importId) {
+      return res.status(400).json({ error: 'importId query parameter is required.' });
+    }
+    const record = await db.getIdempotentImportRecord(importId);
+    if (!record) {
+      return res.json({ completed: false });
+    }
+    if (record.status === 'COMPLETED') {
+      return res.json({ completed: true, result: record.result });
+    }
+    if (record.status === 'FAILED') {
+      return res.json({ completed: false, status: 'FAILED', error: record.result?.error || 'Import failed.' });
+    }
+    return res.json({ completed: false, status: 'PROCESSING' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to check import status.' });
   }
 });
 

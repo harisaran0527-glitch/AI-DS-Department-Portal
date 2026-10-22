@@ -322,8 +322,11 @@ export const AcademicsModule: React.FC<AcademicsModuleProps> = ({
     if (!marksPreviewResult || marksPreviewResult.validRows.length === 0) return;
     setMarksConfirming(true);
     setMarksErrMsg('');
+
+    const clientImportId = `marks-imp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
     try {
-      const res = await API.confirmAcademicMarksImport(marksPreviewResult.validRows, selectedExamType, currentYear, currentSection);
+      const res = await API.confirmAcademicMarksImport(marksPreviewResult.validRows, selectedExamType, currentYear, currentSection, clientImportId);
       const parts = [];
       if (res.importedCount > 0) parts.push(`${res.importedCount} created`);
       if (res.updatedCount > 0) parts.push(`${res.updatedCount} updated`);
@@ -340,7 +343,27 @@ export const AcademicsModule: React.FC<AcademicsModuleProps> = ({
         loadSavedRecords();
       }, 1500);
     } catch (err: any) {
-      setMarksErrMsg(err.message || 'Failed to confirm Academic Marks import.');
+      // Check import status before displaying error
+      const status = await API.checkImportStatus(clientImportId);
+      if (status.completed && status.result) {
+        const res = status.result;
+        const parts = [];
+        if (res.importedCount > 0) parts.push(`${res.importedCount} created`);
+        if (res.updatedCount > 0) parts.push(`${res.updatedCount} updated`);
+        if (res.skippedCount > 0) parts.push(`${res.skippedCount} unchanged`);
+        const details = parts.length > 0 ? parts.join(', ') : `${res.importedCount} saved`;
+        setMarksSuccessMsg(`Academic marks saved successfully! ${details} across ${res.updatedStudentsCount} students into PostgreSQL.`);
+        setMarksPreviewResult(null);
+        setMarksFile(null);
+        if (marksFileInputRef.current) marksFileInputRef.current.value = '';
+        if (onStudentsChange) onStudentsChange();
+        setTimeout(() => {
+          setActiveSubTab('saved-records');
+          loadSavedRecords();
+        }, 1500);
+      } else {
+        setMarksErrMsg(err.message || 'Failed to confirm Academic Marks import.');
+      }
     } finally {
       setMarksConfirming(false);
     }

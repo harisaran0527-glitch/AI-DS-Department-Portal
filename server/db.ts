@@ -563,6 +563,16 @@ export async function initDatabaseSchema(): Promise<void> {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS import_idempotency_records (
+      import_id TEXT PRIMARY KEY,
+      import_type TEXT NOT NULL,
+      user_id TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'COMPLETED',
+      result_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT ''
+    );
+
     -- INDEXES FOR FAST QUERY EXECUTION
     CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
     CREATE INDEX IF NOT EXISTS idx_users_identifier ON users(identifier);
@@ -590,6 +600,21 @@ export async function initDatabaseSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_subjects_code_ctx ON subjects(subject_code, year, semester, section);
     CREATE INDEX IF NOT EXISTS idx_subjects_year_sem ON subjects(year, semester, section);
     CREATE INDEX IF NOT EXISTS idx_student_ai_rewards_score ON student_ai_rewards(total_reward_score DESC);
+    CREATE INDEX IF NOT EXISTS idx_daily_att_stu_date ON daily_attendance_records(student_id, date);
+    CREATE INDEX IF NOT EXISTS idx_daily_att_date ON daily_attendance_records(date);
+    CREATE INDEX IF NOT EXISTS idx_daily_att_stu ON daily_attendance_records(student_id);
+    CREATE INDEX IF NOT EXISTS idx_academic_rec_stu ON academic_records(student_id);
+    CREATE INDEX IF NOT EXISTS idx_academic_rec_stu_sem ON academic_records(student_id, semester_no);
+    CREATE INDEX IF NOT EXISTS idx_attendance_rec_stu ON attendance_records(student_id);
+    CREATE INDEX IF NOT EXISTS idx_skilledge_rec_stu ON skilledge_records(student_id);
+    CREATE INDEX IF NOT EXISTS idx_nptel_rec_stu ON nptel_records(student_id);
+    CREATE INDEX IF NOT EXISTS idx_discipline_rec_stu ON discipline_records(student_id);
+    CREATE INDEX IF NOT EXISTS idx_certificate_rec_stu ON certificate_records(student_id);
+    CREATE INDEX IF NOT EXISTS idx_participation_rec_stu ON participation_records(student_id);
+    CREATE INDEX IF NOT EXISTS idx_project_rec_stu ON project_records(student_id);
+    CREATE INDEX IF NOT EXISTS idx_achievement_rec_stu ON achievement_records(student_id);
+    CREATE INDEX IF NOT EXISTS idx_import_idempotency_user ON import_idempotency_records(user_id);
+    CREATE INDEX IF NOT EXISTS idx_import_idempotency_created ON import_idempotency_records(created_at DESC);
   `;
 
   if (isPostgresActive()) {
@@ -664,6 +689,37 @@ export async function initDatabaseSchema(): Promise<void> {
         try { await pgPool.query(colSql); } catch {}
       }
       await pgPool.query(`ALTER TABLE discipline_records ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'OPEN';`);
+      try {
+        await pgPool.query(`
+          CREATE TABLE IF NOT EXISTS import_idempotency_records (
+            import_id TEXT PRIMARY KEY,
+            import_type TEXT NOT NULL,
+            user_id TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'COMPLETED',
+            result_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT ''
+          );
+        `);
+        await pgPool.query(`ALTER TABLE import_idempotency_records ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT '';`);
+        await pgPool.query(`ALTER TABLE import_idempotency_records ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'COMPLETED';`);
+        await pgPool.query(`ALTER TABLE import_idempotency_records ADD COLUMN IF NOT EXISTS updated_at TEXT NOT NULL DEFAULT '';`);
+        await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_import_idempotency_user ON import_idempotency_records(user_id);`);
+        await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_import_idempotency_created ON import_idempotency_records(created_at DESC);`);
+        await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_daily_att_stu_date ON daily_attendance_records(student_id, date);`);
+        await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_daily_att_date ON daily_attendance_records(date);`);
+        await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_daily_att_stu ON daily_attendance_records(student_id);`);
+        await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_academic_rec_stu ON academic_records(student_id);`);
+        await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_academic_rec_stu_sem ON academic_records(student_id, semester_no);`);
+        await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_attendance_rec_stu ON attendance_records(student_id);`);
+        await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_skilledge_rec_stu ON skilledge_records(student_id);`);
+        await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_nptel_rec_stu ON nptel_records(student_id);`);
+        await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_discipline_rec_stu ON discipline_records(student_id);`);
+        await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_certificate_rec_stu ON certificate_records(student_id);`);
+        await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_participation_rec_stu ON participation_records(student_id);`);
+        await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_project_rec_stu ON project_records(student_id);`);
+        await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_achievement_rec_stu ON achievement_records(student_id);`);
+      } catch (_pgIdxErr) {}
     }
   } else if (sqlite) {
     sqlite.exec(ddl);
@@ -724,7 +780,10 @@ export async function initDatabaseSchema(): Promise<void> {
       `ALTER TABLE certificate_records ADD COLUMN file_data BLOB;`,
       `ALTER TABLE certificate_records ADD COLUMN mime_type TEXT;`,
       `ALTER TABLE participation_records ADD COLUMN file_data BLOB;`,
-      `ALTER TABLE participation_records ADD COLUMN mime_type TEXT;`
+      `ALTER TABLE participation_records ADD COLUMN mime_type TEXT;`,
+      `ALTER TABLE import_idempotency_records ADD COLUMN user_id TEXT DEFAULT '';`,
+      `ALTER TABLE import_idempotency_records ADD COLUMN status TEXT DEFAULT 'COMPLETED';`,
+      `ALTER TABLE import_idempotency_records ADD COLUMN updated_at TEXT DEFAULT '';`
     ];
     for (const colSql of alterCols) {
       try { sqlite.exec(colSql); } catch {}
@@ -3346,6 +3405,466 @@ export class SQLiteDB {
     return await queryAll(query, params);
   }
 
+  // IDEMPOTENCY & BATCH LOOKUP HELPERS
+  public async beginIdempotentImport(
+    importId: string,
+    importType: string,
+    userId: string
+  ): Promise<{ acquired: boolean; existing?: any | null }> {
+    if (!importId || typeof importId !== 'string' || !importId.trim()) {
+      return { acquired: true };
+    }
+    const cleanId = importId.trim();
+    const now = new Date().toISOString();
+
+    let inserted = false;
+    try {
+      if (isPostgresActive()) {
+        const res = await executeRun(
+          `INSERT INTO import_idempotency_records (import_id, import_type, user_id, status, result_json, created_at, updated_at)
+           VALUES (?, ?, ?, 'PROCESSING', '{}', ?, ?)
+           ON CONFLICT (import_id) DO NOTHING`,
+          [cleanId, importType, userId || '', now, now]
+        );
+        inserted = (res.changes || 0) > 0;
+      } else {
+        const res = await executeRun(
+          `INSERT OR IGNORE INTO import_idempotency_records (import_id, import_type, user_id, status, result_json, created_at, updated_at)
+           VALUES (?, ?, ?, 'PROCESSING', '{}', ?, ?)`,
+          [cleanId, importType, userId || '', now, now]
+        );
+        inserted = (res.changes || 0) > 0;
+      }
+    } catch (_err) {
+      inserted = false;
+    }
+
+    if (inserted) {
+      return { acquired: true };
+    }
+
+    const existing = await this.getIdempotentImportRecord(cleanId);
+    return { acquired: false, existing };
+  }
+
+  public async getIdempotentImportRecord(importId: string): Promise<any | null> {
+    if (!importId || typeof importId !== 'string' || !importId.trim()) return null;
+    try {
+      const row = await queryOne(
+        'SELECT import_id, import_type, user_id, status, result_json, created_at, updated_at FROM import_idempotency_records WHERE import_id = ?',
+        [importId.trim()]
+      );
+      if (!row) return null;
+      return {
+        importId: row.import_id,
+        importType: row.import_type,
+        userId: row.user_id,
+        status: row.status,
+        result: safeParseJson(row.result_json, null),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      };
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  public async getIdempotentImport(importId: string): Promise<any | null> {
+    const record = await this.getIdempotentImportRecord(importId);
+    if (!record || record.status !== 'COMPLETED') return null;
+    return record.result;
+  }
+
+  public async saveIdempotentImport(importId: string, importType: string, result: any, userId?: string): Promise<void> {
+    if (!importId || typeof importId !== 'string' || !importId.trim()) return;
+    const now = new Date().toISOString();
+    try {
+      if (isPostgresActive()) {
+        await executeRun(
+          `INSERT INTO import_idempotency_records (import_id, import_type, user_id, status, result_json, created_at, updated_at)
+           VALUES (?, ?, ?, 'COMPLETED', ?, ?, ?)
+           ON CONFLICT (import_id) DO UPDATE SET
+             status = 'COMPLETED',
+             result_json = EXCLUDED.result_json,
+             updated_at = EXCLUDED.updated_at`,
+          [importId.trim(), importType, userId || '', JSON.stringify(result), now, now]
+        );
+      } else {
+        await executeRun(
+          `INSERT OR REPLACE INTO import_idempotency_records (import_id, import_type, user_id, status, result_json, created_at, updated_at)
+           VALUES (?, ?, ?, 'COMPLETED', ?, ?, ?)`,
+          [importId.trim(), importType, userId || '', JSON.stringify(result), now, now]
+        );
+      }
+    } catch (_err) {}
+  }
+
+  public async completeIdempotentImport(importId: string, userId: string, result: any): Promise<void> {
+    if (!importId || typeof importId !== 'string' || !importId.trim()) return;
+    const now = new Date().toISOString();
+    try {
+      await executeRun(
+        `UPDATE import_idempotency_records
+         SET status = 'COMPLETED', result_json = ?, updated_at = ?
+         WHERE import_id = ?`,
+        [JSON.stringify(result), now, importId.trim()]
+      );
+    } catch (err) {
+      console.error('[Idempotency] Failed to mark complete:', err);
+    }
+  }
+
+  public async failIdempotentImport(importId: string, userId: string, error: any): Promise<void> {
+    if (!importId || typeof importId !== 'string' || !importId.trim()) return;
+    const now = new Date().toISOString();
+    try {
+      const errPayload = { error: typeof error === 'string' ? error : (error?.message || 'Import operation failed.') };
+      await executeRun(
+        `UPDATE import_idempotency_records
+         SET status = 'FAILED', result_json = ?, updated_at = ?
+         WHERE import_id = ?`,
+        [JSON.stringify(errPayload), now, importId.trim()]
+      );
+    } catch (err) {
+      console.error('[Idempotency] Failed to mark failed:', err);
+    }
+  }
+
+  public async batchGetStudent360(studentIds: string[]): Promise<Map<string, any>> {
+    const result = new Map<string, any>();
+    if (!Array.isArray(studentIds) || studentIds.length === 0) return result;
+    const uniqueIds = Array.from(new Set(studentIds.filter(Boolean)));
+    if (uniqueIds.length === 0) return result;
+
+    if (isPostgresActive()) {
+      for (let i = 0; i < uniqueIds.length; i += 100) {
+        const chunk = uniqueIds.slice(i, i + 100);
+        const placeholders = chunk.map(() => '?').join(',');
+        const rows = await queryAll<any>(`
+          SELECT
+            s.id as student_id,
+            to_json(s) as student,
+            coalesce((SELECT json_agg(a) FROM academic_records a WHERE a.student_id = s.id), '[]'::json) as academics_raw,
+            coalesce((SELECT json_agg(ar) FROM arrear_history ar WHERE ar.student_id = s.id), '[]'::json) as arrears,
+            (SELECT to_json(sk) FROM skilledge_records sk WHERE sk.student_id = s.id) as skill_raw,
+            coalesce((SELECT json_agg(h) FROM (SELECT * FROM skilledge_sync_history WHERE student_id = s.id ORDER BY synced_at DESC LIMIT 15) h), '[]'::json) as history_rows,
+            coalesce((SELECT json_agg(n) FROM nptel_records n WHERE n.student_id = s.id), '[]'::json) as nptel_raw,
+            (SELECT to_json(att) FROM attendance_records att WHERE att.student_id = s.id) as att_raw,
+            coalesce((SELECT json_agg(d) FROM discipline_records d WHERE d.student_id = s.id), '[]'::json) as discipline,
+            coalesce((SELECT json_agg(c) FROM certificate_records c WHERE c.student_id = s.id), '[]'::json) as certs_raw,
+            coalesce((SELECT json_agg(p) FROM participation_records p WHERE p.student_id = s.id), '[]'::json) as part_raw,
+            (SELECT to_json(lc) FROM leetcode_stats lc WHERE lc.student_id = s.id) as lc_raw,
+            (SELECT to_json(conn) FROM (SELECT provider_username FROM connected_accounts WHERE student_id = s.id AND LOWER(provider) = 'leetcode') conn) as conn_lc,
+            coalesce((SELECT json_agg(prj) FROM project_records prj WHERE prj.student_id = s.id), '[]'::json) as prj_raw,
+            coalesce((SELECT json_agg(ach) FROM achievement_records ach WHERE ach.student_id = s.id), '[]'::json) as achievements,
+            coalesce((SELECT json_agg(np) FROM (SELECT * FROM nptel_proofs WHERE student_id = s.id ORDER BY week_no ASC, uploaded_at DESC) np) as nptel_proofs,
+            coalesce((SELECT json_agg(lp) FROM (SELECT * FROM leetcode_proofs WHERE student_id = s.id ORDER BY uploaded_at DESC) lp) as leetcode_proofs,
+            coalesce((SELECT json_agg(ca) FROM connected_accounts WHERE student_id = s.id) ca) as connected_accounts,
+            coalesce((SELECT json_agg(da) FROM (SELECT date, status, recorded_by, recorded_at FROM daily_attendance_records WHERE student_id = s.id ORDER BY date DESC) da) as daily_attendance_logs
+          FROM students s
+          WHERE s.id IN (${placeholders})
+        `, chunk);
+
+        for (const row of rows) {
+          if (!row || !row.student) continue;
+          const stu = (normalizeStudentRecord(row.student) as StudentRecord) || row.student;
+          result.set(row.student_id, {
+            student: stu,
+            academics: (row.academics_raw || []).map((r: any) => ({
+              ...r,
+              sgpa: (r.sgpa !== null && r.sgpa !== undefined) ? Number(r.sgpa) : (r.gpa !== null && r.gpa !== undefined ? Number(r.gpa) : 0),
+              cgpa: (r.cgpa !== null && r.cgpa !== undefined) ? Number(r.cgpa) : 0,
+              totalCredits: Number(r.total_credits || 0),
+              subjects: safeParseJson(r.subjects_json, [])
+            })),
+            arrears: row.arrears || [],
+            skillEdge: row.skill_raw ? {
+              ...row.skill_raw,
+              overallCompletionPct: Number(row.skill_raw.overall_completion_pct || 0),
+              totalRewardPoints: Number(row.skill_raw.total_reward_points || 0),
+              tracks: safeParseJson(row.skill_raw.tracks_json, []),
+              syncHistory: row.history_rows || []
+            } : null,
+            nptel: (row.nptel_raw || []).map((r: any) => ({
+              ...r,
+              assignmentScore: Number(r.assignment_score || 0),
+              examScore: Number(r.exam_score || 0),
+              finalScore: Number(r.final_score || 0)
+            })),
+            attendance: row.att_raw ? {
+              ...row.att_raw,
+              percentage: Number(row.att_raw.percentage || 0),
+              totalWorkingDays: Number(row.att_raw.total_working_days || 0),
+              presentDays: Number(row.att_raw.present_days || 0),
+              absentDays: Number(row.att_raw.absent_days || 0),
+              odDays: Number(row.att_raw.od_days || 0),
+              dailyLogs: row.daily_attendance_logs || []
+            } : null,
+            discipline: row.discipline || [],
+            certificates: row.certs_raw || [],
+            participation: row.part_raw || [],
+            leetcode: row.lc_raw ? {
+              ...row.lc_raw,
+              totalSolved: Number(row.lc_raw.total_solved || 0),
+              easySolved: Number(row.lc_raw.easy_solved || 0),
+              mediumSolved: Number(row.lc_raw.medium_solved || 0),
+              hardSolved: Number(row.lc_raw.hard_solved || 0),
+              contestRating: Number(row.lc_raw.contest_rating || 0),
+              globalRank: Number(row.lc_raw.global_rank || 0),
+              proofs: row.leetcode_proofs || []
+            } : (row.conn_lc?.provider_username ? { username: row.conn_lc.provider_username, totalSolved: 0, easySolved: 0, mediumSolved: 0, hardSolved: 0, contestRating: 1200, globalRank: 0, proofs: [] } : null),
+            projects: row.prj_raw || [],
+            achievements: row.achievements || [],
+            nptelProofs: row.nptel_proofs || [],
+            connectedAccounts: row.connected_accounts || []
+          });
+        }
+      }
+    } else {
+      for (const sId of uniqueIds) {
+        const full360 = await this.getStudent360(sId);
+        if (full360 && full360.student) {
+          result.set(sId, full360);
+        }
+      }
+    }
+    return result;
+  }
+
+  public async batchRecalculateStudentScoresAndRewards(studentIds: string[]): Promise<{ recalculatedCount: number }> {
+    if (!Array.isArray(studentIds) || studentIds.length === 0) return { recalculatedCount: 0 };
+    const uniqueIds = Array.from(new Set(studentIds.filter(Boolean)));
+    if (uniqueIds.length === 0) return { recalculatedCount: 0 };
+
+    const [scoringConfig, profileMap] = await Promise.all([
+      this.getScoringConfig(),
+      this.batchGetStudent360(uniqueIds)
+    ]);
+
+    const { calculateCategoryScores, computeOverallScore } = await import('./scoringEngine.js');
+    const { computeRewardFrom360 } = await import('./services/studentRewardEngine.js');
+
+    const scoreUpdates: Array<{ id: string; overallScore: number }> = [];
+    const rewardUpdates: any[] = [];
+    const affectedSections = new Set<string>();
+
+    for (const sId of uniqueIds) {
+      const profile = profileMap.get(sId);
+      if (!profile || !profile.student) continue;
+
+      const student = profile.student;
+      const breakdown = calculateCategoryScores(
+        student as any,
+        profile.academics,
+        profile.arrears,
+        profile.skillEdge,
+        profile.nptel,
+        profile.attendance,
+        profile.discipline,
+        profile.leetcode,
+        profile.projects,
+        profile.certificates,
+        profile.participation
+      );
+
+      const newOverallScore = computeOverallScore(breakdown, scoringConfig) || 0;
+      scoreUpdates.push({ id: sId, overallScore: newOverallScore });
+
+      profile.student.overall_score = newOverallScore;
+      const reward = computeRewardFrom360(profile);
+      if (reward) {
+        rewardUpdates.push(reward);
+      }
+
+      if (student.year && student.section) {
+        affectedSections.add(`${student.year}:::${student.section}`);
+      }
+    }
+
+    await executeTransaction(async () => {
+      for (const item of scoreUpdates) {
+        await executeRun('UPDATE students SET overall_score = ? WHERE id = ?', [item.overallScore, item.id]);
+      }
+
+      for (const rev of rewardUpdates) {
+        await this.saveStudentAiReward(rev);
+      }
+
+      for (const secKey of affectedSections) {
+        const [year, section] = secKey.split(':::');
+        if (isPostgresActive()) {
+          await executeRun(`
+            WITH ranked AS (
+              SELECT id, ROW_NUMBER() OVER (ORDER BY overall_score DESC, cgpa DESC NULLS LAST) as new_rank
+              FROM students
+              WHERE year = ? AND section = ?
+            )
+            UPDATE students s
+            SET current_rank = r.new_rank
+            FROM ranked r
+            WHERE s.id = r.id
+          `, [year, section]);
+        } else {
+          const sectionStudents = await this.getStudents(year, section);
+          const sorted = [...sectionStudents].sort((a, b) => {
+            const aScore = a.overall_score || 0;
+            const bScore = b.overall_score || 0;
+            return bScore - aScore;
+          });
+          for (let idx = 0; idx < sorted.length; idx++) {
+            await this.updateStudentScoreAndRank(sorted[idx].id, sorted[idx].overall_score || 0, idx + 1);
+          }
+        }
+      }
+    });
+
+    return { recalculatedCount: scoreUpdates.length };
+  }
+
+  public async getStudentsByIds(ids: string[]): Promise<Map<string, any>> {
+    const studentMap = new Map<string, any>();
+    if (!Array.isArray(ids) || ids.length === 0) return studentMap;
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (uniqueIds.length === 0) return studentMap;
+
+    for (let i = 0; i < uniqueIds.length; i += 200) {
+      const chunk = uniqueIds.slice(i, i + 200);
+      const placeholders = chunk.map(() => '?').join(',');
+      const rows = await queryAll(`SELECT * FROM students WHERE id IN (${placeholders})`, chunk);
+      for (const row of rows) {
+        studentMap.set(row.id, row);
+      }
+    }
+    return studentMap;
+  }
+
+  public async batchFindStudentAcademicRecords(studentIds: string[]): Promise<Map<string, any[]>> {
+    const map = new Map<string, any[]>();
+    if (!Array.isArray(studentIds) || studentIds.length === 0) return map;
+    const uniqueIds = Array.from(new Set(studentIds.filter(Boolean)));
+    if (uniqueIds.length === 0) return map;
+
+    for (let i = 0; i < uniqueIds.length; i += 200) {
+      const chunk = uniqueIds.slice(i, i + 200);
+      const placeholders = chunk.map(() => '?').join(',');
+      const rows = await queryAll(`SELECT * FROM academic_records WHERE student_id IN (${placeholders})`, chunk);
+      for (const r of rows) {
+        const list = map.get(r.student_id) || [];
+        list.push(r);
+        map.set(r.student_id, list);
+      }
+    }
+    return map;
+  }
+
+  public async batchRecalculateStudentAttendancePercentages(studentIds: string[]): Promise<void> {
+    if (!Array.isArray(studentIds) || studentIds.length === 0) return;
+    const uniqueIds = Array.from(new Set(studentIds.filter(Boolean)));
+    if (uniqueIds.length === 0) return;
+
+    const studentMap = await this.getStudentsByIds(uniqueIds);
+    const regularIds: string[] = [];
+    const lateralIds: string[] = [];
+
+    for (const sid of uniqueIds) {
+      const stu = studentMap.get(sid);
+      const isLateral = stu && (stu.entry_type === 'Lateral Entry' || (stu as any).entryType === 'Lateral Entry');
+      if (isLateral) {
+        lateralIds.push(sid);
+      } else {
+        regularIds.push(sid);
+      }
+    }
+
+    const now = new Date().toISOString();
+    const aggResults: Array<{
+      student_id: string;
+      total_working_days: number;
+      present_days: number;
+      absent_days: number;
+      od_days: number;
+      ml_days: number;
+    }> = [];
+
+    const fetchAggregates = async (ids: string[], startDate: string) => {
+      for (let i = 0; i < ids.length; i += 100) {
+        const chunk = ids.slice(i, i + 100);
+        const placeholders = chunk.map(() => '?').join(',');
+        const rows = await queryAll(`
+          SELECT
+            student_id,
+            COUNT(id) as total_working_days,
+            SUM(CASE WHEN status = 'PRESENT' OR status = 'P' THEN 1 ELSE 0 END) as present_days,
+            SUM(CASE WHEN status = 'ABSENT' OR status = 'A' THEN 1 ELSE 0 END) as absent_days,
+            SUM(CASE WHEN status = 'OD' OR status = 'ON' OR status = 'ON DUTY' OR status = 'ONDUTY' OR status = 'ON-DUTY' THEN 1 ELSE 0 END) as od_days,
+            SUM(CASE WHEN status = 'ML' OR status = 'LEAVE' THEN 1 ELSE 0 END) as ml_days
+          FROM daily_attendance_records
+          WHERE student_id IN (${placeholders}) AND date >= ?
+          GROUP BY student_id
+        `, [...chunk, startDate]);
+        for (const r of rows) {
+          aggResults.push({
+            student_id: r.student_id,
+            total_working_days: Number(r.total_working_days) || 0,
+            present_days: Number(r.present_days) || 0,
+            absent_days: Number(r.absent_days) || 0,
+            od_days: Number(r.od_days) || 0,
+            ml_days: Number(r.ml_days) || 0
+          });
+        }
+      }
+    };
+
+    if (regularIds.length > 0) await fetchAggregates(regularIds, '2026-07-13');
+    if (lateralIds.length > 0) await fetchAggregates(lateralIds, '2026-08-11');
+
+    const aggMap = new Map(aggResults.map(a => [a.student_id, a]));
+
+    // Batch fetch existing attendance_records
+    const existingRecMap = new Map<string, string>();
+    for (let i = 0; i < uniqueIds.length; i += 100) {
+      const chunk = uniqueIds.slice(i, i + 100);
+      const placeholders = chunk.map(() => '?').join(',');
+      const rows = await queryAll(`SELECT id, student_id FROM attendance_records WHERE student_id IN (${placeholders})`, chunk);
+      for (const r of rows) {
+        existingRecMap.set(r.student_id, r.id);
+      }
+    }
+
+    // Upsert attendance_records in batches inside transaction
+    await executeTransaction(async () => {
+      for (const sid of uniqueIds) {
+        const agg = aggMap.get(sid) || {
+          student_id: sid,
+          total_working_days: 0,
+          present_days: 0,
+          absent_days: 0,
+          od_days: 0,
+          ml_days: 0
+        };
+        const attendedCount = agg.present_days + agg.od_days + agg.ml_days;
+        const percentage = agg.total_working_days > 0
+          ? parseFloat(((attendedCount / agg.total_working_days) * 100).toFixed(2))
+          : 0.0;
+
+        const existingId = existingRecMap.get(sid);
+        if (existingId) {
+          await executeRun(`
+            UPDATE attendance_records
+            SET total_working_days = ?, present_days = ?, absent_days = ?, od_days = ?, ml_days = ?, percentage = ?, last_updated = ?
+            WHERE id = ?
+          `, [agg.total_working_days, agg.present_days, agg.absent_days, agg.od_days, agg.ml_days, percentage, now, existingId]);
+        } else {
+          const newId = `att-rec-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+          await executeRun(`
+            INSERT INTO attendance_records (id, student_id, total_working_days, present_days, absent_days, od_days, ml_days, percentage, last_updated)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [newId, sid, agg.total_working_days, agg.present_days, agg.absent_days, agg.od_days, agg.ml_days, percentage, now]);
+        }
+      }
+    });
+  }
+
   public async previewBulkAttendanceImport(rows: any[], facultyId?: string): Promise<{
     summary: {
       totalRowsProcessed: number;
@@ -3488,6 +4007,63 @@ export class SQLiteDB {
       return '';
     };
 
+    // Pre-scan rows to collect matched student IDs and dates for batch lookup
+    const preScanStudentIds = new Set<string>();
+    const preScanDates = new Set<string>();
+
+    for (let idx = 0; idx < rows.length; idx++) {
+      const r = rows[idx];
+      if (!r || typeof r !== 'object') continue;
+      const rawRegNo = getRowVal(
+        r,
+        'Register Number', 'Register No', 'Register_No', 'Reg No', 'Reg_No', 'RegNo', 'RegisterNumber', 'Reg. No.', 'registerNo'
+      );
+      if (!rawRegNo) continue;
+      const matched = dbStudentMap.get(String(rawRegNo).trim().toUpperCase());
+      if (!matched) continue;
+
+      const rawDate = getRowVal(r, 'Attendance Date', 'Date', 'Attendance_Date', 'date', 'attendanceDate');
+      const rawStatus = getRowVal(r, 'Attendance Status', 'Status', 'Attendance_Status', 'status', 'attendanceStatus');
+
+      if (rawDate !== '' && rawStatus !== '') {
+        const nd = normalizeDate(rawDate);
+        if (nd) {
+          preScanStudentIds.add(matched.id);
+          preScanDates.add(nd);
+        }
+      } else {
+        for (const colName of Object.keys(r)) {
+          const colDateNorm = normalizeDate(colName);
+          if (colDateNorm) {
+            preScanStudentIds.add(matched.id);
+            preScanDates.add(colDateNorm);
+          }
+        }
+      }
+    }
+
+    const existingDailyMap = new Map<string, { id: string; status: string }>();
+    const targetStudentArr = Array.from(preScanStudentIds);
+    const targetDateArr = Array.from(preScanDates);
+
+    if (targetStudentArr.length > 0 && targetDateArr.length > 0) {
+      for (let i = 0; i < targetStudentArr.length; i += 100) {
+        const stuChunk = targetStudentArr.slice(i, i + 100);
+        const stuPlaceholders = stuChunk.map(() => '?').join(',');
+        for (let j = 0; j < targetDateArr.length; j += 100) {
+          const dateChunk = targetDateArr.slice(j, j + 100);
+          const datePlaceholders = dateChunk.map(() => '?').join(',');
+          const existingRows = await queryAll(
+            `SELECT id, student_id, date, status FROM daily_attendance_records WHERE student_id IN (${stuPlaceholders}) AND date IN (${datePlaceholders})`,
+            [...stuChunk, ...dateChunk]
+          );
+          for (const er of existingRows) {
+            existingDailyMap.set(`${er.student_id}_${er.date}`, { id: er.id, status: er.status });
+          }
+        }
+      }
+    }
+
     for (let idx = 0; idx < rows.length; idx++) {
       const r = rows[idx];
       const rowNum = idx + 1;
@@ -3629,11 +4205,8 @@ export class SQLiteDB {
         }
         seenFileEntries.set(comboKey, rowNum);
 
-        // Check existing record in DB to classify action
-        const existing = await queryOne(
-          'SELECT id, status FROM daily_attendance_records WHERE student_id = ? AND date = ?',
-          [matchedStudent.id, normDate]
-        );
+        // Check existing record in DB from preloaded map to classify action
+        const existing = existingDailyMap.get(`${matchedStudent.id}_${normDate}`);
 
         let rowAction: 'NEW' | 'UPDATE' | 'SKIPPED' = 'NEW';
         let previousStatus: string | undefined;
@@ -3735,10 +4308,7 @@ export class SQLiteDB {
                 seenFileEntries.set(comboKey, rowNum);
                 matchedStudentIds.add(matchedStudent.id);
 
-                const existing = await queryOne(
-                  'SELECT id, status FROM daily_attendance_records WHERE student_id = ? AND date = ?',
-                  [matchedStudent.id, colDateNorm]
-                );
+                const existing = existingDailyMap.get(`${matchedStudent.id}_${colDateNorm}`);
 
                 let rowAction: 'NEW' | 'UPDATE' | 'SKIPPED' = 'NEW';
                 let previousStatus: string | undefined;
@@ -3829,58 +4399,82 @@ export class SQLiteDB {
     let failedCount = 0;
     const failedRows: any[] = [];
 
+    // Pre-extract unique students and dates for batch lookup
+    const studentIds = Array.from(new Set(records.map(r => r.studentId).filter(Boolean)));
+    const dates = Array.from(new Set(records.map(r => r.date).filter(Boolean)));
+
+    const existingMap = new Map<string, { id: string; status: string }>();
+
+    for (let i = 0; i < studentIds.length; i += 100) {
+      const stuChunk = studentIds.slice(i, i + 100);
+      const stuPlaceholders = stuChunk.map(() => '?').join(',');
+      for (let j = 0; j < dates.length; j += 100) {
+        const dateChunk = dates.slice(j, j + 100);
+        const datePlaceholders = dateChunk.map(() => '?').join(',');
+        const rows = await queryAll(
+          `SELECT id, student_id, date, status FROM daily_attendance_records WHERE student_id IN (${stuPlaceholders}) AND date IN (${datePlaceholders})`,
+          [...stuChunk, ...dateChunk]
+        );
+        for (const er of rows) {
+          existingMap.set(`${er.student_id}_${er.date}`, { id: er.id, status: er.status });
+        }
+      }
+    }
+
+    const toInsert: Array<{ id: string; studentId: string; date: string; status: string }> = [];
+    const toUpdate: Array<{ id: string; status: string }> = [];
+
     for (const r of records) {
       if (!r.studentId || !r.date || !r.status) continue;
       const clean = r.status.trim().toUpperCase();
       const targetStatus = (clean === 'ON' || clean === 'OD' || clean === 'ON DUTY' || clean === 'ONDUTY' || clean === 'ON-DUTY') ? 'OD' : clean;
 
-      try {
-        const existing = await queryOne(
-          'SELECT id, status FROM daily_attendance_records WHERE student_id = ? AND date = ?',
-          [r.studentId, r.date]
-        );
-
-        if (existing) {
-          const exClean = (existing.status || '').trim().toUpperCase();
-          const existingStatus = (exClean === 'ON' || exClean === 'OD') ? 'OD' : exClean;
-          if (existingStatus === targetStatus) {
-            skippedCount++;
-          } else {
-            updatedCount++;
-            await executeRun(
-              'UPDATE daily_attendance_records SET status = ?, recorded_by = ?, recorded_at = ? WHERE id = ?',
-              [targetStatus, recordedBy, now, existing.id]
-            );
-          }
+      const existing = existingMap.get(`${r.studentId}_${r.date}`);
+      if (existing) {
+        const exClean = (existing.status || '').trim().toUpperCase();
+        const existingStatus = (exClean === 'ON' || exClean === 'OD') ? 'OD' : exClean;
+        if (existingStatus === targetStatus) {
+          skippedCount++;
         } else {
-          importedCount++;
-          const id = `attd-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-          await executeRun(
-            'INSERT INTO daily_attendance_records (id, student_id, date, status, recorded_by, recorded_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [id, r.studentId, r.date, targetStatus, recordedBy, now]
-          );
+          updatedCount++;
+          toUpdate.push({ id: existing.id, status: targetStatus });
         }
-        affectedStudentIds.add(r.studentId);
-      } catch (err: any) {
-        failedCount++;
-        failedRows.push({
-          studentId: r.studentId,
-          date: r.date,
-          status: r.status,
-          reason: err.message || 'Database write error'
-        });
+      } else {
+        importedCount++;
+        const id = `attd-${Date.now()}-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 4)}`;
+        toInsert.push({ id, studentId: r.studentId, date: r.date, status: targetStatus });
       }
+      affectedStudentIds.add(r.studentId);
     }
 
+    // Atomically execute writes inside transaction
+    await executeTransaction(async () => {
+      // Chunk multi-row inserts in batches of 50
+      for (let i = 0; i < toInsert.length; i += 50) {
+        const chunk = toInsert.slice(i, i + 50);
+        const valuePlaceholders = chunk.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
+        const flatParams: any[] = [];
+        for (const item of chunk) {
+          flatParams.push(item.id, item.studentId, item.date, item.status, recordedBy, now);
+        }
+        await executeRun(
+          `INSERT INTO daily_attendance_records (id, student_id, date, status, recorded_by, recorded_at) VALUES ${valuePlaceholders}`,
+          flatParams
+        );
+      }
+
+      // Execute updates
+      for (const u of toUpdate) {
+        await executeRun(
+          'UPDATE daily_attendance_records SET status = ?, recorded_by = ?, recorded_at = ? WHERE id = ?',
+          [u.status, recordedBy, now, u.id]
+        );
+      }
+    });
+
+    // Batch recalculate attendance percentages for all affected students
     const affectedArr = Array.from(affectedStudentIds);
-    for (let i = 0; i < affectedArr.length; i += 5) {
-      const batch = affectedArr.slice(i, i + 5);
-      await Promise.all(batch.map(async (stuId) => {
-        try {
-          await this.recalculateStudentAttendancePercentage(stuId);
-        } catch (_e) {}
-      }));
-    }
+    await this.batchRecalculateStudentAttendancePercentages(affectedArr);
 
     return {
       message: `Monthly bulk attendance imported successfully! ${importedCount} created, ${updatedCount} updated, ${skippedCount} unchanged across ${affectedStudentIds.size} students.`,

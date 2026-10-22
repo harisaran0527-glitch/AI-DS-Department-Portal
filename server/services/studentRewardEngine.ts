@@ -33,8 +33,7 @@ export interface StudentRewardEvaluation {
   calculatedAt: string;
 }
 
-export async function evaluateStudentRewardPoints(studentId: string): Promise<StudentRewardEvaluation | null> {
-  const full360 = await db.getStudent360(studentId);
+export function computeRewardFrom360(full360: any): StudentRewardEvaluation | null {
   if (!full360 || !full360.student) return null;
 
   const student = full360.student;
@@ -242,6 +241,16 @@ export async function evaluateStudentRewardPoints(studentId: string): Promise<St
     confidenceScore: 0.96,
     calculatedAt: new Date().toISOString()
   };
+
+  return evaluation;
+}
+
+export async function evaluateStudentRewardPoints(studentId: string): Promise<StudentRewardEvaluation | null> {
+  const full360 = await db.getStudent360(studentId);
+  if (!full360 || !full360.student) return null;
+
+  const evaluation = computeRewardFrom360(full360);
+  if (!evaluation) return null;
 
   // Persist into student_ai_rewards DB table
   await db.saveStudentAiReward(evaluation);
