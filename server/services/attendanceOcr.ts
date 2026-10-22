@@ -234,7 +234,11 @@ export async function extractAttendanceFromImage(
   const warnings: string[] = [];
 
   // Attempt 1: Gemini Vision if keys are available
-  if (geminiKeyManager.isConfigured()) {
+  const isGeminiAvailable = typeof geminiKeyManager.isConfigured === 'function'
+    ? geminiKeyManager.isConfigured()
+    : Boolean(geminiKeyManager.getApiStatus?.()?.isConfigured);
+
+  if (isGeminiAvailable) {
     try {
       const prompt = `You are a specialized OCR system for college attendance sheets.
 Extract all student attendance rows from the provided image.

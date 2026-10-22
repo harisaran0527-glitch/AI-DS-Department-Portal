@@ -683,6 +683,10 @@ class GeminiKeyManager {
       availableKeysCount: available
     };
   }
+
+  public isConfigured(): boolean {
+    return this.getApiStatus().isConfigured;
+  }
 }
 
 // Export singleton instance
