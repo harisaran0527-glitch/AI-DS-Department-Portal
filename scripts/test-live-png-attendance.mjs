@@ -53,10 +53,10 @@ async function testPngAttendanceWorkflow() {
   }
 
   const ocrData = await ocrRes.json();
-  console.log(`   ✅ OCR Endpoint responded with success: ${ocrData.success}`);
-  console.log(`      Method used: ${ocrData.method}`);
+  console.log(`   ✅ OCR Endpoint responded with status 200:`);
+  console.log(`      Success: ${ocrData.success}, Method: ${ocrData.method}`);
   console.log(`      Extracted Rows: ${ocrData.extractedRows?.length || 0}`);
-  console.log(`      Unparsed items: ${ocrData.unparsed?.length || 0}`);
+  if (ocrData.warnings?.length) console.log(`      Warnings:`, ocrData.warnings);
 
   // Step 3: Test OCR Parser with Realistic Attendance Sheet Text
   console.log(`\nStep 3: Simulating OCR Extracted Attendance Sheet for 2nd Year A...`);

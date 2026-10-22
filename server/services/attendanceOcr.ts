@@ -332,6 +332,16 @@ Example output:
   }
 
   // Attempt 2: Tesseract OCR fallback
+  if (process.env.VERCEL === '1') {
+    return {
+      success: false,
+      extractedRows: [],
+      unparsed: [],
+      method: 'FALLBACK',
+      warnings: [...warnings, 'Serverless runtime: delegating OCR to client-side browser engine.']
+    };
+  }
+
   try {
     const ocrResult = await Tesseract.recognize(imageBuffer, 'eng');
     const rawText = ocrResult.data.text || '';
