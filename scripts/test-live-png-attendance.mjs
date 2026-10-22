@@ -31,15 +31,35 @@ async function testPngAttendanceWorkflow() {
     'Authorization': `Bearer ${token}`
   };
 
-  // Step 2: Test OCR Extraction Endpoint
-  console.log(`\nStep 2: Testing POST /api/faculty/attendance/ocr-extract...`);
-  const samplePngPath = path.resolve('public/images/avsec-salem-logo.png');
-  const fileBuffer = fs.readFileSync(samplePngPath);
-  console.log(`   Read sample PNG image: ${fileBuffer.length} bytes`);
+  // Step 2a: Test Security Signature Verification with Non-PNG File (should reject with HTTP 400)
+  console.log(`\nStep 2a: Testing Server-Side Signature Rejection on Non-PNG File...`);
+  const fakePngPath = path.resolve('public/images/avsec-salem-logo.png'); // JPEG disguised as PNG
+  const fakeBuffer = fs.readFileSync(fakePngPath);
+  const fakeFormData = new FormData();
+  fakeFormData.append('file', new Blob([fakeBuffer], { type: 'image/png' }), 'fake_sheet.png');
+
+  const fakeRes = await fetch(`${BASE_URL}/api/faculty/attendance/ocr-extract`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: fakeFormData
+  });
+
+  const fakeJson = await fakeRes.json();
+  if (fakeRes.status === 400 && fakeJson.error?.includes('File signature does not match')) {
+    console.log(`   ✅ Security check verified: Disguised non-PNG file correctly rejected with HTTP 400.`);
+  } else {
+    throw new Error(`Expected signature rejection but got ${fakeRes.status}: ${JSON.stringify(fakeJson)}`);
+  }
+
+  // Step 2b: Test OCR Extraction Endpoint with Genuine PNG File
+  console.log(`\nStep 2b: Testing POST /api/faculty/attendance/ocr-extract with Genuine PNG...`);
+  const realPngPath = path.resolve('src/assets/hero.png');
+  const fileBuffer = fs.readFileSync(realPngPath);
+  console.log(`   Read genuine PNG image: ${fileBuffer.length} bytes`);
 
   const formData = new FormData();
   const blob = new Blob([fileBuffer], { type: 'image/png' });
-  formData.append('file', blob, 'sample_attendance.png');
+  formData.append('file', blob, 'genuine_attendance.png');
   formData.append('date', '2026-09-18');
 
   const ocrRes = await fetch(`${BASE_URL}/api/faculty/attendance/ocr-extract`, {
