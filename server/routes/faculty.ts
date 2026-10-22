@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { db, normalizeYear, normalizeSection } from '../db.js';
+import { db, normalizeYear, normalizeSection, normalizeSemester } from '../db.js';
 import { executeRun, queryAll, queryOne, isPostgresActive } from '../postgresAdapter.js';
 import { authenticateToken, requireRole, verifyFacultySectionAccess, AuthRequest, getRouteParam } from '../middleware/auth.js';
 import { calculateCategoryScores, computeOverallScore } from '../scoringEngine.js';
@@ -1971,10 +1971,40 @@ router.get('/academics/records', requireRole('FACULTY', 'HOD', 'ADMIN'), async (
   }
 });
 
+// Student Name verification helper: supports Indian naming conventions (initials at front/end, etc.)
+function normalizePersonName(name: string): string {
+  return String(name || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function verifyStudentNameMatch(inputName: string, dbStudentName: string): boolean {
+  if (!inputName || !inputName.trim()) return true; // Optional in sheet, only verified when provided
+  const normInput = normalizePersonName(inputName);
+  const normDb = normalizePersonName(dbStudentName);
+  if (!normInput || !normDb) return true;
+  if (normInput === normDb) return true;
+
+  const inputWords = normInput.split(' ').filter(Boolean).sort();
+  const dbWords = normDb.split(' ').filter(Boolean).sort();
+  if (inputWords.join(' ') === dbWords.join(' ')) return true;
+
+  // Single name or primary token match when initials are omitted
+  const longInput = inputWords.filter((w) => w.length > 1);
+  const longDb = dbWords.filter((w) => w.length > 1);
+  if (longInput.length > 0 && longDb.length > 0 && longInput.join(' ') === longDb.join(' ')) {
+    return true;
+  }
+
+  return false;
+}
+
 // POST /api/faculty/academics/import-preview - Preview and validate bulk mark Excel upload
 router.post('/academics/import-preview', requireRole('FACULTY', 'ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
-    const { rows, examType = 'Unit Test 1', year: selectedYear, section: selectedSection } = req.body;
+    const { rows, examType = 'Unit Test 1', year: selectedYear, section: selectedSection, semester: selectedSemester } = req.body;
     if (!Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({ error: 'Invalid or empty rows provided for Bulk Marks Upload.' });
     }
@@ -1982,11 +2012,15 @@ router.post('/academics/import-preview', requireRole('FACULTY', 'ADMIN'), async 
     const assignment = await db.getFacultyAssignment(req.user!.id);
     const facultyAssignedYear = selectedYear || (assignment ? assignment.year : (req.user as any)?.assignedYear);
     const facultyAssignedSection = selectedSection || (assignment ? assignment.section : (req.user as any)?.assignedSection);
-    const isSpecialRole = req.user!.role === 'ADMIN';
+    const isSpecialRole = req.user!.role === 'ADMIN' || req.user!.role === 'HOD';
 
     const validRows: any[] = [];
     const invalidRows: any[] = [];
     const seenMap = new Set<string>();
+
+    let newCount = 0;
+    let updateCount = 0;
+    let identicalCount = 0;
 
     const allStudents = await db.getAllStudents();
     const studentRegMap = new Map(allStudents.map((s) => [(s.register_no || s.registerNo || '').trim().toUpperCase(), s]));
@@ -1998,23 +2032,73 @@ router.post('/academics/import-preview', requireRole('FACULTY', 'ADMIN'), async 
       const row = rows[i];
       if (!row || typeof row !== 'object') continue;
 
-      // Clean keys in row (trim whitespace, lowercasing helper)
-      const normalizedRow: Record<string, any> = {};
-      for (const [k, v] of Object.entries(row)) {
-        normalizedRow[k.trim().toLowerCase()] = v;
-      }
-
-      const rawRegNo = normalizedRow['register number'] || normalizedRow['registernumber'] || normalizedRow['register_no'] || normalizedRow['reg no'] || normalizedRow['reg_no'] || normalizedRow['regno'] || normalizedRow['register no'] || normalizedRow['register_number'] || normalizedRow['reg. no.'] || row.registerNo || '';
-      const rawSubjectCode = normalizedRow['subject code'] || normalizedRow['subjectcode'] || normalizedRow['subject_code'] || normalizedRow['code'] || normalizedRow['sub code'] || normalizedRow['sub_code'] || row.subjectCode || '';
-      const rawSubjectTitle = normalizedRow['subject title'] || normalizedRow['subjecttitle'] || normalizedRow['subject_name'] || normalizedRow['subject name'] || normalizedRow['title'] || normalizedRow['name'] || normalizedRow['course title'] || row.subjectTitle || '';
-      const rawMarks = normalizedRow['marks'] !== undefined ? normalizedRow['marks'] : (normalizedRow['mark'] !== undefined ? normalizedRow['mark'] : (normalizedRow['score'] !== undefined ? normalizedRow['score'] : (normalizedRow['marks obtained'] !== undefined ? normalizedRow['marks obtained'] : (normalizedRow['total'] !== undefined ? normalizedRow['total'] : row.marks))));
+      const rawRegNo = getRowValue(
+        row,
+        'Register Number',
+        'Register No',
+        'Register_No',
+        'Reg No',
+        'Reg_No',
+        'RegNo',
+        'RegisterNumber',
+        'Reg. No.',
+        'registerNo'
+      );
+      const rawStudentName = getRowValue(
+        row,
+        'Student Name',
+        'StudentName',
+        'Name',
+        'Student_Name',
+        'Candidate Name',
+        'studentName'
+      );
+      const rawSubjectCode = getRowValue(
+        row,
+        'Subject Code',
+        'SubjectCode',
+        'Subject_Code',
+        'Code',
+        'Sub Code',
+        'Sub_Code',
+        'Course Code',
+        'subjectCode'
+      );
+      const rawSubjectTitle = getRowValue(
+        row,
+        'Subject Title',
+        'SubjectTitle',
+        'Subject Name',
+        'Subject_Name',
+        'Course Title',
+        'Title',
+        'Name',
+        'subjectTitle'
+      );
+      const rawMarks = getRowValue(
+        row,
+        'Marks',
+        'Mark',
+        'Score',
+        'Marks Obtained',
+        'Total',
+        'marks'
+      );
+      const rawSemester = getRowValue(
+        row,
+        'Semester',
+        'Sem',
+        'Semester No',
+        'semester'
+      );
 
       const cleanRegNo = String(rawRegNo).trim().toUpperCase();
+      const cleanStudentName = String(rawStudentName).trim();
       const cleanCode = String(rawSubjectCode).trim().toUpperCase();
       const cleanTitle = String(rawSubjectTitle).trim();
       const numMarks = Number(rawMarks);
 
-      // 1. Basic empty check
+      // 1. Basic empty & type checks
       if (!cleanRegNo) {
         invalidRows.push({ rowNumber: i + 1, rawData: row, reason: 'Register Number is required.' });
         continue;
@@ -2023,36 +2107,55 @@ router.post('/academics/import-preview', requireRole('FACULTY', 'ADMIN'), async 
         invalidRows.push({ rowNumber: i + 1, rawData: row, reason: 'Subject Code is required.' });
         continue;
       }
-      if (rawMarks === undefined || rawMarks === null || rawMarks === '' || isNaN(numMarks) || numMarks < 0 || numMarks > 100) {
-        invalidRows.push({ rowNumber: i + 1, rawData: row, reason: `Invalid marks value "${rawMarks}". Marks must be a valid number between 0 and 100.` });
+      if (rawMarks === '' || rawMarks === null || rawMarks === undefined || isNaN(numMarks) || numMarks < 0 || numMarks > 100) {
+        invalidRows.push({
+          rowNumber: i + 1,
+          rawData: row,
+          reason: `Invalid marks value "${rawMarks}". Marks must be a valid number between 0 and 100.`
+        });
         continue;
       }
 
       // 2. Authoritative Register Number student lookup
       const student = studentRegMap.get(cleanRegNo);
       if (!student) {
-        invalidRows.push({ rowNumber: i + 1, rawData: row, reason: `Student with Register Number "${cleanRegNo}" not found in database.` });
+        invalidRows.push({
+          rowNumber: i + 1,
+          rawData: row,
+          reason: `Student with Register Number "${cleanRegNo}" not found in database.`
+        });
         continue;
       }
 
-      // 3. Section Isolation check for Faculty
-      if (!isSpecialRole && facultyAssignedYear && facultyAssignedSection) {
-        const studentYearNorm = student.year.trim().toLowerCase();
-        const studentSecNorm = student.section.trim().toLowerCase();
-        const facYearNorm = facultyAssignedYear.trim().toLowerCase();
-        const facSecNorm = facultyAssignedSection.trim().toLowerCase();
-
-        if (studentYearNorm !== facYearNorm || studentSecNorm !== facSecNorm) {
-          invalidRows.push({
-            rowNumber: i + 1,
-            rawData: row,
-            reason: `Access Denied: Student ${student.name} (${cleanRegNo}) belongs to [${student.year}, ${student.section}], which is outside your assigned class assignment [${facultyAssignedYear}, ${facultyAssignedSection}].`
-          });
-          continue;
-        }
+      // 3. Student Name verification (when student name is supplied in upload sheet)
+      if (cleanStudentName && !verifyStudentNameMatch(cleanStudentName, student.name)) {
+        invalidRows.push({
+          rowNumber: i + 1,
+          rawData: row,
+          reason: `Name mismatch for Register Number "${cleanRegNo}". Uploaded name "${cleanStudentName}" does not match registered student "${student.name}".`
+        });
+        continue;
       }
 
-      // 4. Subject Master lookup
+      // 4. Section & Year Scope Isolation check
+      const stuYearNorm = normalizeYear(student.year);
+      const stuSecNorm = normalizeSection(student.section);
+      const facYearNorm = facultyAssignedYear ? normalizeYear(facultyAssignedYear) : '';
+      const facSecNorm = facultyAssignedSection ? normalizeSection(facultyAssignedSection) : '';
+
+      const yearMatches = !facYearNorm || facYearNorm === 'ALL' || facYearNorm === stuYearNorm;
+      const secMatches = !facSecNorm || facSecNorm === 'ALL' || facSecNorm === stuSecNorm;
+
+      if (!isSpecialRole && (!yearMatches || !secMatches)) {
+        invalidRows.push({
+          rowNumber: i + 1,
+          rawData: row,
+          reason: `Access Denied: Student ${student.name} (${cleanRegNo}) belongs to [${student.year}, ${student.section}], which is outside your assigned class assignment [${facultyAssignedYear}, ${facultyAssignedSection}].`
+        });
+        continue;
+      }
+
+      // 5. Subject Master lookup
       const masterSubject = subjectCodeMap.get(cleanCode);
       if (!masterSubject) {
         invalidRows.push({
@@ -2063,13 +2166,55 @@ router.post('/academics/import-preview', requireRole('FACULTY', 'ADMIN'), async 
         continue;
       }
 
-      // Duplicate check in same batch
+      // 6. Subject Year alignment check (prevent uploading 3rd-year subjects for 1st-year students)
+      if (masterSubject.year) {
+        const subYearNorm = normalizeYear(masterSubject.year);
+        if (subYearNorm !== 'ALL' && subYearNorm !== stuYearNorm) {
+          invalidRows.push({
+            rowNumber: i + 1,
+            rawData: row,
+            reason: `Subject "${cleanCode}" (${masterSubject.subjectName}) is configured for ${masterSubject.year}, but student ${student.name} is in ${student.year}.`
+          });
+          continue;
+        }
+      }
+
+      // 7. Duplicate check within same upload batch
       const dedupeKey = `${student.id}_${cleanCode}`;
       if (seenMap.has(dedupeKey)) {
-        invalidRows.push({ rowNumber: i + 1, rawData: row, reason: `Duplicate entry for Student ${cleanRegNo} and Subject Code ${cleanCode} in uploaded file.` });
+        invalidRows.push({
+          rowNumber: i + 1,
+          rawData: row,
+          reason: `Duplicate entry for Student ${cleanRegNo} and Subject Code ${cleanCode} in uploaded file.`
+        });
         continue;
       }
       seenMap.add(dedupeKey);
+
+      // 8. Determine target semester
+      let rowSemester = Number(rawSemester) || Number(selectedSemester) || Number(masterSubject.semester);
+      if (!rowSemester || isNaN(rowSemester)) {
+        rowSemester = stuYearNorm.includes('1st') ? 1 : stuYearNorm.includes('2nd') ? 3 : stuYearNorm.includes('3rd') ? 5 : 7;
+      }
+
+      // 9. Inspect existing marks in database to classify as NEW, UPDATE, or IDENTICAL
+      const existingRecord = await db.findStudentSubjectMark(student.id, masterSubject.subjectCode, rowSemester, examType);
+      let rowStatus: 'NEW_MARK' | 'UPDATE_MARK' | 'IDENTICAL_MARK' = 'NEW_MARK';
+      let previousMarks: number | undefined;
+
+      if (existingRecord && existingRecord.exists) {
+        previousMarks = existingRecord.marks;
+        if (existingRecord.marks === numMarks) {
+          rowStatus = 'IDENTICAL_MARK';
+          identicalCount++;
+        } else {
+          rowStatus = 'UPDATE_MARK';
+          updateCount++;
+        }
+      } else {
+        rowStatus = 'NEW_MARK';
+        newCount++;
+      }
 
       validRows.push({
         rowNumber: i + 1,
@@ -2080,10 +2225,12 @@ router.post('/academics/import-preview', requireRole('FACULTY', 'ADMIN'), async 
         section: student.section,
         examType: examType,
         subjectCode: masterSubject.subjectCode,
-        subjectTitle: masterSubject.subjectName,
+        subjectTitle: cleanTitle || masterSubject.subjectName,
         subjectAbbreviation: masterSubject.subjectAbbreviation || '',
-        semester: masterSubject.semester,
-        marks: numMarks
+        semester: rowSemester,
+        marks: numMarks,
+        status: rowStatus,
+        previousMarks
       });
     }
 
@@ -2091,7 +2238,10 @@ router.post('/academics/import-preview', requireRole('FACULTY', 'ADMIN'), async 
       summary: {
         totalRowsProcessed: rows.length,
         validCount: validRows.length,
-        invalidCount: invalidRows.length
+        invalidCount: invalidRows.length,
+        newCount,
+        updateCount,
+        identicalCount
       },
       validRows,
       invalidRows
@@ -2105,7 +2255,7 @@ router.post('/academics/import-preview', requireRole('FACULTY', 'ADMIN'), async 
 // POST /api/faculty/academics/import-confirm - Confirm bulk mark upload
 router.post('/academics/import-confirm', requireRole('FACULTY', 'ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
-    const { marks, examType = 'Unit Test 1' } = req.body;
+    const { marks, examType = 'Unit Test 1', year: selectedYear, section: selectedSection } = req.body;
     if (!Array.isArray(marks) || marks.length === 0) {
       return res.status(400).json({ error: 'No valid marks provided for confirmation.' });
     }
@@ -2113,14 +2263,42 @@ router.post('/academics/import-confirm', requireRole('FACULTY', 'ADMIN'), async 
     const { evaluateStudentRewardPoints } = await import('../services/studentRewardEngine.js');
 
     const affectedStudentIds = new Set<string>();
-    let savedCount = 0;
+    let importedCount = 0; // newly created
+    let updatedCount = 0;  // updated existing
+    let skippedCount = 0;  // unchanged
+    let failedCount = 0;
+    const failedRows: any[] = [];
 
     for (const item of marks) {
       const { studentId, subjectCode, subjectTitle, marks: scoreVal, semester, examType: rowExamType } = item;
       const targetExam = rowExamType || examType || 'Unit Test 1';
-      await db.upsertStudentSubjectMark(studentId, subjectCode, subjectTitle, Number(scoreVal), Number(semester) || 3, targetExam);
-      affectedStudentIds.add(studentId);
-      savedCount++;
+      const targetSem = Number(semester) || 3;
+      try {
+        const result = await db.upsertStudentSubjectMark(
+          studentId,
+          subjectCode,
+          subjectTitle || subjectCode,
+          Number(scoreVal),
+          targetSem,
+          targetExam
+        );
+        if (result.action === 'CREATED') {
+          importedCount++;
+        } else if (result.action === 'UPDATED') {
+          updatedCount++;
+        } else {
+          skippedCount++;
+        }
+        affectedStudentIds.add(studentId);
+      } catch (rowErr: any) {
+        failedCount++;
+        failedRows.push({
+          studentId,
+          subjectCode,
+          marks: scoreVal,
+          reason: rowErr.message || 'Database write error'
+        });
+      }
     }
 
     // Trigger score recalculation & reward evaluation for affected students with controlled concurrency
@@ -2135,21 +2313,41 @@ router.post('/academics/import-confirm', requireRole('FACULTY', 'ADMIN'), async 
       }));
     }
 
+    const totalProcessed = importedCount + updatedCount + skippedCount;
     await db.createBulkImportAudit(
       req.user!.id,
       req.user!.role,
       'BULK_MARKS_IMPORT',
       'bulk_academic_marks.xlsx',
-      savedCount,
-      0,
-      { affectedStudentsCount: affectedStudentIds.size, totalMarksSaved: savedCount, examType }
+      totalProcessed,
+      failedCount,
+      {
+        affectedStudentsCount: affectedStudentIds.size,
+        importedCount,
+        updatedCount,
+        skippedCount,
+        failedCount,
+        examType,
+        year: selectedYear,
+        section: selectedSection
+      }
     );
 
-    await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'BULK_MARKS_IMPORT', `STUDENTS:${affectedStudentIds.size}, MARKS:${savedCount}, EXAM:${examType}`);
+    await db.logAudit(
+      req.user!.id,
+      req.user!.email,
+      req.user!.role,
+      'BULK_MARKS_IMPORT',
+      `STUDENTS:${affectedStudentIds.size}, CREATED:${importedCount}, UPDATED:${updatedCount}, SKIPPED:${skippedCount}, FAILED:${failedCount}, EXAM:${examType}`
+    );
 
     return res.json({
-      message: `Academic marks imported successfully! ${savedCount} marks saved across ${affectedStudentIds.size} students.`,
-      importedCount: savedCount,
+      message: `Academic marks imported successfully! ${importedCount} created, ${updatedCount} updated, ${skippedCount} unchanged across ${affectedStudentIds.size} students.`,
+      importedCount,
+      updatedCount,
+      skippedCount,
+      failedCount,
+      failedRows,
       updatedStudentsCount: affectedStudentIds.size
     });
   } catch (error: any) {

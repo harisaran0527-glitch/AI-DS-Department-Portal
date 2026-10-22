@@ -1173,19 +1173,49 @@ export const API = {
   },
 
   // Bulk Academic Marks Upload & Validation
-  previewAcademicMarksImport: async (rows: any[], examType?: string, year?: string, section?: string) => {
+  previewAcademicMarksImport: async (rows: any[], examType?: string, year?: string, section?: string, semester?: number | string) => {
     return request<{
-      summary: { totalRowsProcessed: number; validCount: number; invalidCount: number };
-      validRows: Array<{ rowNumber: number; studentId: string; studentName: string; registerNo: string; year: string; section: string; examType?: string; subjectCode: string; subjectTitle: string; subjectAbbreviation?: string; semester: number; marks: number }>;
+      summary: {
+        totalRowsProcessed: number;
+        validCount: number;
+        invalidCount: number;
+        newCount: number;
+        updateCount: number;
+        identicalCount: number;
+      };
+      validRows: Array<{
+        rowNumber: number;
+        studentId: string;
+        studentName: string;
+        registerNo: string;
+        year: string;
+        section: string;
+        examType?: string;
+        subjectCode: string;
+        subjectTitle: string;
+        subjectAbbreviation?: string;
+        semester: number;
+        marks: number;
+        status?: 'NEW_MARK' | 'UPDATE_MARK' | 'IDENTICAL_MARK';
+        previousMarks?: number;
+      }>;
       invalidRows: Array<{ rowNumber: number; rawData: any; reason: string }>;
     }>('/faculty/academics/import-preview', {
       method: 'POST',
-      body: JSON.stringify({ rows, examType, year, section })
+      body: JSON.stringify({ rows, examType, year, section, semester })
     });
   },
 
   confirmAcademicMarksImport: async (marks: any[], examType?: string, year?: string, section?: string) => {
-    return request<{ message: string; importedCount: number; updatedStudentsCount: number }>('/faculty/academics/import-confirm', {
+    return request<{
+      message: string;
+      importedCount: number;
+      updatedCount: number;
+      skippedCount: number;
+      failedCount: number;
+      failedRows: any[];
+      updatedStudentsCount: number;
+    }>('/faculty/academics/import-confirm', {
       method: 'POST',
       body: JSON.stringify({ marks, examType, year, section })
     });

@@ -324,7 +324,12 @@ export const AcademicsModule: React.FC<AcademicsModuleProps> = ({
     setMarksErrMsg('');
     try {
       const res = await API.confirmAcademicMarksImport(marksPreviewResult.validRows, selectedExamType, currentYear, currentSection);
-      setMarksSuccessMsg(`Academic marks saved successfully! ${res.importedCount} marks saved across ${res.updatedStudentsCount} students into Supabase PostgreSQL.`);
+      const parts = [];
+      if (res.importedCount > 0) parts.push(`${res.importedCount} created`);
+      if (res.updatedCount > 0) parts.push(`${res.updatedCount} updated`);
+      if (res.skippedCount > 0) parts.push(`${res.skippedCount} unchanged`);
+      const details = parts.length > 0 ? parts.join(', ') : `${res.importedCount} saved`;
+      setMarksSuccessMsg(`Academic marks saved successfully! ${details} across ${res.updatedStudentsCount} students into PostgreSQL.`);
       setMarksPreviewResult(null);
       setMarksFile(null);
       if (marksFileInputRef.current) marksFileInputRef.current.value = '';
@@ -344,10 +349,10 @@ export const AcademicsModule: React.FC<AcademicsModuleProps> = ({
   // Download official Marks Excel template (.xlsx)
   const downloadMarksTemplate = () => {
     const templateRows = [
-      { 'Register Number': '7376222AD101', 'Subject Code': 'CS25C08', 'Marks': 88 },
-      { 'Register Number': '7376222AD101', 'Subject Code': 'CS25C09', 'Marks': 92 },
-      { 'Register Number': '7376222AD102', 'Subject Code': 'CS25C08', 'Marks': 75 },
-      { 'Register Number': '7376222AD102', 'Subject Code': 'CS25C09', 'Marks': 84 }
+      { 'Register Number': '620125243146', 'Student Name': 'SARAN S', 'Subject Code': 'CS25C08', 'Subject Title': 'Data structures', 'Marks': 88 },
+      { 'Register Number': '620125243146', 'Student Name': 'SARAN S', 'Subject Code': 'CS25C09', 'Subject Title': 'Database Management', 'Marks': 92 },
+      { 'Register Number': '620125243147', 'Student Name': 'PRIYA R', 'Subject Code': 'CS25C08', 'Subject Title': 'Data structures', 'Marks': 75 },
+      { 'Register Number': '620125243147', 'Student Name': 'PRIYA R', 'Subject Code': 'CS25C09', 'Subject Title': 'Database Management', 'Marks': 84 }
     ];
     const worksheet = XLSX.utils.json_to_sheet(templateRows);
     const workbook = XLSX.utils.book_new();
@@ -824,18 +829,30 @@ export const AcademicsModule: React.FC<AcademicsModuleProps> = ({
             {/* Validation & Preview Report */}
             {marksPreviewResult && (
               <div className="space-y-4 pt-4 border-t border-slate-800 animate-in fade-in duration-200">
-                <div className="grid grid-cols-3 gap-3 text-center text-xs font-mono">
-                  <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                    <span className="text-slate-400 block text-[10px]">TOTAL ROWS PROCESSED</span>
-                    <span className="text-white font-bold text-lg">{marksPreviewResult.summary.totalRowsProcessed}</span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-center text-xs font-mono">
+                  <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                    <span className="text-slate-400 block text-[10px]">TOTAL ROWS</span>
+                    <span className="text-white font-bold text-base">{marksPreviewResult.summary.totalRowsProcessed}</span>
                   </div>
-                  <div className="bg-emerald-950/50 p-3 rounded-xl border border-emerald-500/40">
-                    <span className="text-emerald-400 block text-[10px]">VALID MARKS (READY TO SAVE)</span>
-                    <span className="text-emerald-200 font-bold text-lg">{marksPreviewResult.summary.validCount}</span>
+                  <div className="bg-emerald-950/50 p-2.5 rounded-xl border border-emerald-500/40">
+                    <span className="text-emerald-400 block text-[10px]">VALID ROWS</span>
+                    <span className="text-emerald-200 font-bold text-base">{marksPreviewResult.summary.validCount}</span>
                   </div>
-                  <div className="bg-rose-950/50 p-3 rounded-xl border border-rose-500/40">
-                    <span className="text-rose-400 block text-[10px]">REJECTED ROWS (ERRORS)</span>
-                    <span className="text-rose-200 font-bold text-lg">{marksPreviewResult.summary.invalidCount}</span>
+                  <div className="bg-rose-950/50 p-2.5 rounded-xl border border-rose-500/40">
+                    <span className="text-rose-400 block text-[10px]">REJECTED ROWS</span>
+                    <span className="text-rose-200 font-bold text-base">{marksPreviewResult.summary.invalidCount}</span>
+                  </div>
+                  <div className="bg-cyan-950/50 p-2.5 rounded-xl border border-cyan-500/40">
+                    <span className="text-cyan-400 block text-[10px]">NEW MARKS</span>
+                    <span className="text-cyan-200 font-bold text-base">{marksPreviewResult.summary.newCount || 0}</span>
+                  </div>
+                  <div className="bg-amber-950/50 p-2.5 rounded-xl border border-amber-500/40">
+                    <span className="text-amber-400 block text-[10px]">UPDATES</span>
+                    <span className="text-amber-200 font-bold text-base">{marksPreviewResult.summary.updateCount || 0}</span>
+                  </div>
+                  <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-700">
+                    <span className="text-slate-400 block text-[10px]">UNCHANGED</span>
+                    <span className="text-slate-300 font-bold text-base">{marksPreviewResult.summary.identicalCount || 0}</span>
                   </div>
                 </div>
 
@@ -856,6 +873,7 @@ export const AcademicsModule: React.FC<AcademicsModuleProps> = ({
                             <th className="p-2 border-b border-slate-800">Subject Code</th>
                             <th className="p-2 border-b border-slate-800">Subject Title</th>
                             <th className="p-2 border-b border-slate-800 text-right">Marks</th>
+                            <th className="p-2 border-b border-slate-800 text-center">Status</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/50">
@@ -867,6 +885,23 @@ export const AcademicsModule: React.FC<AcademicsModuleProps> = ({
                               <td className="p-2 text-amber-300">{r.subjectCode}</td>
                               <td className="p-2 text-slate-300">{r.subjectTitle}</td>
                               <td className="p-2 font-bold text-emerald-400 text-right">{r.marks} / 100</td>
+                              <td className="p-2 text-center">
+                                {r.status === 'NEW_MARK' && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                                    NEW
+                                  </span>
+                                )}
+                                {r.status === 'UPDATE_MARK' && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                    UPDATE ({r.previousMarks} → {r.marks})
+                                  </span>
+                                )}
+                                {r.status === 'IDENTICAL_MARK' && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                                    UNCHANGED
+                                  </span>
+                                )}
+                              </td>
                             </tr>
                           ))}
                         </tbody>

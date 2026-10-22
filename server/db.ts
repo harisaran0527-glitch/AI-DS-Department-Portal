@@ -716,6 +716,15 @@ export async function initDatabaseSchema(): Promise<void> {
   }
 }
 
+export interface UpsertMarkResult {
+  action: 'CREATED' | 'UPDATED' | 'SKIPPED';
+  previousMarks?: number;
+  newMarks: number;
+  semesterNo: number;
+  examType: string;
+  recordId: string;
+}
+
 export interface SubjectRecord {
   id: string;
   subjectCode: string;
@@ -4554,6 +4563,34 @@ export class SQLiteDB {
     };
   }
 
+  public async findStudentSubjectMark(
+    studentId: string,
+    subjectCode: string,
+    semesterNo: number = 3,
+    examType: string = 'Unit Test 1'
+  ): Promise<{ exists: boolean; marks?: number; grade?: string } | null> {
+    const cleanCode = String(subjectCode).trim().toUpperCase();
+    const cleanExamType = String(examType || 'Unit Test 1').trim();
+    const semNo = Number(semesterNo) || 3;
+
+    const existing = await queryAll<any>('SELECT * FROM academic_records WHERE student_id = ?', [studentId]);
+    const semRecord = existing.find((r) =>
+      Number(r.semester_no) === semNo &&
+      (r.exam_type || 'Internal').trim().toLowerCase() === cleanExamType.toLowerCase()
+    );
+
+    if (!semRecord || !semRecord.subjects_json) return null;
+    const subjectsList: any[] = safeParseJson(semRecord.subjects_json, []);
+    const match = subjectsList.find((s) => String(s.subjectCode || s.code).trim().toUpperCase() === cleanCode);
+    if (!match) return null;
+
+    return {
+      exists: true,
+      marks: Number(match.marks),
+      grade: match.grade
+    };
+  }
+
   public async upsertStudentSubjectMark(
     studentId: string,
     subjectCode: string,
@@ -4561,14 +4598,16 @@ export class SQLiteDB {
     marks: number,
     semesterNo: number = 3,
     examType: string = 'Unit Test 1'
-  ): Promise<void> {
+  ): Promise<UpsertMarkResult> {
     const cleanCode = String(subjectCode).trim().toUpperCase();
     const cleanTitle = String(subjectTitle).trim();
     const cleanExamType = String(examType || 'Unit Test 1').trim();
+    const semNo = Number(semesterNo) || 3;
+    const numMarks = Number(marks);
 
     const existing = await queryAll<any>('SELECT * FROM academic_records WHERE student_id = ?', [studentId]);
     let semRecord = existing.find((r) =>
-      Number(r.semester_no) === Number(semesterNo) &&
+      Number(r.semester_no) === semNo &&
       (r.exam_type || 'Internal').trim().toLowerCase() === cleanExamType.toLowerCase()
     );
 
@@ -4583,43 +4622,65 @@ export class SQLiteDB {
       code: cleanCode,
       subjectTitle: cleanTitle,
       title: cleanTitle,
-      marks: Number(marks),
+      marks: numMarks,
       maxMarks: 100,
-      grade: marks >= 90 ? 'O' : (marks >= 80 ? 'A+' : (marks >= 70 ? 'A' : (marks >= 60 ? 'B+' : (marks >= 50 ? 'B' : 'U')))),
+      grade: numMarks >= 90 ? 'O' : (numMarks >= 80 ? 'A+' : (numMarks >= 70 ? 'A' : (numMarks >= 60 ? 'B+' : (numMarks >= 50 ? 'B' : 'U')))),
       credits: 3
     };
 
+    let action: 'CREATED' | 'UPDATED' | 'SKIPPED' = 'CREATED';
+    let previousMarks: number | undefined;
+
     if (idx >= 0) {
-      subjectsList[idx] = markEntry;
+      previousMarks = Number(subjectsList[idx].marks);
+      if (previousMarks === numMarks) {
+        action = 'SKIPPED';
+      } else {
+        action = 'UPDATED';
+        subjectsList[idx] = markEntry;
+      }
     } else {
+      action = 'CREATED';
       subjectsList.push(markEntry);
     }
 
-    const totalMarksSum = subjectsList.reduce((acc, s) => acc + (Number(s.marks) || 0), 0);
-    const avgScore = subjectsList.length > 0 ? totalMarksSum / subjectsList.length : 0;
-    const computedSgpa = Math.min(10.0, Math.round((avgScore / 10) * 100) / 100);
+    let recordId = semRecord?.id;
+    if (action !== 'SKIPPED') {
+      const totalMarksSum = subjectsList.reduce((acc, s) => acc + (Number(s.marks) || 0), 0);
+      const avgScore = subjectsList.length > 0 ? totalMarksSum / subjectsList.length : 0;
+      const computedSgpa = Math.min(10.0, Math.round((avgScore / 10) * 100) / 100);
 
-    const now = new Date().toISOString();
+      const now = new Date().toISOString();
 
-    if (semRecord) {
+      if (semRecord) {
+        await executeRun(`
+          UPDATE academic_records
+          SET subjects_json = ?, sgpa = ?, cgpa = ?
+          WHERE id = ?
+        `, [JSON.stringify(subjectsList), computedSgpa, computedSgpa, semRecord.id]);
+      } else {
+        recordId = `acad-${studentId}-sem${semNo}-${cleanExamType.replace(/\s+/g, '')}-${Date.now()}`;
+        await executeRun(`
+          INSERT INTO academic_records (id, student_id, semester_no, sgpa, cgpa, total_credits, subjects_json, exam_type, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [recordId, studentId, semNo, computedSgpa, computedSgpa, subjectsList.length * 3, JSON.stringify(subjectsList), cleanExamType, now]);
+      }
+
       await executeRun(`
-        UPDATE academic_records
-        SET subjects_json = ?, sgpa = ?, cgpa = ?
+        UPDATE students
+        SET cgpa = ?
         WHERE id = ?
-      `, [JSON.stringify(subjectsList), computedSgpa, computedSgpa, semRecord.id]);
-    } else {
-      const recId = `acad-${studentId}-sem${semesterNo}-${cleanExamType.replace(/\s+/g, '')}-${Date.now()}`;
-      await executeRun(`
-        INSERT INTO academic_records (id, student_id, semester_no, sgpa, cgpa, total_credits, subjects_json, exam_type, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [recId, studentId, semesterNo, computedSgpa, computedSgpa, subjectsList.length * 3, JSON.stringify(subjectsList), cleanExamType, now]);
+      `, [computedSgpa, studentId]);
     }
 
-    await executeRun(`
-      UPDATE students
-      SET cgpa = ?
-      WHERE id = ?
-    `, [computedSgpa, studentId]);
+    return {
+      action,
+      previousMarks,
+      newMarks: numMarks,
+      semesterNo: semNo,
+      examType: cleanExamType,
+      recordId: recordId || ''
+    };
   }
 
   public async getAcademicRecords(filters: {
