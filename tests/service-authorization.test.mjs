@@ -22,7 +22,7 @@ const database = {
   getAttachmentById: async id => ({ id, student_id: id === 'own' ? 'student' : 'other-student', file_data: Buffer.from('memory-only-proof'), original_file_name: 'fixture.pdf', mime_type: 'application/pdf' })
 };
 isolateServer(database, {}, { namedModules: {
-  '../postgresAdapter.js': { executeRun: forbiddenDependency, queryOne: forbiddenDependency, queryAll: forbiddenDependency, isPostgresActive: () => false },
+  '../postgresAdapter.js': { executeRun: forbiddenDependency, queryOne: forbiddenDependency, queryAll: forbiddenDependency, isPostgresActive: () => false, executeTransaction: forbiddenDependency },
   '../storage.js': { MAX_FILE_SIZE_BYTES: 1024, MSG_FILE_TOO_LARGE: 'fixture limit', DANGEROUS_EXTENSIONS: new Set(), PROOF_ALLOWED_EXTENSIONS: new Set(['.pdf']), PROJECT_ALLOWED_EXTENSIONS: new Set(), validateUploadedFile: forbiddenDependency, uploadFileToStorage: forbiddenDependency, downloadFileFromStorage: forbiddenDependency, deleteFileFromStorage: forbiddenDependency, getMimeFromPath: () => 'application/pdf' },
   '../services/skilledgeSync.js': { syncDepartmentSkillEdge: async () => { syncCalls++; return { isolated: true }; }, syncStudentSkillEdge: forbiddenDependency }
 } });

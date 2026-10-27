@@ -6,46 +6,33 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 }
 
-const PORTAL_META: Record<Role, { title: string; manifest: string; shortName: string }> = {
-  STUDENT: {
-    title: 'AVSEC Salem — Student Portal',
-    manifest: '/manifest-student.webmanifest',
-    shortName: 'Install Student App'
-  },
-  FACULTY: {
-    title: 'AVSEC Salem — Faculty Workspace',
-    manifest: '/manifest-faculty.webmanifest',
-    shortName: 'Install Faculty App'
-  },
-  HOD: {
-    title: 'AVSEC Salem — HOD Executive Portal',
-    manifest: '/manifest-hod.webmanifest',
-    shortName: 'Install HOD App'
-  },
-  ADMIN: {
-    title: 'AVSEC Salem — Department Administrator',
-    manifest: '/manifest-admin.webmanifest',
-    shortName: 'Install Admin App'
-  }
+const PORTAL_TITLES: Record<Role, string> = {
+  STUDENT: 'AVSEC-SALEM — Student Portal',
+  FACULTY: 'AVSEC-SALEM — Faculty Workspace',
+  HOD: 'AVSEC-SALEM — HOD Executive Portal',
+  ADMIN: 'AVSEC-SALEM — Department Administrator'
 };
 
-export function usePortalPwa(role: Role) {
+export function usePortalPwa(role?: Role) {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
-    // 1. Dynamic Manifest & Title Switcher
-    const meta = PORTAL_META[role];
-    if (meta) {
-      document.title = meta.title;
-      let manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null;
-      if (!manifestLink) {
-        manifestLink = document.createElement('link');
-        manifestLink.rel = 'manifest';
-        document.head.appendChild(manifestLink);
-      }
-      manifestLink.href = meta.manifest;
+    // 1. Unified Manifest & Title
+    if (role && PORTAL_TITLES[role]) {
+      document.title = PORTAL_TITLES[role];
+    } else {
+      document.title = 'AVSEC-SALEM — AI & DS Department Portal';
     }
+
+    // Ensure link rel="manifest" always points to canonical /manifest.webmanifest
+    let manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null;
+    if (!manifestLink) {
+      manifestLink = document.createElement('link');
+      manifestLink.rel = 'manifest';
+      document.head.appendChild(manifestLink);
+    }
+    manifestLink.href = '/manifest.webmanifest';
 
     // 2. Check if already running in standalone PWA window
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
@@ -97,6 +84,6 @@ export function usePortalPwa(role: Role) {
     canInstall: Boolean(installPrompt) && !isInstalled,
     isInstalled,
     triggerInstall,
-    buttonLabel: PORTAL_META[role]?.shortName || 'Install Application'
+    buttonLabel: 'Install AVSEC-SALEM'
   };
 }

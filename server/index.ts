@@ -15,6 +15,7 @@ import subjectsRoutes from './routes/subjects.js';
 import rankingsRoutes from './routes/rankings.js';
 import skilledgeRoutes from './routes/skilledge.js';
 import disciplineRoutes from './routes/discipline.js';
+import integrationRoutes from './routes/integration.js';
 import { disciplinePortalAuthRouter, disciplinePortalRouter } from './routes/disciplinePortal.js';
 
 const app = express();
@@ -122,6 +123,7 @@ app.use('/api/subjects', subjectsRoutes);
 app.use('/api/rankings', rankingsRoutes);
 app.use('/api/skilledge', skilledgeRoutes);
 app.use('/api/discipline', disciplineRoutes);
+app.use('/api/integration', integrationRoutes);
 app.use('/api/discipline-portal/auth', disciplinePortalAuthRouter);
 app.use('/api/discipline-portal', disciplinePortalRouter);
 

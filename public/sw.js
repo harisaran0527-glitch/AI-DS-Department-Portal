@@ -1,13 +1,13 @@
 // AVSEC Salem AI & DS Department Portal — Service Worker
-const CACHE_NAME = 'avsec-aids-portal-v5';
+const CACHE_NAME = 'avsec-salem-pwa-v6';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
+  '/manifest.webmanifest',
   '/images/avsec-salem-logo.png',
-  '/manifest-student.webmanifest',
-  '/manifest-faculty.webmanifest',
-  '/manifest-hod.webmanifest',
-  '/manifest-admin.webmanifest'
+  '/images/pwa-icon-192.png',
+  '/images/pwa-icon-512.png',
+  '/images/pwa-icon-maskable-512.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -65,4 +65,3 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
-

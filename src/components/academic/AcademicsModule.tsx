@@ -48,7 +48,14 @@ export const AcademicsModule: React.FC<AcademicsModuleProps> = ({
   const [subjectFile, setSubjectFile] = useState<File | null>(null);
   const [subjectParsing, setSubjectParsing] = useState<boolean>(false);
   const [subjectPreviewResult, setSubjectPreviewResult] = useState<{
-    summary: { totalRowsProcessed: number; validCount: number; invalidCount: number };
+    summary: {
+      totalRowsProcessed: number;
+      validCount: number;
+      invalidCount: number;
+      newCount?: number;
+      updateCount?: number;
+      identicalCount?: number;
+    };
     validRows: any[];
     invalidRows: any[];
   } | null>(null);
@@ -64,7 +71,14 @@ export const AcademicsModule: React.FC<AcademicsModuleProps> = ({
   const [marksFile, setMarksFile] = useState<File | null>(null);
   const [marksParsing, setMarksParsing] = useState<boolean>(false);
   const [marksPreviewResult, setMarksPreviewResult] = useState<{
-    summary: { totalRowsProcessed: number; validCount: number; invalidCount: number };
+    summary: {
+      totalRowsProcessed: number;
+      validCount: number;
+      invalidCount: number;
+      newCount?: number;
+      updateCount?: number;
+      identicalCount?: number;
+    };
     validRows: any[];
     invalidRows: any[];
   } | null>(null);

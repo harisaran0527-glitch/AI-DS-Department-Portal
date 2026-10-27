@@ -4,7 +4,17 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { db, normalizeYear, normalizeSection, normalizeSemester } from '../db.js';
-import { executeRun, queryAll, queryOne, isPostgresActive } from '../postgresAdapter.js';
+import { executeRun, queryAll, queryOne, isPostgresActive, executeTransaction } from '../postgresAdapter.js';
+
+function safeParseJson<T = any>(val: any, fallback: T): T {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === 'object') return val as T;
+  try {
+    return JSON.parse(val);
+  } catch {
+    return fallback;
+  }
+}
 import { authenticateToken, requireRole, verifyFacultySectionAccess, AuthRequest, getRouteParam } from '../middleware/auth.js';
 import { calculateCategoryScores, computeOverallScore } from '../scoringEngine.js';
 import { generateSecureRandomPassword } from '../services/security.js';
@@ -249,7 +259,7 @@ router.get('/students/:studentId/360', verifyFacultySectionAccess, async (req: A
 });
 
 // Helper function to recalculate ONLY the affected student's score and update section rank atomically
-async function recalculateAffectedStudentScore(studentId: string): Promise<{ overallScore: number; profile: any }> {
+export async function recalculateAffectedStudentScore(studentId: string): Promise<{ overallScore: number; profile: any }> {
   const full360 = await db.getStudent360(studentId);
   if (!full360 || !full360.student) {
     return { overallScore: 0, profile: null };
@@ -1459,8 +1469,8 @@ router.post('/attendance', async (req: AuthRequest, res: Response) => {
       if (studentIds.length > 0) {
         const assignment = await db.getFacultyAssignment(req.user!.id, { fresh: true });
         const facultyUser = await db.getUserById(req.user!.id);
-        const assignedYear = assignment?.is_active ? assignment.year : (facultyUser?.year || req.user!.year);
-        const assignedSection = assignment?.is_active ? assignment.section : (facultyUser?.section || req.user!.section);
+        const assignedYear = assignment?.is_active ? assignment.year : (facultyUser?.year || req.user!.assignedYear);
+        const assignedSection = assignment?.is_active ? assignment.section : (facultyUser?.section || req.user!.assignedSection);
         const cleanAssignedYear = normalizeYear(assignedYear);
         const cleanAssignedSec = normalizeSection(assignedSection);
 
@@ -1573,8 +1583,8 @@ router.post('/attendance/import-confirm', async (req: AuthRequest, res: Response
     if (req.user!.role !== 'ADMIN' && req.user!.role !== 'HOD') {
       const assignment = await db.getFacultyAssignment(req.user!.id, { fresh: true });
       const facultyUser = await db.getUserById(req.user!.id);
-      const assignedYear = assignment?.is_active ? assignment.year : (facultyUser?.year || req.user!.year);
-      const assignedSection = assignment?.is_active ? assignment.section : (facultyUser?.section || req.user!.section);
+      const assignedYear = assignment?.is_active ? assignment.year : (facultyUser?.year || req.user!.assignedYear);
+      const assignedSection = assignment?.is_active ? assignment.section : (facultyUser?.section || req.user!.assignedSection);
       const cleanAssignedYear = normalizeYear(assignedYear);
       const cleanAssignedSec = normalizeSection(assignedSection);
 
@@ -1601,8 +1611,8 @@ router.post('/attendance/import-confirm', async (req: AuthRequest, res: Response
     await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'BULK_IMPORT_ATTENDANCE', `RECORDS:${result.importedCount}:STUDENTS:${result.updatedStudentsCount}`);
 
     const resultPayload = {
-      message: 'Monthly bulk attendance imported successfully.',
-      ...result
+      ...result,
+      message: result.message || 'Monthly bulk attendance imported successfully.'
     };
 
     if (importId && lockAcquired) {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API } from '../../services/api';
-import { User, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { ForgotPasswordModal } from '../common/ForgotPasswordModal';
 
 export const SimpleAdminLogin: React.FC = () => {
@@ -73,7 +73,17 @@ setErrorMessage('');
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-cyan-400/15 blur-[130px] rounded-full pointer-events-none z-0" />
 
       {/* CLEAN SIMPLE PREMIUM ADMIN LOGIN CARD (z-10) */}
-      <div className="relative z-10 w-full max-w-[400px]">
+      <div className="relative z-10 w-full max-w-[400px] space-y-3">
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1B205F]/90 hover:bg-[#1B205F] text-xs font-mono text-cyan-300 hover:text-white border border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.15)] transition-all cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Portal Hub</span>
+          </button>
+        </div>
         
         {authStatus === 'success' ? (
           /* Admin Access Granted Display */

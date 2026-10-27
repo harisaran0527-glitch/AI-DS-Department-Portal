@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { UniversalPortalHub } from './pages/hub/UniversalPortalHub';
 import { StudentLogin } from './pages/logins/StudentLogin';
 import { FacultyLogin } from './pages/logins/FacultyLogin';
 import { HODLogin } from './pages/logins/HODLogin';
@@ -17,35 +18,30 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 import { ThemeProvider } from './context/ThemeContext';
 
-// Dynamic manifest & title syncer per route for four independent PWAs
+// Dynamic title syncer preserving canonical AVSEC-SALEM manifest
 const PwaManifestSyncer: React.FC = () => {
   const location = useLocation();
 
   useEffect(() => {
     const path = location.pathname.toLowerCase();
-    let manifest = '/manifest.webmanifest';
-    let title = 'AVSEC Salem — AI & Data Science Department Portal';
+    let title = 'AVSEC-SALEM — AI & DS Department Portal';
 
-    if (path.startsWith('/discipline')) {
-      title = 'AVS Engineering College — Discipline Monitoring System';
-    } else if (path.startsWith('/student')) {
-      manifest = '/manifest-student.webmanifest';
-      title = 'AVSEC Salem — Student Portal';
+    if (path.startsWith('/student')) {
+      title = 'AVSEC-SALEM — Student Portal';
     } else if (path.startsWith('/faculty')) {
-      manifest = '/manifest-faculty.webmanifest';
-      title = 'AVSEC Salem — Faculty Workspace';
+      title = 'AVSEC-SALEM — Faculty Workspace';
     } else if (path.startsWith('/hod')) {
-      manifest = '/manifest-hod.webmanifest';
-      title = 'AVSEC Salem — HOD Executive Portal';
+      title = 'AVSEC-SALEM — HOD Executive Portal';
     } else if (path.startsWith('/admin')) {
-      manifest = '/manifest-admin.webmanifest';
-      title = 'AVSEC Salem — Department Administrator';
+      title = 'AVSEC-SALEM — Department Administrator';
+    } else if (path.startsWith('/discipline')) {
+      title = 'AVS Engineering College — Discipline System';
     }
 
     document.title = title;
     const manifestEl = document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null;
     if (manifestEl) {
-      manifestEl.href = manifest;
+      manifestEl.href = '/manifest.webmanifest';
     }
   }, [location.pathname]);
 
@@ -59,9 +55,8 @@ export const App: React.FC = () => {
         <PwaManifestSyncer />
         <ErrorBoundary fallbackTitle="Department Portal Application Error">
           <Routes>
-            {/* Default root route redirects to Student Login */}
-            <Route path="/" element={<Navigate to={import.meta.env.VITE_DISCIPLINE_PORTAL === 'true' ? '/discipline/login' : '/student'} replace />} />
-            <Route path="/discipline/login" element={<DisciplineLogin />} />
+            {/* Common Entry Point: AVSEC Salem Splash + Futuristic Universal Portal Hub */}
+            <Route path="/" element={<UniversalPortalHub />} />
 
             {/* Four Completely Separate Portal Login Routes */}
             <Route path="/student" element={<LoginRoute role="STUDENT"><StudentLogin /></LoginRoute>} />
@@ -90,9 +85,6 @@ export const App: React.FC = () => {
                 </ProtectedRoute>
               }
             />
-            <Route path="/faculty/discipline" element={<Navigate to="/discipline/login" replace />} />
-            <Route path="/discipline-issues" element={<Navigate to="/discipline/login" replace />} />
-            <Route path="/discipline" element={<DisciplineIssuePage />} />
             <Route
               path="/hod/dashboard"
               element={
@@ -114,8 +106,13 @@ export const App: React.FC = () => {
               }
             />
 
+            {/* Independent Discipline Isolated Routes */}
+            <Route path="/discipline/login" element={<DisciplineLogin />} />
+            <Route path="/discipline-issues" element={<Navigate to="/discipline/login" replace />} />
+            <Route path="/discipline" element={<DisciplineIssuePage />} />
+
             {/* Fallback for Unknown Paths */}
-            <Route path="*" element={<Navigate to={import.meta.env.VITE_DISCIPLINE_PORTAL === 'true' ? '/discipline/login' : '/student'} replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </ErrorBoundary>
       </BrowserRouter>

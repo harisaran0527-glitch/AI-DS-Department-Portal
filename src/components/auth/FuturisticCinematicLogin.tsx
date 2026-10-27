@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API } from '../../services/api';
-import { User, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, ShieldCheck, Sparkles } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, ShieldCheck, Sparkles, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ForgotPasswordModal } from '../common/ForgotPasswordModal';
 import { ParticleField } from './ParticleField';
@@ -150,7 +150,18 @@ setErrorMessage('');
       </div>
 
       {/* MAIN CONTAINER FOR LOGIN TERMINAL AND SCROLL-DOWN CARDS */}
-      <div className="relative z-10 w-full max-w-[460px] my-auto px-2 sm:px-0 space-y-10">
+      <div className="relative z-10 w-full max-w-[460px] my-auto px-2 sm:px-0 space-y-4">
+        {/* BACK TO PORTAL HUB NAVIGATION */}
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#071A3D]/90 hover:bg-[#0B2559] text-xs font-mono text-cyan-300 hover:text-white border border-[#1E4D8F]/60 shadow-[0_0_12px_rgba(34,211,238,0.12)] transition-all cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Portal Hub</span>
+          </button>
+        </div>
         <motion.div
           initial={{ opacity: 0, y: 28, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}

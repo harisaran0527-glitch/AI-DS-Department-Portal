@@ -208,7 +208,7 @@ export function clearSessionAuth(role?: string): void {
 
 const inFlightGetRequests = new Map<string, Promise<any>>();
 
-export async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+export async function request<T>(endpoint: string, options: RequestInit & { timeoutMs?: number } = {}): Promise<T> {
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const defaultHeaders: Record<string, string> = isFormData ? {} : { 'Content-Type': 'application/json' };
   const method = (options.method || 'GET').toUpperCase();

@@ -690,8 +690,8 @@ router.post('/attendance/import-confirm', async (req: AuthRequest, res: Response
     await db.logAudit(req.user!.id, req.user!.email, req.user!.role, 'ADMIN_BULK_IMPORT_ATTENDANCE', `RECORDS:${result.importedCount}:STUDENTS:${result.updatedStudentsCount}`);
 
     const resultPayload = {
-      message: 'Monthly bulk attendance imported successfully by Admin.',
-      ...result
+      ...result,
+      message: result.message || 'Monthly bulk attendance imported successfully by Admin.'
     };
 
     if (importId && lockAcquired) {

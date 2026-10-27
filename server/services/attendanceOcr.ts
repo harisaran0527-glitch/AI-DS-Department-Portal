@@ -304,7 +304,7 @@ Example output:
 
             return {
               id: `gemini-${idx + 1}-${Math.random().toString(36).substring(2, 6)}`,
-              registerNo,
+              registerNo: regNo,
               studentName,
               date: item.date || fallbackDate,
               status: normStatus,

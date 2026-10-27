@@ -280,7 +280,7 @@ export const FacultyDashboard: React.FC = () => {
   const [isOcrProcessing, setIsOcrProcessing] = useState(false);
   const [ocrStatusMessage, setOcrStatusMessage] = useState('');
   const [editableOcrRows, setEditableOcrRows] = useState<ExtractedAttendanceRow[]>([]);
-  const [ocrWarnings, setOcrWarnings] = useState<string[]>([]);
+  const [, setOcrWarnings] = useState<string[]>([]);
   const [isDraggingBulk, setIsDraggingBulk] = useState(false);
 
   // --- CERTIFICATE FORM & UPLOAD MODAL STATE ---
@@ -957,7 +957,7 @@ export const FacultyDashboard: React.FC = () => {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `attendance_template_${currentYear ? currentYear.replace(/\s+/g, '_') : 'class'}_Sec_${currentSection || 'A'}.csv`;
+    link.download = `attendance_template_${assignedYear ? assignedYear.replace(/\s+/g, '_') : 'class'}_Sec_${assignedSection || 'A'}.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
   };
@@ -981,7 +981,7 @@ export const FacultyDashboard: React.FC = () => {
     const worksheet = XLSX.utils.json_to_sheet(templateRows);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Attendance');
-    XLSX.writeFile(workbook, `attendance_template_${currentYear ? currentYear.replace(/\s+/g, '_') : 'class'}_Sec_${currentSection || 'A'}.xlsx`);
+    XLSX.writeFile(workbook, `attendance_template_${assignedYear ? assignedYear.replace(/\s+/g, '_') : 'class'}_Sec_${assignedSection || 'A'}.xlsx`);
   };
 
   const processAttendanceBulkFile = async (file: File) => {
@@ -1553,7 +1553,7 @@ export const FacultyDashboard: React.FC = () => {
         let normStatus = 'UNMARKED';
         if (short === 'P') normStatus = 'PRESENT';
         else if (short === 'A') normStatus = 'ABSENT';
-        else if (short === 'OD' || short === 'ON') normStatus = 'OD';
+        else if (short === 'OD') normStatus = 'OD';
         else if (short === 'ML') normStatus = 'ML';
         return {
           studentId: s.id,
@@ -3222,7 +3222,7 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                     const st = toShortAttendanceStatus(attStudentStatuses[stu.id]);
                     if (st === 'P') present++;
                     else if (st === 'A') absent++;
-                    else if (st === 'OD' || st === 'ON') od++;
+                    else if (st === 'OD') od++;
                     else if (st === 'ML') ml++;
                     else unmarked++;
                   });
@@ -4404,7 +4404,7 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                                       <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
                                         short === 'P' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
                                         short === 'A' ? 'bg-red-950 text-red-300 border border-red-800' :
-                                        short === 'OD' || short === 'ON' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                                        short === 'OD' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
                                         short === 'ML' ? 'bg-sky-950 text-sky-300 border border-sky-800' :
                                         'bg-slate-800 text-slate-400 border border-slate-700'
                                       }`}>

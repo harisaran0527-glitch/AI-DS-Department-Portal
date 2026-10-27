@@ -92,6 +92,7 @@ export function isolateServer(database, modules = {}, { loadRealDatabase = false
           currentRank: stu.current_rank !== undefined ? stu.current_rank : (stu.currentRank || 99),
           current_rank: stu.current_rank !== undefined ? stu.current_rank : (stu.currentRank || 99),
         }) : null;
+        export const safeParseJson = (val, fallback) => (val === null || val === undefined) ? fallback : (typeof val === 'object' ? val : (() => { try { return JSON.parse(val); } catch { return fallback; } })());
         export class SQLiteDB {}
       ` };
       if (url.startsWith('file:') && /\.tsx?$/.test(url)) {
