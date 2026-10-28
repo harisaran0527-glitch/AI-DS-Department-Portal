@@ -224,6 +224,34 @@ router.get('/record/:studentId/:recordType/:recordId', authenticateToken, async 
   });
 });
 
+async function fetchRemoteFormBuilderBuffer(storedFileName: string): Promise<{ buffer: Buffer; contentType?: string } | null> {
+  if (!storedFileName || (!storedFileName.startsWith("/api/files") && !storedFileName.startsWith("http"))) {
+    return null;
+  }
+  const formBuilderBase = (process.env.FORM_BUILDER_API_URL || "http://127.0.0.1:5000").replace(/\/api$/, "");
+  const url = storedFileName.startsWith("http") ? storedFileName : `${formBuilderBase}${storedFileName}`;
+  const syncKey = process.env.HOD_INTEGRATION_KEY?.trim();
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "Authorization": `Bearer ${syncKey}`,
+        "X-HOD-Integration-Key": syncKey || ""
+      }
+    });
+    if (res.ok) {
+      const arrayBuf = await res.arrayBuffer();
+      return {
+        buffer: Buffer.from(arrayBuf),
+        contentType: res.headers.get("content-type") || undefined
+      };
+    }
+  } catch (err: any) {
+    console.error("[HOD Files Proxy] Remote proof fetch failed:", err.message);
+  }
+  return null;
+}
+
 // GET View File inline
 router.get('/:fileId', authenticateToken, async (req: AuthRequest, res: Response) => {
   const fileId = req.params.fileId as string;
@@ -246,7 +274,14 @@ router.get('/:fileId', authenticateToken, async (req: AuthRequest, res: Response
     buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
   }
 
-  // 2. Secondary: Supabase Storage or local storage fallback
+  // 2. Secondary: Form Builder remote proxy fallback or Supabase Storage
+  if (!buffer) {
+    const remote = await fetchRemoteFormBuilderBuffer(att.stored_file_name);
+    if (remote) {
+      buffer = remote.buffer;
+      if (remote.contentType) contentType = remote.contentType;
+    }
+  }
   if (!buffer) {
     const fileData = await downloadFileFromStorage(att.stored_file_name);
     if (fileData) {
@@ -288,7 +323,14 @@ router.get('/:fileId/download', authenticateToken, async (req: AuthRequest, res:
     buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
   }
 
-  // 2. Secondary: Supabase Storage or local storage fallback
+  // 2. Secondary: Form Builder remote proxy fallback or Supabase Storage
+  if (!buffer) {
+    const remote = await fetchRemoteFormBuilderBuffer(att.stored_file_name);
+    if (remote) {
+      buffer = remote.buffer;
+      if (remote.contentType) contentType = remote.contentType;
+    }
+  }
   if (!buffer) {
     const fileData = await downloadFileFromStorage(att.stored_file_name);
     if (fileData) {
