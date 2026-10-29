@@ -85,6 +85,12 @@ router.post('/sync-submission', verifyIntegrationKey, async (req: Request, res: 
     const safeProofs = Array.isArray(proofFiles) ? proofFiles : [];
     const primaryProof = safeProofs[0] || null;
 
+    // Ensure table columns exist in database schema
+    await executeRun(`ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS mime_type TEXT;`).catch(() => {});
+    await executeRun(`ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS created_at TEXT;`).catch(() => {});
+    await executeRun(`ALTER TABLE project_records ADD COLUMN IF NOT EXISTS live_url TEXT;`).catch(() => {});
+    await executeRun(`ALTER TABLE project_records ADD COLUMN IF NOT EXISTS product_photo_path TEXT;`).catch(() => {});
+
     // 4. Synchronize based on templateKey
     if (templateKey === 'DEFAULT_CERTIFICATE') {
       const courseName = safeRecord.courseName || safeRecord.course_name || 'Certificate';

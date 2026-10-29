@@ -5729,6 +5729,10 @@ async function initVercelSchema(): Promise<void> {
       if (pgPool) {
         await pgPool.query(`ALTER TABLE subjects ADD COLUMN IF NOT EXISTS subject_abbreviation TEXT;`).catch(() => {});
         await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_subjects_code_ctx ON subjects(subject_code, year, semester, section);`).catch(() => {});
+        await pgPool.query(`ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS mime_type TEXT;`).catch(() => {});
+        await pgPool.query(`ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS created_at TEXT;`).catch(() => {});
+        await pgPool.query(`ALTER TABLE project_records ADD COLUMN IF NOT EXISTS live_url TEXT;`).catch(() => {});
+        await pgPool.query(`ALTER TABLE project_records ADD COLUMN IF NOT EXISTS product_photo_path TEXT;`).catch(() => {});
       }
     } catch (_err) {}
   }
