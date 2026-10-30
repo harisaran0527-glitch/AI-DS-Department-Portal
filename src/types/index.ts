@@ -169,11 +169,23 @@ export interface ParticipationRecord {
 export interface CertificateRecord {
   id: string;
   studentId: string;
+  student_id?: string;
   courseName: string;
-  platform: 'NPTEL' | 'Cisco' | 'Google' | 'IBM' | 'Infosys' | 'Coursera' | 'Great Learning' | 'Other';
+  course_name?: string;
+  platform: 'NPTEL' | 'Cisco' | 'Google' | 'IBM' | 'Infosys' | 'Coursera' | 'Great Learning' | 'Other' | string;
   category: string;
   issueDate: string;
+  issue_date?: string;
   certificateId?: string;
+  certificate_id?: string;
+  filePath?: string;
+  file_path?: string;
+  originalFileName?: string;
+  original_file_name?: string;
+  uploadedAt?: string;
+  uploaded_at?: string;
+  mimeType?: string;
+  mime_type?: string;
 }
 
 export interface AttendanceRecord {
@@ -220,6 +232,7 @@ export interface LeetCodeStats {
 export interface ProjectRecord {
   id: string;
   studentId: string;
+  student_id?: string;
   title: string;
   description: string;
   domain: string; // AI, Machine Learning, Web Dev, IoT, Data Science
@@ -228,10 +241,15 @@ export interface ProjectRecord {
   teamMembers?: string[];
   studentRole: string;
   githubUrl?: string;
+  github_url?: string;
   demoUrl?: string;
-  category: 'Mini Project' | 'Main Project' | 'Hackathon Project' | 'Research Project';
-  status: 'Planning' | 'In Progress' | 'Completed';
+  liveUrl?: string;
+  live_url?: string;
+  category: 'Mini Project' | 'Main Project' | 'Hackathon Project' | 'Research Project' | 'Software' | 'Hardware' | string;
+  status: 'Planning' | 'In Progress' | 'Completed' | string;
   prizeAwarded?: string;
+  productPhotoPath?: string;
+  product_photo_path?: string;
 }
 
 export interface AchievementRecord {

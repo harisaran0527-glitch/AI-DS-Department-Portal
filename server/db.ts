@@ -2023,9 +2023,12 @@ export class SQLiteDB {
       isTeam: Boolean(p.is_team),
       studentRole: p.student_role,
       githubUrl: p.github_url,
+      liveUrl: p.live_url || p.liveUrl || '',
       category: p.category,
       status: p.status,
-      prizeAwarded: p.prize_awarded
+      prizeAwarded: p.prize_awarded,
+      productPhotoPath: p.product_photo_path || p.productPhotoPath || '',
+      product_photo_path: p.product_photo_path || p.productPhotoPath || ''
     }));
 
     return {
@@ -2695,6 +2698,13 @@ export class SQLiteDB {
 
   public async saveCertificateRecords(studentId: string, records: any[]): Promise<void> {
     if (!Array.isArray(records)) return;
+    const existingCerts = await queryAll('SELECT * FROM certificate_records WHERE student_id = ?', [studentId]);
+    const existingMap = new Map<string, any>();
+    for (const c of existingCerts) {
+      existingMap.set(c.id, c);
+      if (c.course_name) existingMap.set(`name:${c.course_name.trim().toLowerCase()}`, c);
+    }
+
     await executeRun('DELETE FROM certificate_records WHERE student_id = ?', [studentId]);
     for (const r of records) {
       const recId = r.id || `cert-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
@@ -2703,10 +2713,19 @@ export class SQLiteDB {
       const category = r.category || 'Certification';
       const issueDate = r.issueDate || r.issue_date || new Date().toISOString().split('T')[0];
       const certId = r.certificateId || r.certificate_id || '';
+
+      const matchedExisting = existingMap.get(recId) || existingMap.get(`name:${courseName.trim().toLowerCase()}`);
+      const filePath = r.filePath !== undefined ? r.filePath : (r.file_path !== undefined ? r.file_path : (matchedExisting?.file_path || ''));
+      const originalFileName = r.originalFileName !== undefined ? r.originalFileName : (r.original_file_name !== undefined ? r.original_file_name : (matchedExisting?.original_file_name || ''));
+      const fileData = r.fileData !== undefined ? r.fileData : (r.file_data !== undefined ? r.file_data : (matchedExisting?.file_data || null));
+      const mimeType = r.mimeType !== undefined ? r.mimeType : (r.mime_type !== undefined ? r.mime_type : (matchedExisting?.mime_type || ''));
+      const uploadedAt = r.uploadedAt || r.uploaded_at || matchedExisting?.uploaded_at || new Date().toISOString();
+      const createdAt = r.createdAt || r.created_at || matchedExisting?.created_at || uploadedAt;
+
       await executeRun(`
-        INSERT INTO certificate_records (id, student_id, course_name, platform, category, issue_date, certificate_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [recId, studentId, courseName, platform, category, issueDate, certId]);
+        INSERT INTO certificate_records (id, student_id, course_name, platform, category, issue_date, certificate_id, file_path, original_file_name, file_data, mime_type, uploaded_at, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [recId, studentId, courseName, platform, category, issueDate, certId, filePath, originalFileName, fileData, mimeType, uploadedAt, createdAt]);
     }
   }
 
@@ -2733,6 +2752,13 @@ export class SQLiteDB {
 
   public async saveProjectRecords(studentId: string, records: any[]): Promise<void> {
     if (!Array.isArray(records)) return;
+    const existingProjects = await queryAll('SELECT * FROM project_records WHERE student_id = ?', [studentId]);
+    const existingMap = new Map<string, any>();
+    for (const p of existingProjects) {
+      existingMap.set(p.id, p);
+      if (p.title) existingMap.set(`title:${p.title.trim().toLowerCase()}`, p);
+    }
+
     await executeRun('DELETE FROM project_records WHERE student_id = ?', [studentId]);
     for (const r of records) {
       const recId = r.id || `proj-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
@@ -2747,10 +2773,14 @@ export class SQLiteDB {
       const category = r.category || 'Software';
       const status = r.status || 'Completed';
       const prizeAwarded = r.prizeAwarded || r.prize_awarded || '';
+
+      const matchedExisting = existingMap.get(recId) || existingMap.get(`title:${title.trim().toLowerCase()}`);
+      const productPhotoPath = r.productPhotoPath !== undefined ? r.productPhotoPath : (r.product_photo_path !== undefined ? r.product_photo_path : (matchedExisting?.product_photo_path || ''));
+
       await executeRun(`
-        INSERT INTO project_records (id, student_id, title, description, domain, tech_stack_json, is_team, student_role, github_url, live_url, category, status, prize_awarded)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [recId, studentId, title, description, domain, techStackJson, isTeam, studentRole, githubUrl, liveUrl, category, status, prizeAwarded]);
+        INSERT INTO project_records (id, student_id, title, description, domain, tech_stack_json, is_team, student_role, github_url, live_url, category, status, prize_awarded, product_photo_path)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [recId, studentId, title, description, domain, techStackJson, isTeam, studentRole, githubUrl, liveUrl, category, status, prizeAwarded, productPhotoPath]);
     }
   }
 
@@ -2770,6 +2800,10 @@ export class SQLiteDB {
 
   public async getCertificateById(certId: string): Promise<any> {
     return await queryOne('SELECT * FROM certificate_records WHERE id = ?', [certId]);
+  }
+
+  public async getProjectById(projId: string): Promise<any> {
+    return await queryOne('SELECT * FROM project_records WHERE id = ?', [projId]);
   }
 
   public async saveCertificateUpload(rec: {
@@ -3613,7 +3647,12 @@ export class SQLiteDB {
               globalRank: Number(row.lc_raw.global_rank || 0),
               proofs: row.leetcode_proofs || []
             } : (row.conn_lc?.provider_username ? { username: row.conn_lc.provider_username, totalSolved: 0, easySolved: 0, mediumSolved: 0, hardSolved: 0, contestRating: 1200, globalRank: 0, proofs: [] } : null),
-            projects: row.prj_raw || [],
+            projects: (row.prj_raw || []).map((p: any) => ({
+              ...p,
+              liveUrl: p.live_url || p.liveUrl || '',
+              productPhotoPath: p.product_photo_path || p.productPhotoPath || '',
+              product_photo_path: p.product_photo_path || p.productPhotoPath || ''
+            })),
             achievements: row.achievements || [],
             nptelProofs: row.nptel_proofs || [],
             connectedAccounts: row.connected_accounts || []
@@ -4767,13 +4806,53 @@ export class SQLiteDB {
     return (await queryOne<AttachmentRecord>('SELECT * FROM attachments WHERE id = ? AND is_deleted = 0', [id])) || undefined;
   }
 
-  public async getAttachmentForRecord(studentId: string, recordType: string, recordId: string): Promise<AttachmentRecord | undefined> {
+  public async getAttachmentByRecordId(recordId: string): Promise<AttachmentRecord | undefined> {
     return (await queryOne<AttachmentRecord>(`
-      SELECT id, student_id, record_type, record_id, original_file_name, stored_file_name, mime_type, file_size, uploaded_by_user_id, uploaded_by_role, uploaded_at, is_deleted
+      SELECT *
       FROM attachments
-      WHERE student_id = ? AND record_type = ? AND record_id = ? AND is_deleted = 0
+      WHERE record_id = ? AND is_deleted = 0
       ORDER BY uploaded_at DESC LIMIT 1
-    `, [studentId, recordType, recordId])) || undefined;
+    `, [recordId])) || undefined;
+  }
+
+  public async getAttachmentForRecord(studentId: string, recordType: string, recordId: string): Promise<AttachmentRecord | undefined> {
+    const cleanType = (recordType || '').toLowerCase().trim();
+    const isCert = cleanType === 'certificates' || cleanType === 'certificate';
+    const isProj = cleanType === 'projects' || cleanType === 'project';
+    const isPart = cleanType === 'participation' || cleanType === 'participations';
+
+    let typeClause = 'record_type = ?';
+    let params: any[] = [studentId, recordType, recordId];
+
+    if (isCert) {
+      typeClause = "(record_type = 'certificates' OR record_type = 'certificate')";
+      params = [studentId, recordId];
+    } else if (isProj) {
+      typeClause = "(record_type = 'projects' OR record_type = 'project')";
+      params = [studentId, recordId];
+    } else if (isPart) {
+      typeClause = "(record_type = 'participation' OR record_type = 'participations')";
+      params = [studentId, recordId];
+    }
+
+    const att = (await queryOne<AttachmentRecord>(`
+      SELECT *
+      FROM attachments
+      WHERE student_id = ? AND ${typeClause} AND record_id = ? AND is_deleted = 0
+      ORDER BY uploaded_at DESC LIMIT 1
+    `, params)) || undefined;
+
+    if (att) return att;
+
+    // Flexible fallback: if record_id matches without student_id filter
+    const fallbackAtt = (await queryOne<AttachmentRecord>(`
+      SELECT *
+      FROM attachments
+      WHERE ${typeClause} AND record_id = ? AND is_deleted = 0
+      ORDER BY uploaded_at DESC LIMIT 1
+    `, [recordId])) || undefined;
+
+    return fallbackAtt;
   }
 
   public async getAttachmentsForStudent(studentId: string): Promise<AttachmentRecord[]> {
@@ -5729,10 +5808,14 @@ async function initVercelSchema(): Promise<void> {
       if (pgPool) {
         await pgPool.query(`ALTER TABLE subjects ADD COLUMN IF NOT EXISTS subject_abbreviation TEXT;`).catch(() => {});
         await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_subjects_code_ctx ON subjects(subject_code, year, semester, section);`).catch(() => {});
+        await pgPool.query(`ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS file_data BYTEA;`).catch(() => {});
+        await pgPool.query(`ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS file_path TEXT;`).catch(() => {});
+        await pgPool.query(`ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS original_file_name TEXT;`).catch(() => {});
         await pgPool.query(`ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS mime_type TEXT;`).catch(() => {});
         await pgPool.query(`ALTER TABLE certificate_records ADD COLUMN IF NOT EXISTS created_at TEXT;`).catch(() => {});
         await pgPool.query(`ALTER TABLE project_records ADD COLUMN IF NOT EXISTS live_url TEXT;`).catch(() => {});
         await pgPool.query(`ALTER TABLE project_records ADD COLUMN IF NOT EXISTS product_photo_path TEXT;`).catch(() => {});
+        await pgPool.query(`ALTER TABLE attachments ADD COLUMN IF NOT EXISTS file_data BYTEA;`).catch(() => {});
       }
     } catch (_err) {}
   }

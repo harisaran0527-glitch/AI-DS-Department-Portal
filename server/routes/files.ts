@@ -11,7 +11,10 @@ import {
   validateUploadedFile,
   uploadFileToStorage,
   downloadFileFromStorage,
-  deleteFileFromStorage
+  deleteFileFromStorage,
+  getMimeFromPath,
+  detectMimeFromBuffer,
+  fetchRemoteFormBuilderBuffer
 } from '../storage.js';
 
 const router = Router();
@@ -202,101 +205,196 @@ router.get('/record/:studentId/:recordType/:recordId', authenticateToken, async 
     return res.status(403).json({ error: 'Unauthorized: Access forbidden.' });
   }
 
-  const att = await db.getAttachmentForRecord(studentId, recordType, recordId);
-  if (!att) {
-    return res.status(404).json({ error: 'No attachment found for this record.' });
+  let att = typeof db.getAttachmentForRecord === 'function' ? await db.getAttachmentForRecord(studentId, recordType, recordId) : null;
+  if (!att && typeof db.getAttachmentByRecordId === 'function') {
+    att = await db.getAttachmentByRecordId(recordId);
   }
 
-  return res.json({
-    attachment: {
-      id: att.id,
-      studentId: att.student_id,
-      recordType: att.record_type,
-      recordId: att.record_id,
-      originalFileName: att.original_file_name,
-      mimeType: att.mime_type,
-      fileSize: att.file_size,
-      uploadedAt: att.uploaded_at,
-      uploadedByRole: att.uploaded_by_role,
-      downloadUrl: `/api/files/${att.id}/download`,
-      viewUrl: `/api/files/${att.id}`
-    }
-  });
-});
-
-async function fetchRemoteFormBuilderBuffer(storedFileName: string): Promise<{ buffer: Buffer; contentType?: string } | null> {
-  if (!storedFileName || (!storedFileName.startsWith("/api/files") && !storedFileName.startsWith("http"))) {
-    return null;
-  }
-  const formBuilderBase = (process.env.FORM_BUILDER_API_URL || "http://127.0.0.1:5000").replace(/\/api$/, "");
-  const url = storedFileName.startsWith("http") ? storedFileName : `${formBuilderBase}${storedFileName}`;
-  const syncKey = process.env.HOD_INTEGRATION_KEY?.trim();
-
-  try {
-    const res = await fetch(url, {
-      headers: {
-        "Authorization": `Bearer ${syncKey}`,
-        "X-HOD-Integration-Key": syncKey || ""
+  if (att) {
+    return res.json({
+      attachment: {
+        id: att.id,
+        studentId: att.student_id,
+        recordType: att.record_type,
+        recordId: att.record_id,
+        originalFileName: att.original_file_name,
+        mimeType: att.mime_type,
+        fileSize: att.file_size,
+        uploadedAt: att.uploaded_at,
+        uploadedByRole: att.uploaded_by_role,
+        downloadUrl: `/api/files/${att.id}/download`,
+        viewUrl: `/api/files/${att.id}`
       }
     });
-    if (res.ok) {
-      const arrayBuf = await res.arrayBuffer();
-      return {
-        buffer: Buffer.from(arrayBuf),
-        contentType: res.headers.get("content-type") || undefined
-      };
-    }
-  } catch (err: any) {
-    console.error("[HOD Files Proxy] Remote proof fetch failed:", err.message);
   }
-  return null;
-}
+
+  // Synthesize attachment fallback for project records with product_photo_path
+  const cleanType = (recordType || '').toLowerCase().trim();
+  if (cleanType === 'projects' || cleanType === 'project') {
+    const proj = typeof db.getProjectById === 'function' ? await db.getProjectById(recordId) : null;
+    if (proj && (proj.product_photo_path || proj.productPhotoPath)) {
+      const photoPath = proj.product_photo_path || proj.productPhotoPath;
+      const ext = path.extname(photoPath || '.png');
+      return res.json({
+        attachment: {
+          id: recordId,
+          studentId: student.id,
+          recordType: 'projects',
+          recordId: proj.id,
+          originalFileName: `${proj.title || 'Project'}_Photo${ext}`,
+          mimeType: getMimeFromPath(photoPath),
+          fileSize: 0,
+          uploadedAt: new Date().toISOString(),
+          uploadedByRole: 'FACULTY',
+          downloadUrl: `/api/files/${recordId}/download`,
+          viewUrl: `/api/files/${recordId}`
+        }
+      });
+    }
+  }
+
+  // Synthesize attachment fallback for certificate records with file_path or file_data
+  if (cleanType === 'certificates' || cleanType === 'certificate') {
+    const cert = typeof db.getCertificateById === 'function' ? await db.getCertificateById(recordId) : null;
+    if (cert && (cert.file_path || cert.file_data || cert.proof_file_path)) {
+      const ext = path.extname(cert.original_file_name || cert.file_path || '.pdf');
+      return res.json({
+        attachment: {
+          id: recordId,
+          studentId: student.id,
+          recordType: 'certificates',
+          recordId: cert.id,
+          originalFileName: cert.original_file_name || `${cert.course_name || 'Certificate'}${ext}`,
+          mimeType: cert.mime_type || getMimeFromPath(cert.original_file_name || cert.file_path || '.pdf'),
+          fileSize: 0,
+          uploadedAt: cert.uploaded_at || new Date().toISOString(),
+          uploadedByRole: 'FACULTY',
+          downloadUrl: `/api/files/${recordId}/download`,
+          viewUrl: `/api/files/${recordId}`
+        }
+      });
+    }
+  }
+
+  return res.status(404).json({ error: 'No attachment found for this record.' });
+});
 
 // GET View File inline
 router.get('/:fileId', authenticateToken, async (req: AuthRequest, res: Response) => {
   const fileId = req.params.fileId as string;
 
-  const att = await db.getAttachmentById(fileId);
-  if (!att) {
-    return res.status(404).json({ error: 'Attachment not found.' });
+  let att = typeof db.getAttachmentById === 'function' ? await db.getAttachmentById(fileId) : null;
+  if (!att && typeof db.getAttachmentByRecordId === 'function') {
+    att = await db.getAttachmentByRecordId(fileId);
   }
 
-  const student = await db.getStudentById(att.student_id);
-  if (!student || !(await checkFilePermission(req, student))) {
-    return res.status(403).json({ error: 'Unauthorized access to requested file.' });
-  }
-
+  let student: any = null;
   let buffer: Buffer | null = null;
-  let contentType = att.mime_type;
+  let contentType = att?.mime_type || '';
+  let originalFileName = att?.original_file_name || 'attachment';
 
-  // 1. Primary: Database persistence (BYTEA)
-  if (att.file_data) {
-    buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
-  }
+  if (att) {
+    student = await db.getStudentById(att.student_id);
+    if (!student || !(await checkFilePermission(req, student))) {
+      return res.status(403).json({ error: 'Unauthorized access to requested file.' });
+    }
 
-  // 2. Secondary: Form Builder remote proxy fallback or Supabase Storage
-  if (!buffer) {
-    const remote = await fetchRemoteFormBuilderBuffer(att.stored_file_name);
-    if (remote) {
-      buffer = remote.buffer;
-      if (remote.contentType) contentType = remote.contentType;
+    // 1. Primary: Database persistence (BYTEA)
+    if (att.file_data) {
+      buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
+    }
+
+    // 2. Secondary: Form Builder remote proxy fallback or Supabase Storage
+    if (!buffer) {
+      const remote = await fetchRemoteFormBuilderBuffer(att.stored_file_name);
+      if (remote) {
+        buffer = remote.buffer;
+        if (remote.contentType) contentType = remote.contentType;
+      }
+    }
+    if (!buffer) {
+      const fileData = await downloadFileFromStorage(att.stored_file_name);
+      if (fileData) {
+        buffer = fileData.buffer;
+        if (fileData.contentType) contentType = fileData.contentType;
+      }
+    }
+  } else {
+    // Fallback: Check if fileId corresponds to a certificate record
+    const cert = typeof db.getCertificateById === 'function' ? await db.getCertificateById(fileId) : null;
+    if (cert) {
+      student = await db.getStudentById(cert.student_id);
+      if (!student || !(await checkFilePermission(req, student))) {
+        return res.status(403).json({ error: 'Unauthorized access to requested file.' });
+      }
+
+      const ext = path.extname(cert.original_file_name || cert.file_path || '.pdf');
+      originalFileName = cert.original_file_name || `${cert.course_name || 'Certificate'}${ext}`;
+      contentType = cert.mime_type || '';
+
+      if (cert.file_data) {
+        buffer = Buffer.isBuffer(cert.file_data) ? cert.file_data : Buffer.from(cert.file_data);
+      }
+      const certPath = cert.file_path || cert.proof_file_path || '';
+      if (!buffer && certPath) {
+        const remote = await fetchRemoteFormBuilderBuffer(certPath);
+        if (remote) {
+          buffer = remote.buffer;
+          if (remote.contentType) contentType = remote.contentType;
+        }
+      }
+      if (!buffer && certPath) {
+        const fileData = await downloadFileFromStorage(certPath);
+        if (fileData) {
+          buffer = fileData.buffer;
+          if (fileData.contentType) contentType = fileData.contentType;
+        }
+      }
+    } else {
+      // Fallback: Check if fileId corresponds to a project record
+      const proj = typeof db.getProjectById === 'function' ? await db.getProjectById(fileId) : null;
+      if (proj) {
+        student = await db.getStudentById(proj.student_id);
+        if (!student || !(await checkFilePermission(req, student))) {
+          return res.status(403).json({ error: 'Unauthorized access to requested file.' });
+        }
+
+        const projPath = proj.product_photo_path || '';
+        const ext = path.extname(projPath || '.png');
+        originalFileName = `${proj.title || 'Project'}_Photo${ext}`;
+
+        if (projPath) {
+          const remote = await fetchRemoteFormBuilderBuffer(projPath);
+          if (remote) {
+            buffer = remote.buffer;
+            if (remote.contentType) contentType = remote.contentType;
+          }
+        }
+        if (!buffer && projPath) {
+          const fileData = await downloadFileFromStorage(projPath);
+          if (fileData) {
+            buffer = fileData.buffer;
+            if (fileData.contentType) contentType = fileData.contentType;
+          }
+        }
+      }
     }
   }
-  if (!buffer) {
-    const fileData = await downloadFileFromStorage(att.stored_file_name);
-    if (fileData) {
-      buffer = fileData.buffer;
-      if (fileData.contentType) contentType = fileData.contentType;
-    }
+
+  if (!student && !buffer) {
+    return res.status(404).json({ error: 'Attachment not found.' });
   }
 
   if (!buffer) {
     return res.status(404).json({ error: 'File content missing from server storage.' });
   }
 
-  res.setHeader('Content-Type', contentType || 'application/octet-stream');
+  const detectedMime = detectMimeFromBuffer(buffer);
+  const finalContentType = contentType || detectedMime || getMimeFromPath(originalFileName);
+
+  res.setHeader('Content-Type', finalContentType);
   res.setHeader('Content-Length', buffer.length.toString());
-  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(att.original_file_name)}"`);
+  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(originalFileName)}"`);
   res.setHeader('Cache-Control', 'private, no-store');
   return res.send(buffer);
 });
@@ -305,38 +403,106 @@ router.get('/:fileId', authenticateToken, async (req: AuthRequest, res: Response
 router.get('/:fileId/download', authenticateToken, async (req: AuthRequest, res: Response) => {
   const fileId = req.params.fileId as string;
 
-  const att = await db.getAttachmentById(fileId);
-  if (!att) {
-    return res.status(404).json({ error: 'Attachment not found.' });
+  let att = typeof db.getAttachmentById === 'function' ? await db.getAttachmentById(fileId) : null;
+  if (!att && typeof db.getAttachmentByRecordId === 'function') {
+    att = await db.getAttachmentByRecordId(fileId);
   }
 
-  const student = await db.getStudentById(att.student_id);
-  if (!student || !(await checkFilePermission(req, student))) {
-    return res.status(403).json({ error: 'Unauthorized access to requested file.' });
-  }
-
+  let student: any = null;
   let buffer: Buffer | null = null;
-  let contentType = att.mime_type;
+  let contentType = att?.mime_type || '';
+  let originalFileName = att?.original_file_name || 'attachment';
 
-  // 1. Primary: Database persistence (BYTEA)
-  if (att.file_data) {
-    buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
-  }
+  if (att) {
+    student = await db.getStudentById(att.student_id);
+    if (!student || !(await checkFilePermission(req, student))) {
+      return res.status(403).json({ error: 'Unauthorized access to requested file.' });
+    }
 
-  // 2. Secondary: Form Builder remote proxy fallback or Supabase Storage
-  if (!buffer) {
-    const remote = await fetchRemoteFormBuilderBuffer(att.stored_file_name);
-    if (remote) {
-      buffer = remote.buffer;
-      if (remote.contentType) contentType = remote.contentType;
+    // 1. Primary: Database persistence (BYTEA)
+    if (att.file_data) {
+      buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
+    }
+
+    // 2. Secondary: Form Builder remote proxy fallback or Supabase Storage
+    if (!buffer) {
+      const remote = await fetchRemoteFormBuilderBuffer(att.stored_file_name);
+      if (remote) {
+        buffer = remote.buffer;
+        if (remote.contentType) contentType = remote.contentType;
+      }
+    }
+    if (!buffer) {
+      const fileData = await downloadFileFromStorage(att.stored_file_name);
+      if (fileData) {
+        buffer = fileData.buffer;
+        if (fileData.contentType) contentType = fileData.contentType;
+      }
+    }
+  } else {
+    // Fallback: Check if fileId corresponds to a certificate record
+    const cert = typeof db.getCertificateById === 'function' ? await db.getCertificateById(fileId) : null;
+    if (cert) {
+      student = await db.getStudentById(cert.student_id);
+      if (!student || !(await checkFilePermission(req, student))) {
+        return res.status(403).json({ error: 'Unauthorized access to requested file.' });
+      }
+
+      const ext = path.extname(cert.original_file_name || cert.file_path || '.pdf');
+      originalFileName = cert.original_file_name || `${cert.course_name || 'Certificate'}${ext}`;
+      contentType = cert.mime_type || '';
+
+      if (cert.file_data) {
+        buffer = Buffer.isBuffer(cert.file_data) ? cert.file_data : Buffer.from(cert.file_data);
+      }
+      const certPath = cert.file_path || cert.proof_file_path || '';
+      if (!buffer && certPath) {
+        const remote = await fetchRemoteFormBuilderBuffer(certPath);
+        if (remote) {
+          buffer = remote.buffer;
+          if (remote.contentType) contentType = remote.contentType;
+        }
+      }
+      if (!buffer && certPath) {
+        const fileData = await downloadFileFromStorage(certPath);
+        if (fileData) {
+          buffer = fileData.buffer;
+          if (fileData.contentType) contentType = fileData.contentType;
+        }
+      }
+    } else {
+      // Fallback: Check if fileId corresponds to a project record
+      const proj = typeof db.getProjectById === 'function' ? await db.getProjectById(fileId) : null;
+      if (proj) {
+        student = await db.getStudentById(proj.student_id);
+        if (!student || !(await checkFilePermission(req, student))) {
+          return res.status(403).json({ error: 'Unauthorized access to requested file.' });
+        }
+
+        const projPath = proj.product_photo_path || '';
+        const ext = path.extname(projPath || '.png');
+        originalFileName = `${proj.title || 'Project'}_Photo${ext}`;
+
+        if (projPath) {
+          const remote = await fetchRemoteFormBuilderBuffer(projPath);
+          if (remote) {
+            buffer = remote.buffer;
+            if (remote.contentType) contentType = remote.contentType;
+          }
+        }
+        if (!buffer && projPath) {
+          const fileData = await downloadFileFromStorage(projPath);
+          if (fileData) {
+            buffer = fileData.buffer;
+            if (fileData.contentType) contentType = fileData.contentType;
+          }
+        }
+      }
     }
   }
-  if (!buffer) {
-    const fileData = await downloadFileFromStorage(att.stored_file_name);
-    if (fileData) {
-      buffer = fileData.buffer;
-      if (fileData.contentType) contentType = fileData.contentType;
-    }
+
+  if (!student && !buffer) {
+    return res.status(404).json({ error: 'Attachment not found.' });
   }
 
   if (!buffer) {
@@ -348,12 +514,15 @@ router.get('/:fileId/download', authenticateToken, async (req: AuthRequest, res:
     req.user!.email,
     req.user!.role,
     'DOWNLOAD_FILE',
-    `FILE:${att.original_file_name} (Attachment:${att.id})`
+    `FILE:${originalFileName} (Attachment:${fileId})`
   );
 
-  res.setHeader('Content-Type', contentType || 'application/octet-stream');
+  const detectedMime = detectMimeFromBuffer(buffer);
+  const finalContentType = contentType || detectedMime || getMimeFromPath(originalFileName);
+
+  res.setHeader('Content-Type', finalContentType);
   res.setHeader('Content-Length', buffer.length.toString());
-  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(att.original_file_name)}"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(originalFileName)}"`);
   return res.send(buffer);
 });
 

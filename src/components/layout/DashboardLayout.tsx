@@ -13,7 +13,6 @@ export type MenuItem = {
 };
 
 import { ThemeToggle } from '../common/ThemeToggle';
-import { useTheme } from '../../context/ThemeContext';
 
 interface DashboardLayoutProps {
   portalRole: 'STUDENT' | 'FACULTY' | 'HOD' | 'ADMIN';
@@ -41,38 +40,6 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   children,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { theme } = useTheme();
-
-  // Apply dashboard theme while mounted inside portal dashboard, and reset to fixed dark on exit
-  useEffect(() => {
-    if (theme === 'light') {
-      document.documentElement.classList.add('light');
-      document.documentElement.classList.remove('dark');
-      document.documentElement.setAttribute('data-theme', 'light');
-      document.body.setAttribute('data-theme', 'light');
-    } else {
-      document.documentElement.classList.add('dark');
-      document.documentElement.classList.remove('light');
-      document.documentElement.setAttribute('data-theme', 'dark');
-      document.body.setAttribute('data-theme', 'dark');
-    }
-
-    return () => {
-      // Clean up when unmounting (leaving dashboard for any reason): restore fixed dark mode
-      document.documentElement.classList.remove('light');
-      document.documentElement.classList.add('dark');
-      document.documentElement.setAttribute('data-theme', 'dark');
-      document.body.setAttribute('data-theme', 'dark');
-    };
-  }, [theme]);
-
-  const handleLogoutWithThemeReset = () => {
-    document.documentElement.classList.remove('light');
-    document.documentElement.classList.add('dark');
-    document.documentElement.setAttribute('data-theme', 'dark');
-    document.body.setAttribute('data-theme', 'dark');
-    onLogout();
-  };
 
   // Lock body scroll when mobile navigation drawer is active
   useEffect(() => {
@@ -291,11 +258,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           <button
             onClick={() => {
               setMobileMenuOpen(false);
-              handleLogoutWithThemeReset();
+              onLogout();
             }}
-            className="w-full min-h-[44px] flex items-center justify-center space-x-2 bg-[#12161F] hover:bg-rose-950/80 hover:text-white border border-[#252B36] hover:border-rose-800 text-[#94A3B8] py-2.5 rounded-xl text-xs font-bold transition-all btn-action active:scale-95"
+            type="button"
+            className="btn-sidebar-logout w-full min-h-[44px] flex items-center justify-center space-x-2 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 shadow-sm"
           >
-            <LogOut className="w-4 h-4 text-rose-400" />
+            <LogOut className="w-4 h-4 shrink-0" />
             <span>Logout Portal</span>
           </button>
         </div>
@@ -325,13 +293,6 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           <div className="flex items-center space-x-3">
             <ThemeToggle />
             {headerActions}
-            <button
-              onClick={handleLogoutWithThemeReset}
-              className="flex items-center space-x-2 bg-[#12161F] hover:bg-rose-950/80 hover:text-white border border-[#252B36] hover:border-rose-800 text-[#94A3B8] px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all btn-action"
-            >
-              <LogOut className="w-3.5 h-3.5 text-[#64748B]" />
-              <span>Logout</span>
-            </button>
           </div>
         </header>
 

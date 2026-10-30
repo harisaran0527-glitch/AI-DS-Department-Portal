@@ -38,7 +38,8 @@ body {
   color: var(--portal-text) !important;
   overflow-x: hidden;
   min-height: 100vh;
-  transition: background-color 0.25s ease, color 0.25s ease;
+  /* Snappy, immediate theme response without heavy repaint lag */
+  transition: none;
 }
 
 #root {
@@ -536,6 +537,233 @@ html.light ::-webkit-scrollbar-thumb {
 }
 html.light ::-webkit-scrollbar-thumb:hover {
   background: #0284C7;
+}
+
+/* ============================================================
+   FORGOT PASSWORD BUTTON (HEADER) - ACCESSIBLE HIGH CONTRAST
+   ============================================================ */
+.btn-header-forgot {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1rem;
+  padding: 0.5rem 0.875rem;
+  min-height: 44px;
+  border-radius: 0.75rem;
+  border-width: 1px;
+  border-style: solid;
+  cursor: pointer;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Light Mode: Crisp Deep Indigo on Soft Lavender, WCAG AAA (>7:1 contrast) */
+html.light .btn-header-forgot,
+[data-theme="light"] .btn-header-forgot {
+  background-color: #EEF2FF !important;
+  border-color: #A5B4FC !important;
+  color: #312E81 !important;
+  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.12) !important;
+}
+
+html.light .btn-header-forgot:hover,
+[data-theme="light"] .btn-header-forgot:hover,
+html.light .btn-header-forgot:focus-visible,
+[data-theme="light"] .btn-header-forgot:focus-visible {
+  background-color: #E0E7FF !important;
+  border-color: #818CF8 !important;
+  color: #1E1B4B !important;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.2) !important;
+}
+
+html.light .btn-header-forgot svg,
+[data-theme="light"] .btn-header-forgot svg {
+  color: #4F46E5 !important;
+}
+
+html.light .btn-header-forgot:hover svg,
+[data-theme="light"] .btn-header-forgot:hover svg,
+html.light .btn-header-forgot:focus-visible svg,
+[data-theme="light"] .btn-header-forgot:focus-visible svg {
+  color: #4338CA !important;
+}
+
+html.light .btn-header-forgot span,
+[data-theme="light"] .btn-header-forgot span {
+  color: #312E81 !important;
+}
+
+html.light .btn-header-forgot:hover span,
+[data-theme="light"] .btn-header-forgot:hover span,
+html.light .btn-header-forgot:focus-visible span,
+[data-theme="light"] .btn-header-forgot:focus-visible span {
+  color: #1E1B4B !important;
+}
+
+/* Dark Mode: High Contrast Neon Indigo Accent */
+html.dark .btn-header-forgot,
+[data-theme="dark"] .btn-header-forgot {
+  background-color: rgba(30, 27, 75, 0.85) !important;
+  border-color: rgba(99, 102, 241, 0.5) !important;
+  color: #C7D2FE !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4) !important;
+}
+
+html.dark .btn-header-forgot:hover,
+[data-theme="dark"] .btn-header-forgot:hover,
+html.dark .btn-header-forgot:focus-visible,
+[data-theme="dark"] .btn-header-forgot:focus-visible {
+  background-color: rgba(49, 46, 129, 0.95) !important;
+  border-color: rgba(129, 140, 248, 0.75) !important;
+  color: #FFFFFF !important;
+}
+
+html.dark .btn-header-forgot svg,
+[data-theme="dark"] .btn-header-forgot svg {
+  color: #818CF8 !important;
+}
+
+html.dark .btn-header-forgot:hover svg,
+[data-theme="dark"] .btn-header-forgot:hover svg,
+html.dark .btn-header-forgot:focus-visible svg,
+[data-theme="dark"] .btn-header-forgot:focus-visible svg {
+  color: #A5B4FC !important;
+}
+
+html.dark .btn-header-forgot span,
+[data-theme="dark"] .btn-header-forgot span {
+  color: #C7D2FE !important;
+}
+
+html.dark .btn-header-forgot:hover span,
+[data-theme="dark"] .btn-header-forgot:hover span,
+html.dark .btn-header-forgot:focus-visible span,
+[data-theme="dark"] .btn-header-forgot:focus-visible span {
+  color: #FFFFFF !important;
+}
+
+/* ============================================================
+   SIDEBAR LOGOUT BUTTON - ACCESSIBLE HIGH CONTRAST (LIGHT & DARK)
+   ============================================================ */
+.btn-sidebar-logout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.625rem 1rem;
+  border-radius: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-width: 1px;
+  border-style: solid;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Light Mode: Clear rose surface, vibrant red icon, dark bold text */
+html.light .btn-sidebar-logout,
+[data-theme="light"] .btn-sidebar-logout {
+  background-color: #FFF1F2 !important;
+  border-color: #FECDD3 !important;
+  color: #9F1239 !important;
+  box-shadow: 0 1px 3px rgba(225, 29, 72, 0.1) !important;
+}
+
+html.light .btn-sidebar-logout:hover,
+[data-theme="light"] .btn-sidebar-logout:hover,
+html.light .btn-sidebar-logout:focus-visible,
+[data-theme="light"] .btn-sidebar-logout:focus-visible {
+  background-color: #FFE4E6 !important;
+  border-color: #FDA4AF !important;
+  color: #881337 !important;
+  box-shadow: 0 2px 6px rgba(225, 29, 72, 0.18) !important;
+}
+
+html.light .btn-sidebar-logout svg,
+[data-theme="light"] .btn-sidebar-logout svg {
+  color: #E11D48 !important;
+}
+
+html.light .btn-sidebar-logout:hover svg,
+[data-theme="light"] .btn-sidebar-logout:hover svg,
+html.light .btn-sidebar-logout:focus-visible svg,
+[data-theme="light"] .btn-sidebar-logout:focus-visible svg {
+  color: #BE123C !important;
+}
+
+html.light .btn-sidebar-logout span,
+[data-theme="light"] .btn-sidebar-logout span {
+  color: #9F1239 !important;
+}
+
+html.light .btn-sidebar-logout:hover span,
+[data-theme="light"] .btn-sidebar-logout:hover span,
+html.light .btn-sidebar-logout:focus-visible span,
+[data-theme="light"] .btn-sidebar-logout:focus-visible span {
+  color: #881337 !important;
+}
+
+/* Dark Mode: Deep crimson/rose slate surface, bright rose text */
+html.dark .btn-sidebar-logout,
+[data-theme="dark"] .btn-sidebar-logout {
+  background-color: rgba(159, 18, 57, 0.22) !important;
+  border-color: rgba(244, 63, 94, 0.38) !important;
+  color: #FECDD3 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35) !important;
+}
+
+html.dark .btn-sidebar-logout:hover,
+[data-theme="dark"] .btn-sidebar-logout:hover,
+html.dark .btn-sidebar-logout:focus-visible,
+[data-theme="dark"] .btn-sidebar-logout:focus-visible {
+  background-color: rgba(225, 29, 72, 0.35) !important;
+  border-color: rgba(244, 63, 94, 0.65) !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 2px 8px rgba(225, 29, 72, 0.25) !important;
+}
+
+html.dark .btn-sidebar-logout svg,
+[data-theme="dark"] .btn-sidebar-logout svg {
+  color: #FB7185 !important;
+}
+
+html.dark .btn-sidebar-logout:hover svg,
+[data-theme="dark"] .btn-sidebar-logout:hover svg,
+html.dark .btn-sidebar-logout:focus-visible svg,
+[data-theme="dark"] .btn-sidebar-logout:focus-visible svg {
+  color: #FDA4AF !important;
+}
+
+html.dark .btn-sidebar-logout span,
+[data-theme="dark"] .btn-sidebar-logout span {
+  color: #FECDD3 !important;
+}
+
+html.dark .btn-sidebar-logout:hover span,
+[data-theme="dark"] .btn-sidebar-logout:hover span,
+html.dark .btn-sidebar-logout:focus-visible span,
+[data-theme="dark"] .btn-sidebar-logout:focus-visible span {
+  color: #FFFFFF !important;
+}
+
+/* Maintain Cinematic Dark Space Aesthetics on Login Portals even when light theme is active */
+html.light .stage,
+html.light .admin-login-screen {
+  background-color: #061229 !important;
+  color: #FFFFFF !important;
+}
+
+html.light .stage .panel,
+html.light .admin-login-screen .panel {
+  background-color: rgba(11, 37, 89, 0.85) !important;
+  border-color: rgba(18, 58, 115, 0.6) !important;
+  color: #FFFFFF !important;
 }
 
 /* ============================================================

@@ -23,7 +23,7 @@ const database = {
 };
 isolateServer(database, {}, { namedModules: {
   '../postgresAdapter.js': { executeRun: forbiddenDependency, queryOne: forbiddenDependency, queryAll: forbiddenDependency, isPostgresActive: () => false, executeTransaction: forbiddenDependency },
-  '../storage.js': { MAX_FILE_SIZE_BYTES: 1024, MSG_FILE_TOO_LARGE: 'fixture limit', DANGEROUS_EXTENSIONS: new Set(), PROOF_ALLOWED_EXTENSIONS: new Set(['.pdf']), PROJECT_ALLOWED_EXTENSIONS: new Set(), validateUploadedFile: forbiddenDependency, uploadFileToStorage: forbiddenDependency, downloadFileFromStorage: forbiddenDependency, deleteFileFromStorage: forbiddenDependency, getMimeFromPath: () => 'application/pdf' },
+  '../storage.js': { MAX_FILE_SIZE_BYTES: 1024, MSG_FILE_TOO_LARGE: 'fixture limit', DANGEROUS_EXTENSIONS: new Set(), PROOF_ALLOWED_EXTENSIONS: new Set(['.pdf']), PROJECT_ALLOWED_EXTENSIONS: new Set(), validateUploadedFile: forbiddenDependency, uploadFileToStorage: forbiddenDependency, downloadFileFromStorage: forbiddenDependency, deleteFileFromStorage: forbiddenDependency, getMimeFromPath: () => 'application/pdf', detectMimeFromBuffer: () => 'application/pdf', fetchRemoteFormBuilderBuffer: async () => null },
   '../services/skilledgeSync.js': { syncDepartmentSkillEdge: async () => { syncCalls++; return { isolated: true }; }, syncStudentSkillEdge: forbiddenDependency }
 } });
 const { default: facultyRoutes } = await import('../server/routes/faculty.ts');
@@ -35,13 +35,36 @@ app.use(express.json());
 app.use('/api/faculty', facultyRoutes);
 app.use('/api/skilledge', skilledgeRoutes);
 app.use('/api/files', fileRoutes);
+import http from 'node:http';
 app.use((error, _req, res, _next) => res.status(500).json({ error: error.message }));
-const server = app.listen(0, '127.0.0.1');
+const pipePath = `\\\\.\\pipe\\test-svc-auth-${Date.now()}`;
+const server = app.listen(pipePath);
 await new Promise(resolve => server.once('listening', resolve));
 after(() => new Promise(resolve => server.close(resolve)));
-const base = `http://127.0.0.1:${server.address().port}`;
-const request = (path, role, method = 'GET', extra = {}) => fetch(base + path, {
-  method, headers: { ...(role ? { Authorization: `Bearer ${signSessionToken(accounts.find(account => account.role === role))}`, 'X-Portal-Role': role } : {}), ...extra }
+const request = (path, role, method = 'GET', extra = {}) => new Promise((resolve, reject) => {
+  const req = http.request({
+    socketPath: pipePath,
+    path,
+    method,
+    headers: {
+      ...(role ? { Authorization: `Bearer ${signSessionToken(accounts.find(account => account.role === role))}`, 'X-Portal-Role': role } : {}),
+      ...extra
+    }
+  }, res => {
+    const chunks = [];
+    res.on('data', chunk => chunks.push(chunk));
+    res.on('end', () => {
+      resolve({
+        status: res.statusCode,
+        headers: {
+          get: (name) => res.headers[name.toLowerCase()]
+        },
+        body: Buffer.concat(chunks).toString()
+      });
+    });
+  });
+  req.on('error', reject);
+  req.end();
 });
 
 test('Student sessions cannot list staff rosters or mutate any faculty endpoint', async () => {

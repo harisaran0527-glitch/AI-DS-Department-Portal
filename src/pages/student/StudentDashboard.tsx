@@ -253,7 +253,7 @@ export const StudentDashboard: React.FC = () => {
     );
   }
 
-  const { student, academics: _academics, arrears: _arrears, skillEdge: _skillEdge, nptel: _nptel, attendance: _attendance, discipline: _discipline, certificates: _certificates, participation: _participation, leetcode, projects: _projects, achievements: _achievements, finalizedAwards } = student360;
+  const { student, academics: _academics, arrears: _arrears, skillEdge: _skillEdge, nptel: _nptel, attendance: _attendance, discipline: _discipline, certificates: _certificates, participation: _participation, leetcode, projects: _projects, achievements: _achievements, finalizedAwards } = student360;
 
   const registerNoDisplay = student.registerNo || student.register_no || (_session as any)?.identifier || (_session as any)?.registerNo || 'N/A';
   const coordinatorDisplay = student.classCoordinatorName || (student as any).class_coordinator_name || 'Assigned Faculty';
@@ -303,9 +303,11 @@ export const StudentDashboard: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setShowForgotModal(true)}
-            className="min-h-[44px] text-xs text-indigo-300 hover:text-white bg-indigo-950/80 border border-indigo-700/60 px-3.5 py-2 rounded-xl font-mono flex items-center space-x-1.5 cursor-pointer shadow-sm"
+            type="button"
+            aria-label="Forgot Password"
+            className="btn-header-forgot min-h-[44px] text-xs px-3.5 py-2 rounded-xl font-mono flex items-center space-x-1.5 cursor-pointer shadow-sm active:scale-95 transition-all"
           >
-            <Lock className="w-3.5 h-3.5 text-indigo-400" />
+            <Lock className="w-3.5 h-3.5 shrink-0" />
             <span>Forgot Password?</span>
           </button>
           <div className="min-h-[44px] flex items-center space-x-2 text-xs text-indigo-300 bg-indigo-950/80 border border-indigo-700/60 px-3.5 py-2 rounded-xl font-mono">

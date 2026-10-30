@@ -46,7 +46,7 @@ async function disciplinePortalAuthRequest<T>(path: string, options: RequestInit
 
 /** Fetch proof content with headers so session tokens never enter URLs or browser history. */
 export async function openAuthenticatedFile(endpoint: string, role: Role, options: { download?: boolean; filename?: string } = {}): Promise<void> {
-  if (!/^\/faculty\/(?:certificates|participation|nptel-proofs)\/[^/]+\/(?:view|download)$/.test(endpoint)) {
+  if (!/^\/(?:faculty\/(?:certificates|participation|nptel-proofs|projects)|files)\/[^/]+(?:\/(?:view|download))?$/.test(endpoint)) {
     throw new Error('Invalid proof endpoint.');
   }
   const preview = options.download ? null : window.open('about:blank', '_blank');
@@ -59,9 +59,18 @@ export async function openAuthenticatedFile(endpoint: string, role: Role, option
       headers: { 'X-Portal-Role': role, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       credentials: 'include'
     });
-    if (!response.ok) throw new Error(`Attachment could not be loaded (${response.status}).`);
+    if (!response.ok) {
+      let errMsg = `Attachment could not be loaded (${response.status}).`;
+      try {
+        const errJson = await response.json();
+        if (errJson?.error) errMsg = `${errJson.error} (${response.status})`;
+      } catch {
+        // ignore
+      }
+      throw new Error(errMsg);
+    }
     const blob = await response.blob();
-    if (!options.download && !/^(?:application\/pdf|image\/(?:jpeg|png|gif|webp))$/i.test(blob.type)) {
+    if (!options.download && !/^(?:application\/pdf|image\/(?:jpeg|png|gif|webp|pjpeg))$/i.test(blob.type)) {
       throw new Error('Preview is unavailable for this file type. Download the attachment instead.');
     }
     const objectUrl = URL.createObjectURL(blob);
@@ -839,7 +848,7 @@ export const API = {
       let errMsg = `Failed to fetch file (${res.status})`;
       try {
         const errJson = await res.json();
-        if (errJson?.error) errMsg = errJson.error;
+        if (errJson?.error) errMsg = `${errJson.error} (${res.status})`;
       } catch {
         // ignore
       }

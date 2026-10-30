@@ -2009,9 +2009,11 @@ console.warn('Backend logout unavailable, clearing local session:', error);
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setShowForgotModal(true)}
-            className="text-xs text-sky-300 hover:text-white bg-sky-950/80 border border-sky-700/60 px-3.5 py-2 min-h-[44px] rounded-xl font-mono flex items-center space-x-1.5 cursor-pointer shadow-sm"
+            type="button"
+            aria-label="Forgot Password"
+            className="btn-header-forgot min-h-[44px] text-xs px-3.5 py-2 rounded-xl font-mono flex items-center space-x-1.5 cursor-pointer shadow-sm active:scale-95 transition-all"
           >
-            <Lock className="w-3.5 h-3.5 text-sky-400" />
+            <Lock className="w-3.5 h-3.5 shrink-0" />
             <span>Forgot Password?</span>
           </button>
         </div>
@@ -5262,6 +5264,7 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                         setIsProjSaving(true);
                         setProjSaveFeedback(null);
                         let uploadedAttId: string | null = null;
+                        let uploadedPath = '';
                         const newProjId = `proj-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
                         const saveOperation = async () => {
@@ -5276,6 +5279,7 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                             const uploadRes = await API.uploadProofFile(selectedStudent.id, 'projects', newProjId, projDocFile);
                             if (uploadRes?.attachment?.id) {
                               uploadedAttId = uploadRes.attachment.id;
+                              uploadedPath = uploadRes.attachment.viewUrl || uploadRes.attachment.downloadUrl || '';
                             }
                           }
 
@@ -5299,7 +5303,8 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                               title: projTitle.trim(),
                               category: projCategory,
                               liveUrl: projCategory === 'Software' ? projLiveUrl.trim() : '',
-                              githubUrl: projCategory === 'Software' ? projUrl.trim() : ''
+                              githubUrl: projCategory === 'Software' ? projUrl.trim() : '',
+                              productPhotoPath: uploadedPath || ''
                             }
                           ];
 

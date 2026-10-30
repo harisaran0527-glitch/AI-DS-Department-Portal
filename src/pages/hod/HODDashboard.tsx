@@ -206,9 +206,11 @@ console.warn('Backend logout unavailable, clearing local session:', error);
       headerActions={
         <button
           onClick={() => setShowForgotModal(true)}
-          className="min-h-[44px] text-xs text-indigo-300 hover:text-white bg-indigo-950/80 border border-indigo-700/60 px-3.5 py-2 rounded-xl font-mono flex items-center space-x-1.5 cursor-pointer shadow-sm"
+          type="button"
+          aria-label="Forgot Password"
+          className="btn-header-forgot min-h-[44px] text-xs px-3.5 py-2 rounded-xl font-mono flex items-center space-x-1.5 cursor-pointer shadow-sm active:scale-95 transition-all"
         >
-          <Key className="w-3.5 h-3.5 text-indigo-400" />
+          <Key className="w-3.5 h-3.5 shrink-0" />
           <span>Forgot Password?</span>
         </button>
       }

@@ -254,3 +254,70 @@ export function getMimeFromPath(filePath: string): string {
   return map[ext] || 'application/octet-stream';
 }
 
+export function detectMimeFromBuffer(buffer: Buffer): string | null {
+  if (!buffer || buffer.length < 4) return null;
+  // PDF: %PDF (0x25 0x50 0x44 0x46)
+  if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
+    return 'application/pdf';
+  }
+  // PNG: \x89PNG (0x89 0x50 0x4E 0x47)
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+    return 'image/png';
+  }
+  // JPEG: \xFF\xD8\xFF
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+    return 'image/jpeg';
+  }
+  return null;
+}
+
+export async function fetchRemoteFormBuilderBuffer(storedFileName: string): Promise<{ buffer: Buffer; contentType?: string } | null> {
+  if (!storedFileName || (!storedFileName.startsWith('/api/files') && !storedFileName.startsWith('http'))) {
+    return null;
+  }
+  // If storedFileName is a self-referential /api/files/:id path, resolve via db directly
+  if (storedFileName.startsWith('/api/files/')) {
+    const rawId = storedFileName.replace(/^\/api\/files\/(?:download\/)?/, '').split('/')[0].split('?')[0];
+    if (rawId) {
+      try {
+        const { db } = await import('./db.js');
+        const internalAtt = await db.getAttachmentById(rawId);
+        if (internalAtt?.file_data) {
+          const buf = Buffer.isBuffer(internalAtt.file_data) ? internalAtt.file_data : Buffer.from(internalAtt.file_data);
+          return {
+            buffer: buf,
+            contentType: internalAtt.mime_type || detectMimeFromBuffer(buf) || undefined
+          };
+        }
+      } catch {
+        // Fall through to remote fetch
+      }
+    }
+  }
+
+  const formBuilderBase = (process.env.FORM_BUILDER_API_URL || 'http://127.0.0.1:5000').replace(/\/api$/, '');
+  const url = storedFileName.startsWith('http') ? storedFileName : `${formBuilderBase}${storedFileName}`;
+  const syncKey = process.env.HOD_INTEGRATION_KEY?.trim();
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${syncKey}`,
+        'X-HOD-Integration-Key': syncKey || ''
+      }
+    });
+    if (res.ok) {
+      const arrayBuf = await res.arrayBuffer();
+      const buffer = Buffer.from(arrayBuf);
+      const headerContentType = res.headers.get('content-type') || undefined;
+      return {
+        buffer,
+        contentType: headerContentType || detectMimeFromBuffer(buffer) || undefined
+      };
+    }
+  } catch (err: any) {
+    console.error('[HOD Files Proxy] Remote proof fetch failed:', err.message);
+  }
+  return null;
+}
+

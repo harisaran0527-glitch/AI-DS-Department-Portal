@@ -26,7 +26,9 @@ import {
   uploadFileToStorage,
   downloadFileFromStorage,
   deleteFileFromStorage,
-  getMimeFromPath
+  getMimeFromPath,
+  detectMimeFromBuffer,
+  fetchRemoteFormBuilderBuffer
 } from '../storage.js';
 
 const router = Router();
@@ -69,7 +71,7 @@ router.use(authenticateToken, requireRole('FACULTY', 'HOD', 'ADMIN', 'STUDENT'))
 router.use((req: AuthRequest, res, next) => {
   // Students may use these shared proof readers; other faculty operations require staff.
   if (req.user!.role === 'STUDENT' &&
-      !(req.method === 'GET' && /^\/(?:certificates|participation|nptel-proofs)\/[^/]+\/(?:view|download)$/.test(req.path))) {
+      !(req.method === 'GET' && /^\/(?:certificates|participation|nptel-proofs|projects)\/[^/]+\/(?:view|download)$/.test(req.path))) {
     return res.status(403).json({ error: 'Faculty access is required for this operation.' });
   }
   return next();
@@ -1030,36 +1032,51 @@ router.delete('/students/:studentId/certificates/:certId', verifyFacultySectionA
 
 router.get('/certificates/:certId/view', async (req: AuthRequest, res: Response) => {
   const certId = getRouteParam(req, 'certId');
-  const cert = await db.getCertificateById(certId);
+  let cert = typeof db.getCertificateById === 'function' ? await db.getCertificateById(certId) : null;
+  let att = typeof db.getAttachmentByRecordId === 'function' ? await db.getAttachmentByRecordId(certId) : null;
+  if (!att && !cert && typeof db.getAttachmentById === 'function') {
+    att = await db.getAttachmentById(certId);
+  }
 
-  if (!cert) {
+  const studentId = cert?.student_id || att?.student_id;
+  if (!studentId) {
     return res.status(404).json({ error: 'Certificate record not found.' });
   }
 
-  const student = await db.getStudentById(cert.student_id);
+  const student = await db.getStudentById(studentId);
   if (!student || !(await checkFacultyStudentFileAccess(req, student))) {
     return res.status(403).json({ error: 'Forbidden: You do not have permission to view files for this student.' });
   }
 
+  if (!att && typeof db.getAttachmentForRecord === 'function') {
+    att = await db.getAttachmentForRecord(studentId, 'certificates', certId);
+  }
+
   let buffer: Buffer | null = null;
-  let contentType = cert.mime_type || '';
+  let contentType = cert?.mime_type || att?.mime_type || '';
 
   // 1. Primary: Direct record bytea persistence
-  if (cert.file_data) {
+  if (cert?.file_data) {
     buffer = Buffer.isBuffer(cert.file_data) ? cert.file_data : Buffer.from(cert.file_data);
   }
 
   // 2. Secondary: Attachments table bytea persistence
-  if (!buffer) {
-    const att = await db.getAttachmentForRecord(cert.student_id, 'certificates', certId);
-    if (att && att.file_data) {
-      buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
-      if (!contentType && att.mime_type) contentType = att.mime_type;
+  if (!buffer && att?.file_data) {
+    buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
+    if (!contentType && att.mime_type) contentType = att.mime_type;
+  }
+
+  // 3. Form Builder remote proxy fallback
+  const filePath = cert?.file_path || cert?.proof_file_path || att?.stored_file_name || '';
+  if (!buffer && filePath) {
+    const remote = await fetchRemoteFormBuilderBuffer(filePath);
+    if (remote) {
+      buffer = remote.buffer;
+      if (remote.contentType) contentType = remote.contentType;
     }
   }
 
-  // 3. Fallback: Supabase Storage / filesystem
-  const filePath = cert.file_path || cert.proof_file_path;
+  // 4. Fallback: Supabase Storage / filesystem
   if (!buffer && filePath) {
     const fileData = await downloadFileFromStorage(filePath);
     if (fileData) {
@@ -1072,9 +1089,12 @@ router.get('/certificates/:certId/view', async (req: AuthRequest, res: Response)
     return res.status(404).json({ error: 'Certificate file content is not available on server storage.' });
   }
 
-  const ext = path.extname(cert.original_file_name || filePath || '.pdf').toLowerCase();
-  const origName = cert.original_file_name || `${cert.course_name}_Certificate${ext}`;
-  res.setHeader('Content-Type', contentType || getMimeFromPath(origName));
+  const ext = path.extname(cert?.original_file_name || att?.original_file_name || filePath || '.pdf').toLowerCase();
+  const origName = cert?.original_file_name || att?.original_file_name || `${cert?.course_name || 'Certificate'}_Certificate${ext}`;
+  const detectedMime = detectMimeFromBuffer(buffer);
+  const finalContentType = contentType || detectedMime || getMimeFromPath(origName);
+
+  res.setHeader('Content-Type', finalContentType);
   res.setHeader('Content-Length', buffer.length.toString());
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(origName)}"`);
   res.setHeader('Cache-Control', 'private, no-store');
@@ -1083,36 +1103,51 @@ router.get('/certificates/:certId/view', async (req: AuthRequest, res: Response)
 
 router.get('/certificates/:certId/download', async (req: AuthRequest, res: Response) => {
   const certId = getRouteParam(req, 'certId');
-  const cert = await db.getCertificateById(certId);
+  let cert = typeof db.getCertificateById === 'function' ? await db.getCertificateById(certId) : null;
+  let att = typeof db.getAttachmentByRecordId === 'function' ? await db.getAttachmentByRecordId(certId) : null;
+  if (!att && !cert && typeof db.getAttachmentById === 'function') {
+    att = await db.getAttachmentById(certId);
+  }
 
-  if (!cert) {
+  const studentId = cert?.student_id || att?.student_id;
+  if (!studentId) {
     return res.status(404).json({ error: 'Certificate record not found.' });
   }
 
-  const student = await db.getStudentById(cert.student_id);
+  const student = await db.getStudentById(studentId);
   if (!student || !(await checkFacultyStudentFileAccess(req, student))) {
     return res.status(403).json({ error: 'Forbidden: You do not have permission to download files for this student.' });
   }
 
+  if (!att && typeof db.getAttachmentForRecord === 'function') {
+    att = await db.getAttachmentForRecord(studentId, 'certificates', certId);
+  }
+
   let buffer: Buffer | null = null;
-  let contentType = cert.mime_type || '';
+  let contentType = cert?.mime_type || att?.mime_type || '';
 
   // 1. Primary: Direct record bytea persistence
-  if (cert.file_data) {
+  if (cert?.file_data) {
     buffer = Buffer.isBuffer(cert.file_data) ? cert.file_data : Buffer.from(cert.file_data);
   }
 
   // 2. Secondary: Attachments table bytea persistence
-  if (!buffer) {
-    const att = await db.getAttachmentForRecord(cert.student_id, 'certificates', certId);
-    if (att && att.file_data) {
-      buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
-      if (!contentType && att.mime_type) contentType = att.mime_type;
+  if (!buffer && att?.file_data) {
+    buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
+    if (!contentType && att.mime_type) contentType = att.mime_type;
+  }
+
+  // 3. Form Builder remote proxy fallback
+  const filePath = cert?.file_path || cert?.proof_file_path || att?.stored_file_name || '';
+  if (!buffer && filePath) {
+    const remote = await fetchRemoteFormBuilderBuffer(filePath);
+    if (remote) {
+      buffer = remote.buffer;
+      if (remote.contentType) contentType = remote.contentType;
     }
   }
 
-  // 3. Fallback: Supabase Storage / filesystem
-  const filePath = cert.file_path || cert.proof_file_path;
+  // 4. Fallback: Supabase Storage / filesystem
   if (!buffer && filePath) {
     const fileData = await downloadFileFromStorage(filePath);
     if (fileData) {
@@ -1125,9 +1160,141 @@ router.get('/certificates/:certId/download', async (req: AuthRequest, res: Respo
     return res.status(404).json({ error: 'Certificate file content is not available on server storage.' });
   }
 
-  const ext = path.extname(cert.original_file_name || filePath || '.pdf').toLowerCase();
-  const origName = cert.original_file_name || `${cert.course_name}_Certificate${ext}`;
-  res.setHeader('Content-Type', contentType || getMimeFromPath(origName));
+  const ext = path.extname(cert?.original_file_name || att?.original_file_name || filePath || '.pdf').toLowerCase();
+  const origName = cert?.original_file_name || att?.original_file_name || `${cert?.course_name || 'Certificate'}_Certificate${ext}`;
+  const detectedMime = detectMimeFromBuffer(buffer);
+  const finalContentType = contentType || detectedMime || getMimeFromPath(origName);
+
+  res.setHeader('Content-Type', finalContentType);
+  res.setHeader('Content-Length', buffer.length.toString());
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(origName)}"`);
+  return res.send(buffer);
+});
+
+router.get('/projects/:projId/view', async (req: AuthRequest, res: Response) => {
+  const projId = getRouteParam(req, 'projId');
+  let proj = typeof db.getProjectById === 'function' ? await db.getProjectById(projId) : null;
+  let att = typeof db.getAttachmentByRecordId === 'function' ? await db.getAttachmentByRecordId(projId) : null;
+  if (!att && !proj && typeof db.getAttachmentById === 'function') {
+    att = await db.getAttachmentById(projId);
+  }
+
+  const studentId = proj?.student_id || att?.student_id;
+  if (!studentId) {
+    return res.status(404).json({ error: 'Project record not found.' });
+  }
+
+  const student = await db.getStudentById(studentId);
+  if (!student || !(await checkFacultyStudentFileAccess(req, student))) {
+    return res.status(403).json({ error: 'Forbidden: You do not have permission to view files for this student.' });
+  }
+
+  if (!att && typeof db.getAttachmentForRecord === 'function') {
+    att = await db.getAttachmentForRecord(studentId, 'projects', projId);
+  }
+
+  let buffer: Buffer | null = null;
+  let contentType = att?.mime_type || '';
+
+  // 1. Primary: Attachments table bytea persistence
+  if (att && att.file_data) {
+    buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
+  }
+
+  // 2. Secondary: Remote Form Builder proxy
+  const targetPath = att?.stored_file_name || proj?.product_photo_path || '';
+  if (!buffer && targetPath) {
+    const remote = await fetchRemoteFormBuilderBuffer(targetPath);
+    if (remote) {
+      buffer = remote.buffer;
+      if (remote.contentType) contentType = remote.contentType;
+    }
+  }
+
+  // 3. Fallback: Supabase Storage / filesystem
+  if (!buffer && targetPath) {
+    const fileData = await downloadFileFromStorage(targetPath);
+    if (fileData) {
+      buffer = fileData.buffer;
+      if (!contentType && fileData.contentType) contentType = fileData.contentType;
+    }
+  }
+
+  if (!buffer) {
+    return res.status(404).json({ error: 'Project file content is not available on server storage.' });
+  }
+
+  const ext = path.extname(att?.original_file_name || targetPath || '.pdf').toLowerCase();
+  const origName = att?.original_file_name || (proj?.title ? `${proj.title}_Documentation${ext}` : `Project_Attachment${ext}`);
+  const detectedMime = detectMimeFromBuffer(buffer);
+  const finalContentType = contentType || detectedMime || getMimeFromPath(origName);
+
+  res.setHeader('Content-Type', finalContentType);
+  res.setHeader('Content-Length', buffer.length.toString());
+  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(origName)}"`);
+  res.setHeader('Cache-Control', 'private, no-store');
+  return res.send(buffer);
+});
+
+router.get('/projects/:projId/download', async (req: AuthRequest, res: Response) => {
+  const projId = getRouteParam(req, 'projId');
+  let proj = typeof db.getProjectById === 'function' ? await db.getProjectById(projId) : null;
+  let att = typeof db.getAttachmentByRecordId === 'function' ? await db.getAttachmentByRecordId(projId) : null;
+  if (!att && !proj && typeof db.getAttachmentById === 'function') {
+    att = await db.getAttachmentById(projId);
+  }
+
+  const studentId = proj?.student_id || att?.student_id;
+  if (!studentId) {
+    return res.status(404).json({ error: 'Project record not found.' });
+  }
+
+  const student = await db.getStudentById(studentId);
+  if (!student || !(await checkFacultyStudentFileAccess(req, student))) {
+    return res.status(403).json({ error: 'Forbidden: You do not have permission to download files for this student.' });
+  }
+
+  if (!att && typeof db.getAttachmentForRecord === 'function') {
+    att = await db.getAttachmentForRecord(studentId, 'projects', projId);
+  }
+
+  let buffer: Buffer | null = null;
+  let contentType = att?.mime_type || '';
+
+  // 1. Primary: Attachments table bytea persistence
+  if (att && att.file_data) {
+    buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
+  }
+
+  // 2. Secondary: Remote Form Builder proxy
+  const targetPath = att?.stored_file_name || proj?.product_photo_path || '';
+  if (!buffer && targetPath) {
+    const remote = await fetchRemoteFormBuilderBuffer(targetPath);
+    if (remote) {
+      buffer = remote.buffer;
+      if (remote.contentType) contentType = remote.contentType;
+    }
+  }
+
+  // 3. Fallback: Supabase Storage / filesystem
+  if (!buffer && targetPath) {
+    const fileData = await downloadFileFromStorage(targetPath);
+    if (fileData) {
+      buffer = fileData.buffer;
+      if (!contentType && fileData.contentType) contentType = fileData.contentType;
+    }
+  }
+
+  if (!buffer) {
+    return res.status(404).json({ error: 'Project file content is not available on server storage.' });
+  }
+
+  const ext = path.extname(att?.original_file_name || targetPath || '.pdf').toLowerCase();
+  const origName = att?.original_file_name || (proj?.title ? `${proj.title}_Documentation${ext}` : `Project_Attachment${ext}`);
+  const detectedMime = detectMimeFromBuffer(buffer);
+  const finalContentType = contentType || detectedMime || getMimeFromPath(origName);
+
+  res.setHeader('Content-Type', finalContentType);
   res.setHeader('Content-Length', buffer.length.toString());
   res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(origName)}"`);
   return res.send(buffer);
