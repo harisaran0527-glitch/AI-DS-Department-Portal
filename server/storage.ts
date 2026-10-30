@@ -271,30 +271,108 @@ export function detectMimeFromBuffer(buffer: Buffer): string | null {
   return null;
 }
 
+/**
+ * Safely converts any BYTEA representation (Buffer, Uint8Array, PostgreSQL \x hex string, base64 data URL) into a Buffer.
+ */
+export function safeToBuffer(val: any): Buffer | null {
+  if (!val) return null;
+  if (Buffer.isBuffer(val)) return val;
+  if (val instanceof Uint8Array) return Buffer.from(val);
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (trimmed.startsWith('\\x')) {
+      return Buffer.from(trimmed.slice(2), 'hex');
+    }
+    if (trimmed.startsWith('data:')) {
+      const commaIdx = trimmed.indexOf(',');
+      if (commaIdx !== -1) {
+        return Buffer.from(trimmed.slice(commaIdx + 1), 'base64');
+      }
+    }
+    if (/^[0-9a-fA-F]{32,}$/.test(trimmed)) {
+      try {
+        const hexBuf = Buffer.from(trimmed, 'hex');
+        if (hexBuf.length > 0) return hexBuf;
+      } catch {}
+    }
+    if (/^[A-Za-z0-9+/=]{32,}$/.test(trimmed)) {
+      try {
+        const b64Buf = Buffer.from(trimmed, 'base64');
+        if (b64Buf.length > 0) return b64Buf;
+      } catch {}
+    }
+    return Buffer.from(trimmed);
+  }
+  return null;
+}
+
 export async function fetchRemoteFormBuilderBuffer(storedFileName: string): Promise<{ buffer: Buffer; contentType?: string } | null> {
-  if (!storedFileName || (!storedFileName.startsWith('/api/files') && !storedFileName.startsWith('http'))) {
+  if (!storedFileName) {
     return null;
   }
-  // If storedFileName is a self-referential /api/files/:id path, resolve via db directly
-  if (storedFileName.startsWith('/api/files/')) {
-    const rawId = storedFileName.replace(/^\/api\/files\/(?:download\/)?/, '').split('/')[0].split('?')[0];
-    if (rawId) {
-      try {
-        const { db } = await import('./db.js');
-        const internalAtt = await db.getAttachmentById(rawId);
-        if (internalAtt?.file_data) {
-          const buf = Buffer.isBuffer(internalAtt.file_data) ? internalAtt.file_data : Buffer.from(internalAtt.file_data);
+
+  // 1. If storedFileName references an internal file path /api/files/:id (either relative or absolute URL)
+  const fileIdMatch = storedFileName.match(/\/api\/files\/(?:download\/)?([^/?#]+)/i);
+  if (fileIdMatch && fileIdMatch[1]) {
+    const rawId = fileIdMatch[1];
+    try {
+      const { db } = await import('./db.js');
+      const internalAtt = typeof db.getAttachmentById === 'function' ? await db.getAttachmentById(rawId) : null;
+      if (internalAtt?.file_data) {
+        const buf = safeToBuffer(internalAtt.file_data);
+        if (buf) {
           return {
             buffer: buf,
             contentType: internalAtt.mime_type || detectMimeFromBuffer(buf) || undefined
           };
         }
-      } catch {
-        // Fall through to remote fetch
       }
+      if (internalAtt?.stored_file_name && internalAtt.stored_file_name !== storedFileName) {
+        const fileData = await downloadFileFromStorage(internalAtt.stored_file_name);
+        if (fileData) return fileData;
+      }
+      const cert = typeof db.getCertificateById === 'function' ? await db.getCertificateById(rawId) : null;
+      if (cert?.file_data) {
+        const buf = safeToBuffer(cert.file_data);
+        if (buf) {
+          return {
+            buffer: buf,
+            contentType: cert.mime_type || detectMimeFromBuffer(buf) || undefined
+          };
+        }
+      }
+    } catch {
+      // Fall through to remote fetch
     }
   }
 
+  // 2. If storedFileName is an attachment ID directly (e.g. att-...)
+  if (storedFileName.startsWith('att-')) {
+    try {
+      const { db } = await import('./db.js');
+      const internalAtt = typeof db.getAttachmentById === 'function' ? await db.getAttachmentById(storedFileName) : null;
+      if (internalAtt?.file_data) {
+        const buf = safeToBuffer(internalAtt.file_data);
+        if (buf) {
+          return {
+            buffer: buf,
+            contentType: internalAtt.mime_type || detectMimeFromBuffer(buf) || undefined
+          };
+        }
+      }
+      if (internalAtt?.stored_file_name && internalAtt.stored_file_name !== storedFileName) {
+        const fileData = await downloadFileFromStorage(internalAtt.stored_file_name);
+        if (fileData) return fileData;
+      }
+    } catch {}
+  }
+
+  // 3. If storedFileName is NOT an HTTP URL and does NOT start with /api/files, it cannot be a remote URL
+  if (!storedFileName.startsWith('http') && !storedFileName.startsWith('/api/files')) {
+    return null;
+  }
+
+  // 4. Remote HTTP fetch from Form Builder
   const formBuilderBase = (process.env.FORM_BUILDER_API_URL || 'http://127.0.0.1:5000').replace(/\/api$/, '');
   const url = storedFileName.startsWith('http') ? storedFileName : `${formBuilderBase}${storedFileName}`;
   const syncKey = process.env.HOD_INTEGRATION_KEY?.trim();
@@ -304,7 +382,8 @@ export async function fetchRemoteFormBuilderBuffer(storedFileName: string): Prom
       headers: {
         'Authorization': `Bearer ${syncKey}`,
         'X-HOD-Integration-Key': syncKey || ''
-      }
+      },
+      signal: AbortSignal.timeout(8000)
     });
     if (res.ok) {
       const arrayBuf = await res.arrayBuffer();
@@ -316,7 +395,7 @@ export async function fetchRemoteFormBuilderBuffer(storedFileName: string): Prom
       };
     }
   } catch (err: any) {
-    console.error('[HOD Files Proxy] Remote proof fetch failed:', err.message);
+    console.warn('[HOD Files Proxy] Remote proof fetch failed:', err.message);
   }
   return null;
 }

@@ -14,7 +14,8 @@ import {
   deleteFileFromStorage,
   getMimeFromPath,
   detectMimeFromBuffer,
-  fetchRemoteFormBuilderBuffer
+  fetchRemoteFormBuilderBuffer,
+  safeToBuffer
 } from '../storage.js';
 
 const router = Router();
@@ -301,7 +302,7 @@ router.get('/:fileId', authenticateToken, async (req: AuthRequest, res: Response
 
     // 1. Primary: Database persistence (BYTEA)
     if (att.file_data) {
-      buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
+      buffer = safeToBuffer(att.file_data);
     }
 
     // 2. Secondary: Form Builder remote proxy fallback or Supabase Storage
@@ -333,7 +334,7 @@ router.get('/:fileId', authenticateToken, async (req: AuthRequest, res: Response
       contentType = cert.mime_type || '';
 
       if (cert.file_data) {
-        buffer = Buffer.isBuffer(cert.file_data) ? cert.file_data : Buffer.from(cert.file_data);
+        buffer = safeToBuffer(cert.file_data);
       }
       const certPath = cert.file_path || cert.proof_file_path || '';
       if (!buffer && certPath) {
@@ -421,7 +422,7 @@ router.get('/:fileId/download', authenticateToken, async (req: AuthRequest, res:
 
     // 1. Primary: Database persistence (BYTEA)
     if (att.file_data) {
-      buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
+      buffer = safeToBuffer(att.file_data);
     }
 
     // 2. Secondary: Form Builder remote proxy fallback or Supabase Storage
@@ -453,7 +454,7 @@ router.get('/:fileId/download', authenticateToken, async (req: AuthRequest, res:
       contentType = cert.mime_type || '';
 
       if (cert.file_data) {
-        buffer = Buffer.isBuffer(cert.file_data) ? cert.file_data : Buffer.from(cert.file_data);
+        buffer = safeToBuffer(cert.file_data);
       }
       const certPath = cert.file_path || cert.proof_file_path || '';
       if (!buffer && certPath) {

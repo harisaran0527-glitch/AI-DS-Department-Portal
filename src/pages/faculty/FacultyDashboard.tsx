@@ -283,7 +283,7 @@ export const FacultyDashboard: React.FC = () => {
   const [, setOcrWarnings] = useState<string[]>([]);
   const [isDraggingBulk, setIsDraggingBulk] = useState(false);
 
-  // --- CERTIFICATE FORM & UPLOAD MODAL STATE ---
+  // --- CERTIFICATE FORM & UPLOAD STATE ---
   const [showCertModal, setShowCertModal] = useState(false);
   const [editingCert, setEditingCert] = useState<any | null>(null);
   const [certCourseName, setCertCourseName] = useState('');
@@ -293,6 +293,11 @@ export const FacultyDashboard: React.FC = () => {
   const [certFile, setCertFile] = useState<File | null>(null);
   const [certUploading, setCertUploading] = useState(false);
   const [certError, setCertError] = useState('');
+  const [certDocFile, setCertDocFile] = useState<File | null>(null);
+  const [isCertSaving, setIsCertSaving] = useState(false);
+  const [certSaveFeedback, setCertSaveFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [certSaveStep, setCertSaveStep] = useState<'IDLE' | 'UPLOADING' | 'SAVING' | 'SUCCESS'>('IDLE');
+  const [certCardErrors, setCertCardErrors] = useState<Record<string, string>>({});
 
   // --- LEETCODE STATE ---
   const [leetcodeSelectedEmail, setLeetcodeSelectedEmail] = useState<string>('');
@@ -682,8 +687,107 @@ export const FacultyDashboard: React.FC = () => {
       setCertIssueDate(new Date().toISOString().split('T')[0]);
     }
     setCertFile(null);
+    setCertDocFile(null);
     setCertError('');
+    setCertSaveFeedback(null);
     setShowCertModal(true);
+  };
+
+  const handleStartEditCert = (cert: any) => {
+    setEditingCert(cert);
+    setCertCourseName(cert.courseName || cert.course_name || cert.title || '');
+    setCertPlatform(cert.platform || cert.issuingOrganization || cert.issuedBy || '');
+    setCertCategory(cert.category || 'Technical Certification');
+    setCertIssueDate(cert.issueDate || cert.issue_date || cert.issued_date || new Date().toISOString().split('T')[0]);
+    setCertDocFile(null);
+    setCertSaveFeedback(null);
+  };
+
+  const handleCancelEditCert = () => {
+    setEditingCert(null);
+    setCertCourseName('');
+    setCertPlatform('');
+    setCertCategory('Technical Certification');
+    setCertIssueDate(new Date().toISOString().split('T')[0]);
+    setCertDocFile(null);
+    setCertSaveFeedback(null);
+  };
+
+  const handleSaveCertificateInline = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!selectedStudent || !certCourseName.trim() || !certPlatform.trim() || isCertSaving) return;
+
+    setIsCertSaving(true);
+    setCertSaveFeedback(null);
+
+    const isEditing = Boolean(editingCert);
+    const targetCertId = editingCert?.id || `cert-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+
+    const saveOperation = async () => {
+      if (certDocFile) {
+        setCertSaveStep('UPLOADING');
+        setCertSaveFeedback({
+          type: 'info',
+          message: 'Uploading certificate document to secure storage...'
+        });
+      }
+
+      setCertSaveStep('SAVING');
+      setCertSaveFeedback({
+        type: 'info',
+        message: 'Persisting certificate record to database...'
+      });
+
+      const formData = new FormData();
+      formData.append('courseName', certCourseName.trim());
+      formData.append('platform', certPlatform.trim());
+      formData.append('category', certCategory);
+      if (certIssueDate) formData.append('issueDate', certIssueDate);
+      if (certDocFile) formData.append('file', certDocFile);
+
+      if (isEditing) {
+        await API.updateCertificateForFaculty(selectedStudent.id, targetCertId, formData);
+      } else {
+        await API.uploadCertificateForFaculty(selectedStudent.id, formData);
+      }
+
+      setCertSaveStep('SUCCESS');
+      setCertSaveFeedback({
+        type: 'success',
+        message: `Certificate "${certCourseName.trim()}" ${isEditing ? 'updated' : 'saved'} successfully ${certDocFile ? 'with document attached' : ''}!`
+      });
+
+      setCertCourseName('');
+      setCertPlatform('');
+      setCertCategory('Technical Certification');
+      setCertIssueDate(new Date().toISOString().split('T')[0]);
+      setCertDocFile(null);
+      setEditingCert(null);
+
+      await reloadStudent360();
+      fetchRoster().catch(() => {});
+
+      setTimeout(() => {
+        setCertSaveStep('IDLE');
+        setCertSaveFeedback(null);
+      }, 3500);
+    };
+
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Certificate save timed out after 20 seconds. Please check your connection and retry.')), 20000);
+    });
+
+    try {
+      await Promise.race([saveOperation(), timeoutPromise]);
+    } catch (err: any) {
+      setCertSaveStep('IDLE');
+      setCertSaveFeedback({
+        type: 'error',
+        message: err.message || 'Failed to save certificate record.'
+      });
+    } finally {
+      setIsCertSaving(false);
+    }
   };
 
   const handleSaveCertificate = async (e: React.FormEvent) => {
@@ -733,10 +837,10 @@ export const FacultyDashboard: React.FC = () => {
 
       if (editingCert) {
         await API.updateCertificateForFaculty(selectedStudent.id, editingCert.id, formData);
-        alert(`Certificate "${certCourseName}" updated successfully.`);
+        setCertSaveFeedback({ type: 'success', message: `Certificate "${certCourseName}" updated successfully.` });
       } else {
         await API.uploadCertificateForFaculty(selectedStudent.id, formData);
-        alert(`Certificate "${certCourseName}" uploaded successfully.`);
+        setCertSaveFeedback({ type: 'success', message: `Certificate "${certCourseName}" uploaded successfully.` });
       }
 
       setShowCertModal(false);
@@ -755,21 +859,36 @@ export const FacultyDashboard: React.FC = () => {
 
     try {
       await API.deleteCertificateForFaculty(selectedStudent.id, certId);
-      alert(`Certificate "${certName}" deleted successfully.`);
+      setCertCardErrors(prev => { const n = { ...prev }; delete n[certId]; return n; });
+      if (editingCert?.id === certId) {
+        handleCancelEditCert();
+      }
+      setCertSaveFeedback({ type: 'success', message: `Certificate "${certName}" deleted successfully.` });
+      setTimeout(() => setCertSaveFeedback(null), 3000);
       await reloadStudent360();
     } catch (err: any) {
-      alert(err.message || 'Failed to delete certificate.');
+      setCertSaveFeedback({ type: 'error', message: err.message || 'Failed to delete certificate.' });
     }
   };
 
-  const handleViewCertificate = (certId: string) => {
-    void openAuthenticatedFile(`/faculty/certificates/${encodeURIComponent(certId)}/view`, 'FACULTY')
-      .catch(error => alert(error instanceof Error ? error.message : 'Attachment could not be loaded.'));
+  const handleViewCertificate = async (certId: string) => {
+    setCertCardErrors(prev => { const n = { ...prev }; delete n[certId]; return n; });
+    try {
+      await openAuthenticatedFile(`/faculty/certificates/${encodeURIComponent(certId)}/view`, 'FACULTY');
+    } catch (error: any) {
+      const msg = error instanceof Error ? error.message : 'Certificate attachment could not be loaded.';
+      setCertCardErrors(prev => ({ ...prev, [certId]: msg }));
+    }
   };
 
-  const handleDownloadCertificate = (certId: string, filename?: string) => {
-    void openAuthenticatedFile(`/faculty/certificates/${encodeURIComponent(certId)}/download`, 'FACULTY', { download: true, filename })
-      .catch(error => alert(error instanceof Error ? error.message : 'Attachment could not be loaded.'));
+  const handleDownloadCertificate = async (certId: string, filename?: string) => {
+    setCertCardErrors(prev => { const n = { ...prev }; delete n[certId]; return n; });
+    try {
+      await openAuthenticatedFile(`/faculty/certificates/${encodeURIComponent(certId)}/download`, 'FACULTY', { download: true, filename });
+    } catch (error: any) {
+      const msg = error instanceof Error ? error.message : 'Certificate attachment could not be downloaded.';
+      setCertCardErrors(prev => ({ ...prev, [certId]: msg }));
+    }
   };
 
   const handleOpenPartModal = (part?: any) => {
@@ -4488,20 +4607,20 @@ console.warn('Backend logout unavailable, clearing local session:', error);
             <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-6 space-y-6 shadow-xl">
             {activeTab.startsWith('bth-') ? renderBestTeamStudentHeader() : renderSelectedStudentHeader()}
 
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-3">
               <div className="space-y-1">
                 <h2 className="text-lg font-bold text-white flex items-center space-x-2 font-sans">
                   <FileText className="w-5 h-5 text-sky-400" />
                   <span>Certificate Showcase & Verification</span>
                 </h2>
-                <p className="text-xs text-slate-400 font-mono">Upload, verify, and manage external course certifications with database persistence.</p>
+                <p className="text-xs text-slate-400 font-mono mt-0.5">Upload, verify, and manage external course certifications with database persistence.</p>
               </div>
 
               {selectedStudent && (
                 <button
                   type="button"
                   onClick={() => handleOpenCertModal()}
-                  className="bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white font-bold font-sans text-xs px-5 py-2.5 rounded-xl cursor-pointer shadow-lg transition-all flex items-center space-x-2 shrink-0"
+                  className="bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white font-bold font-sans text-xs px-4 py-2 rounded-xl cursor-pointer shadow-md transition-all flex items-center space-x-1.5 shrink-0"
                 >
                   <Plus className="w-4 h-4 text-white" />
                   <span>Upload Certificate</span>
@@ -4511,85 +4630,84 @@ console.warn('Backend logout unavailable, clearing local session:', error);
 
             {!selectedStudent ? (activeTab.startsWith('bth-') ? renderNoTeamStudentSelectedPrompt() : renderNoStudentSelectedPrompt()) : (
               <div className="space-y-6 font-mono text-xs">
-                {/* CERTIFICATE GALLERY */}
-                {(student360Edit?.certificates || []).length === 0 ? (
-                  <div className="bg-slate-950 border border-slate-800 p-8 rounded-xl text-center space-y-3">
-                    <Award className="w-12 h-12 text-slate-600 mx-auto" />
-                    <div className="text-slate-300 font-sans font-bold text-sm">No Uploaded Certificates Found</div>
-                    <p className="text-slate-500 max-w-md mx-auto text-xs font-mono">
-                      No certificate records uploaded for {selectedStudent.name}. Click "Upload Certificate" to upload a PDF, JPG, or PNG certificate document.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenCertModal()}
-                      className="bg-sky-950 hover:bg-sky-900 border border-sky-800 text-sky-300 font-bold font-sans text-xs px-4 py-2 rounded-xl cursor-pointer transition-all inline-flex items-center space-x-2"
-                    >
-                      <Plus className="w-4 h-4 text-sky-400" />
-                      <span>Upload First Certificate</span>
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-bold text-sky-400 uppercase font-sans text-sm flex items-center space-x-2">
-                        <Award className="w-4 h-4 text-sky-400" />
-                        <span>Verified Certificates ({(student360Edit?.certificates || []).length})</span>
-                      </h4>
-                      <span className="text-slate-500 text-[11px]">All uploaded files persist across sessions</span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {/* CERTIFICATE RECORDS LIST */}
+                {(student360Edit?.certificates || []).length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="font-bold text-sky-400 uppercase font-sans text-sm">
+                      Certificate Records ({(student360Edit?.certificates || []).length})
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {(student360Edit?.certificates || []).map((c: any, idx: number) => {
-                        const hasFile = Boolean(c.filePath || c.file_path || c.originalFileName || c.original_file_name);
+                        const hasFile = Boolean(c.filePath || c.file_path || c.originalFileName || c.original_file_name || c.fileData || c.file_data);
                         return (
-                          <div key={c.id || idx} className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3 hover:border-slate-700 transition-all flex flex-col justify-between">
+                          <div key={c.id || idx} className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3 shadow-md flex flex-col justify-between">
                             <div className="space-y-2">
-                              <div className="flex justify-between items-start gap-2">
-                                <span className="bg-sky-950 text-sky-300 font-bold text-[10px] px-2 py-0.5 rounded border border-sky-800/80 truncate">
+                              <div className="flex justify-between items-center">
+                                <span className="bg-sky-950 text-sky-300 font-bold px-2 py-0.5 rounded border border-sky-800">
                                   {c.category || 'Technical Certification'}
                                 </span>
                                 <div className="flex items-center space-x-1 shrink-0">
                                   <button
                                     type="button"
-                                    title="Edit Certificate Details"
-                                    onClick={() => handleOpenCertModal(c)}
+                                    title="Edit certificate details"
+                                    onClick={() => handleStartEditCert(c)}
                                     className="text-slate-400 hover:text-sky-300 p-1 cursor-pointer transition-colors"
                                   >
-                                    <Pencil className="w-3.5 h-3.5" />
+                                    <Pencil className="w-4 h-4" />
                                   </button>
                                   <button
                                     type="button"
-                                    title="Delete Certificate"
-                                    onClick={() => handleDeleteCertificateRecord(c.id, c.courseName || c.title || 'Certificate')}
-                                    className="text-slate-400 hover:text-red-400 p-1 cursor-pointer transition-colors"
+                                    title="Delete certificate record"
+                                    onClick={() => handleDeleteCertificateRecord(c.id, c.courseName || c.course_name || c.title || 'Certificate')}
+                                    className="text-red-400 hover:text-red-300 p-1 cursor-pointer transition-colors"
                                   >
-                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <Trash2 className="w-4 h-4" />
                                   </button>
                                 </div>
                               </div>
 
-                              <div className="text-white font-bold font-sans text-sm leading-snug line-clamp-2">{c.courseName || c.title}</div>
+                              <div className="text-white font-bold font-sans text-sm leading-snug line-clamp-2">
+                                {c.courseName || c.course_name || c.title}
+                              </div>
 
-                              <div className="space-y-1 text-[11px] text-slate-400 border-t border-slate-800/60 pt-2">
+                              <div className="space-y-1 text-xs font-mono text-slate-400 pt-1">
                                 {(c.platform || c.issuingOrganization || c.issuedBy) && (
-                                  <div>
+                                  <div className="truncate">
                                     <span className="text-slate-500">Issuing Org:</span>{' '}
                                     <strong className="text-slate-200">{c.platform || c.issuingOrganization || c.issuedBy}</strong>
                                   </div>
                                 )}
-                                {(c.issueDate || c.issued_date) && (
+                                {(c.issueDate || c.issue_date || c.issued_date) && (
                                   <div>
                                     <span className="text-slate-500">Issue Date:</span>{' '}
-                                    <span className="text-slate-300">{formatDate(c.issueDate || c.issued_date)}</span>
+                                    <span className="text-slate-300">{formatDate(c.issueDate || c.issue_date || c.issued_date)}</span>
                                   </div>
                                 )}
-                                {c.uploadedAt && (
-                                  <div className="text-[10px] text-slate-500">
-                                    Uploaded: {formatDate(c.uploadedAt)}
+                                {(c.originalFileName || c.original_file_name) && (
+                                  <div className="text-[11px] text-slate-400 flex items-center space-x-1 truncate">
+                                    <FileText className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                                    <span className="truncate">{c.originalFileName || c.original_file_name}</span>
                                   </div>
                                 )}
                               </div>
                             </div>
+
+                            {/* Inline Card Error Notification for missing/unreachable files */}
+                            {certCardErrors[c.id] && (
+                              <div className="p-2.5 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-200 text-xs flex items-center justify-between gap-2 font-mono">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                                  <span className="truncate">{certCardErrors[c.id]}</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setCertCardErrors(prev => { const n = { ...prev }; delete n[c.id]; return n; })}
+                                  className="text-rose-400 hover:text-white p-0.5 cursor-pointer"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
 
                             {/* View / Download Actions */}
                             <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
@@ -4598,22 +4716,22 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                                   <button
                                     type="button"
                                     onClick={() => handleViewCertificate(c.id)}
-                                    className="flex-1 bg-sky-950/80 hover:bg-sky-900 text-sky-300 border border-sky-800/80 px-2.5 py-1.5 rounded-lg text-center font-bold text-[11px] flex items-center justify-center space-x-1 transition-all cursor-pointer"
+                                    className="flex-1 bg-sky-950/80 hover:bg-sky-900 text-sky-300 border border-sky-800/80 px-2.5 py-1.5 rounded-lg text-center font-bold text-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer font-sans"
                                   >
-                                    <ExternalLink className="w-3 h-3 text-sky-400" />
+                                    <ExternalLink className="w-3.5 h-3.5 text-sky-400" />
                                     <span>View File</span>
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => handleDownloadCertificate(c.id, c.originalFileName || c.original_file_name)}
-                                    className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 px-2.5 py-1.5 rounded-lg text-center font-bold text-[11px] flex items-center justify-center space-x-1 transition-all cursor-pointer"
+                                    className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 px-2.5 py-1.5 rounded-lg text-center font-bold text-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer font-sans"
                                   >
-                                    <Download className="w-3 h-3 text-slate-400" />
+                                    <Download className="w-3.5 h-3.5 text-slate-400" />
                                     <span>Download</span>
                                   </button>
                                 </>
                               ) : (
-                                <span className="text-slate-500 text-[10px] italic">No document file attached</span>
+                                <span className="text-slate-500 text-xs italic">No document file attached</span>
                               )}
                             </div>
                           </div>
@@ -4622,6 +4740,160 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                     </div>
                   </div>
                 )}
+
+                {/* ADD / EDIT CERTIFICATE FORM (Matching Project Form Styling Exactly) */}
+                <form onSubmit={handleSaveCertificateInline} className="bg-slate-950 border border-slate-800 p-5 rounded-xl space-y-4 shadow-inner">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-sky-400 uppercase text-sm font-sans">
+                      {editingCert ? `Edit Certificate: ${editingCert.courseName || editingCert.course_name || 'Record'}` : '+ Add Certificate Record'}
+                    </h4>
+                    {editingCert && (
+                      <button
+                        type="button"
+                        onClick={handleCancelEditCert}
+                        className="text-xs font-mono text-slate-400 hover:text-white px-2.5 py-1 border border-slate-700 rounded-lg cursor-pointer"
+                      >
+                        Cancel Edit
+                      </button>
+                    )}
+                  </div>
+
+                  {certSaveFeedback && (
+                    <div
+                      className={`p-3 rounded-xl border text-xs font-mono flex items-center space-x-2 transition-all ${
+                        certSaveFeedback.type === 'success'
+                          ? 'bg-emerald-950/80 border-emerald-500 text-emerald-200'
+                          : certSaveFeedback.type === 'info'
+                          ? 'bg-sky-950/80 border-sky-500 text-sky-200'
+                          : 'bg-rose-950/80 border-rose-500 text-rose-200'
+                      }`}
+                    >
+                      {certSaveFeedback.type === 'success' ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      ) : certSaveFeedback.type === 'info' ? (
+                        <Loader2 className="w-4 h-4 text-sky-400 animate-spin shrink-0" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                      )}
+                      <span>{certSaveFeedback.message}</span>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input
+                      type="text"
+                      placeholder="Certificate / Course Name *"
+                      value={certCourseName}
+                      onChange={(e) => setCertCourseName(e.target.value)}
+                      className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl text-white font-sans text-xs focus:outline-none focus:border-sky-500"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Issuing Organization / Platform (e.g. AWS, Coursera, NPTEL) *"
+                      value={certPlatform}
+                      onChange={(e) => setCertPlatform(e.target.value)}
+                      className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl text-white font-sans text-xs focus:outline-none focus:border-sky-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <select
+                      value={certCategory}
+                      onChange={(e) => setCertCategory(e.target.value)}
+                      className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl text-white font-bold text-xs focus:outline-none focus:border-sky-500"
+                    >
+                      <option value="Technical Certification">Technical Certification</option>
+                      <option value="Workshop & Seminar">Workshop & Seminar</option>
+                      <option value="Internship & Training">Internship & Training</option>
+                      <option value="Hackathon & Competition">Hackathon & Competition</option>
+                      <option value="Academic Excellence">Academic Excellence</option>
+                      <option value="Other">Other</option>
+                    </select>
+                    <input
+                      type="date"
+                      value={certIssueDate}
+                      onChange={(e) => setCertIssueDate(e.target.value)}
+                      className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-sky-500"
+                    />
+                  </div>
+
+                  {/* Certificate Document Upload Box (Matching Project Upload Box Exactly!) */}
+                  <div className="space-y-2 border border-slate-800 rounded-xl p-4 bg-slate-900/60">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-200 flex items-center space-x-1.5">
+                        <FileText className="w-4 h-4 text-sky-400" />
+                        <span>Certificate Document (PDF, JPG, PNG)</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono">Max 10 MB (PDF, JPG, PNG)</span>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-center gap-3">
+                      <label className="flex-1 w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl bg-slate-950 border border-slate-700 hover:border-sky-500 cursor-pointer text-xs font-mono text-slate-300 transition-colors">
+                        <Upload className="w-4 h-4 text-sky-400" />
+                        <span className="truncate">
+                          {certDocFile ? certDocFile.name : (editingCert ? 'Choose New Certificate File (or keep existing)' : 'Choose Certificate File (PDF / Image)')}
+                        </span>
+                        <input
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/jpg,image/png"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (!f) return;
+                            if (f.size > 10 * 1024 * 1024) {
+                              setCertSaveFeedback({ type: 'error', message: 'File exceeds 10 MB limit. Please select a smaller file.' });
+                              e.target.value = '';
+                              return;
+                            }
+                            const ext = f.name.substring(f.name.lastIndexOf('.')).toLowerCase();
+                            const allowed = ['.pdf', '.jpg', '.jpeg', '.png'];
+                            if (!allowed.includes(ext)) {
+                              setCertSaveFeedback({ type: 'error', message: 'Invalid file format. Supported formats: PDF, JPG, PNG.' });
+                              e.target.value = '';
+                              return;
+                            }
+                            setCertSaveFeedback(null);
+                            setCertDocFile(f);
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      {certDocFile && (
+                        <button
+                          type="button"
+                          onClick={() => setCertDocFile(null)}
+                          className="text-xs text-rose-400 hover:text-rose-300 px-3 py-2 border border-rose-900/50 rounded-xl cursor-pointer"
+                        >
+                          Remove File
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="submit"
+                      disabled={!certCourseName.trim() || !certPlatform.trim() || isCertSaving}
+                      className="bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold px-6 py-2.5 rounded-xl cursor-pointer shadow-lg transition-all font-sans text-xs flex items-center space-x-2"
+                    >
+                      {certSaveStep === 'UPLOADING' ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-white" />
+                          <span>Uploading Certificate...</span>
+                        </>
+                      ) : certSaveStep === 'SAVING' ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-white" />
+                          <span>Saving Record...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-white" />
+                          <span>{editingCert ? 'Update Certificate' : 'Save Certificate'}</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
               </div>
             )}
           </div>
@@ -5919,13 +6191,52 @@ console.warn('Backend logout unavailable, clearing local session:', error);
             {!selectedStudent ? renderNoStudentSelectedPrompt() : (
               <div className="space-y-6 font-mono text-xs">
                 {(student360Edit?.certificates || []).length > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    {(student360Edit?.certificates || []).map((c: any, idx: number) => (
-                      <div key={c.id || idx} className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-2">
-                        <span className="bg-sky-950 text-sky-300 font-bold px-2 py-0.5 rounded border border-sky-800">{c.platform || 'Online'}</span>
-                        <div className="text-white font-bold font-sans text-sm">{c.courseName || c.title}</div>
-                      </div>
-                    ))}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {(student360Edit?.certificates || []).map((c: any, idx: number) => {
+                      const hasFile = Boolean(c.filePath || c.file_path || c.originalFileName || c.original_file_name || c.fileData || c.file_data);
+                      return (
+                        <div key={c.id || idx} className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-2.5">
+                          <div className="flex justify-between items-center">
+                            <span className="bg-sky-950 text-sky-300 font-bold px-2 py-0.5 rounded border border-sky-800">
+                              {c.category || c.platform || 'Certification'}
+                            </span>
+                            <button
+                              onClick={() => setDeleteTarget({ studentId: selectedStudent.id, recordType: 'certificates', recordId: c.id, recordName: c.courseName || c.title })}
+                              className="text-red-400 hover:text-red-300 p-1 cursor-pointer"
+                              title="Delete certificate"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <div className="text-white font-bold font-sans text-sm">{c.courseName || c.title}</div>
+                          {c.platform && (
+                            <div className="text-[11px] text-slate-400 truncate">
+                              <span className="text-slate-500">Platform:</span> <strong className="text-slate-200">{c.platform}</strong>
+                            </div>
+                          )}
+                          {hasFile && (
+                            <div className="pt-2 border-t border-slate-800/80 flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleViewCertificate(c.id)}
+                                className="flex-1 bg-sky-950/80 hover:bg-sky-900 text-sky-300 border border-sky-800/80 px-2 py-1 rounded-lg text-center font-bold text-xs flex items-center justify-center space-x-1 cursor-pointer"
+                              >
+                                <ExternalLink className="w-3 h-3 text-sky-400" />
+                                <span>View</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDownloadCertificate(c.id, c.originalFileName || c.original_file_name)}
+                                className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 px-2 py-1 rounded-lg text-center font-bold text-xs flex items-center justify-center space-x-1 cursor-pointer"
+                              >
+                                <Download className="w-3 h-3 text-slate-400" />
+                                <span>Download</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

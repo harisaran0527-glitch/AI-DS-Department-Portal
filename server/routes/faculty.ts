@@ -28,7 +28,8 @@ import {
   deleteFileFromStorage,
   getMimeFromPath,
   detectMimeFromBuffer,
-  fetchRemoteFormBuilderBuffer
+  fetchRemoteFormBuilderBuffer,
+  safeToBuffer
 } from '../storage.js';
 
 const router = Router();
@@ -1030,15 +1031,124 @@ router.delete('/students/:studentId/certificates/:certId', verifyFacultySectionA
   }
 });
 
-router.get('/certificates/:certId/view', async (req: AuthRequest, res: Response) => {
-  const certId = getRouteParam(req, 'certId');
+// Robust helper to resolve Certificate and Attachment records across all identifier schemes
+async function resolveCertificateEntity(certId: string): Promise<{ cert: any | null; att: any | null; studentId: string | null }> {
   let cert = typeof db.getCertificateById === 'function' ? await db.getCertificateById(certId) : null;
   let att = typeof db.getAttachmentByRecordId === 'function' ? await db.getAttachmentByRecordId(certId) : null;
-  if (!att && !cert && typeof db.getAttachmentById === 'function') {
+  if (!att && typeof db.getAttachmentById === 'function') {
     att = await db.getAttachmentById(certId);
   }
 
-  const studentId = cert?.student_id || att?.student_id;
+  // If cert was not found, but att was found: check if att.record_id points to a certificate record
+  if (!cert && att?.record_id && typeof db.getCertificateById === 'function') {
+    cert = await db.getCertificateById(att.record_id);
+  }
+
+  const studentId = cert?.student_id || att?.student_id || null;
+  if (cert && !att && studentId) {
+    if (typeof db.getAttachmentForRecord === 'function') {
+      att = await db.getAttachmentForRecord(studentId, 'certificates', cert.id);
+    }
+    if (!att && typeof db.getAttachmentById === 'function') {
+      att = (await db.getAttachmentById(`att-cert-${cert.id}`)) || null;
+    }
+    if (!att && cert.file_path) {
+      const match = cert.file_path.match(/(?:^|\/api\/files\/(?:download\/)?)(att-[^/?#]+|[0-9a-f-]{36})/i);
+      if (match && typeof db.getAttachmentById === 'function') {
+        att = (await db.getAttachmentById(match[1])) || null;
+      }
+      if (!att) {
+        att = (await queryOne('SELECT * FROM attachments WHERE stored_file_name = ? AND is_deleted = 0 ORDER BY uploaded_at DESC LIMIT 1', [cert.file_path])) || null;
+      }
+    }
+    if (!att && cert.certificate_id) {
+      if (typeof db.getAttachmentByRecordId === 'function') {
+        att = (await db.getAttachmentByRecordId(cert.certificate_id)) || null;
+      }
+      if (!att && typeof db.getAttachmentById === 'function') {
+        att = (await db.getAttachmentById(`att-sync-${cert.certificate_id}-proof`)) ||
+              (await db.getAttachmentById(`att-sync-${cert.certificate_id}`)) || null;
+      }
+    }
+  }
+
+  return { cert, att, studentId };
+}
+
+// Robust helper to extract binary buffer and determine content type across all persistence tiers
+async function resolveCertificateBinary(cert: any, att: any): Promise<{ buffer: Buffer | null; contentType: string; originalFileName: string }> {
+  let buffer: Buffer | null = null;
+  let contentType = cert?.mime_type || att?.mime_type || '';
+  let originalFileName = cert?.original_file_name || att?.original_file_name || '';
+
+  // 1. Primary: Direct cert.file_data (BYTEA)
+  if (cert?.file_data) {
+    buffer = safeToBuffer(cert.file_data);
+  }
+
+  // 2. Secondary: Attachments table bytea persistence (att.file_data)
+  if (!buffer && att?.file_data) {
+    buffer = safeToBuffer(att.file_data);
+    if (!contentType && att.mime_type) contentType = att.mime_type;
+    if (!originalFileName && att.original_file_name) originalFileName = att.original_file_name;
+  }
+
+  // 3. Check candidate paths & references
+  const candidatePaths = [
+    cert?.file_path,
+    cert?.proof_file_path,
+    att?.stored_file_name
+  ].filter(Boolean) as string[];
+
+  // 3a. If any path references an internal attachment ID
+  for (const p of candidatePaths) {
+    if (buffer) break;
+    const match = p.match(/(?:^|\/api\/files\/(?:download\/)?)(att-[^/?#]+|[0-9a-f-]{36})/i);
+    const candidateId = match ? match[1] : (p.startsWith('att-') ? p : null);
+    if (candidateId && candidateId !== att?.id && candidateId !== cert?.id) {
+      const extraAtt = typeof db.getAttachmentById === 'function' ? await db.getAttachmentById(candidateId) : null;
+      if (extraAtt?.file_data) {
+        buffer = safeToBuffer(extraAtt.file_data);
+        if (!contentType && extraAtt.mime_type) contentType = extraAtt.mime_type;
+        if (!originalFileName && extraAtt.original_file_name) originalFileName = extraAtt.original_file_name;
+      }
+    }
+  }
+
+  // 3b. Remote proxy fallback (handles Form Builder synced files and internal proxy)
+  for (const p of candidatePaths) {
+    if (buffer) break;
+    const remote = await fetchRemoteFormBuilderBuffer(p);
+    if (remote) {
+      buffer = remote.buffer;
+      if (remote.contentType) contentType = remote.contentType;
+    }
+  }
+
+  // 3c. Fallback: Supabase Storage / filesystem
+  for (const p of candidatePaths) {
+    if (buffer) break;
+    const fileData = await downloadFileFromStorage(p);
+    if (fileData) {
+      buffer = fileData.buffer;
+      if (!contentType && fileData.contentType) contentType = fileData.contentType;
+    }
+  }
+
+  const ext = path.extname(originalFileName || candidatePaths[0] || '.pdf').toLowerCase();
+  if (!originalFileName) {
+    originalFileName = `${cert?.course_name || 'Certificate'}_Document${ext || '.pdf'}`;
+  }
+  const detectedMime = buffer ? detectMimeFromBuffer(buffer) : null;
+  const finalContentType = contentType || detectedMime || getMimeFromPath(originalFileName) || 'application/pdf';
+
+  return { buffer, contentType: finalContentType, originalFileName };
+}
+
+router.get('/certificates/:certId/view', async (req: AuthRequest, res: Response) => {
+  const certId = getRouteParam(req, 'certId');
+  const { cert, att, studentId } = await resolveCertificateEntity(certId);
+
   if (!studentId) {
     return res.status(404).json({ error: 'Certificate record not found.' });
   }
@@ -1048,68 +1158,23 @@ router.get('/certificates/:certId/view', async (req: AuthRequest, res: Response)
     return res.status(403).json({ error: 'Forbidden: You do not have permission to view files for this student.' });
   }
 
-  if (!att && typeof db.getAttachmentForRecord === 'function') {
-    att = await db.getAttachmentForRecord(studentId, 'certificates', certId);
-  }
-
-  let buffer: Buffer | null = null;
-  let contentType = cert?.mime_type || att?.mime_type || '';
-
-  // 1. Primary: Direct record bytea persistence
-  if (cert?.file_data) {
-    buffer = Buffer.isBuffer(cert.file_data) ? cert.file_data : Buffer.from(cert.file_data);
-  }
-
-  // 2. Secondary: Attachments table bytea persistence
-  if (!buffer && att?.file_data) {
-    buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
-    if (!contentType && att.mime_type) contentType = att.mime_type;
-  }
-
-  // 3. Form Builder remote proxy fallback
-  const filePath = cert?.file_path || cert?.proof_file_path || att?.stored_file_name || '';
-  if (!buffer && filePath) {
-    const remote = await fetchRemoteFormBuilderBuffer(filePath);
-    if (remote) {
-      buffer = remote.buffer;
-      if (remote.contentType) contentType = remote.contentType;
-    }
-  }
-
-  // 4. Fallback: Supabase Storage / filesystem
-  if (!buffer && filePath) {
-    const fileData = await downloadFileFromStorage(filePath);
-    if (fileData) {
-      buffer = fileData.buffer;
-      if (!contentType && fileData.contentType) contentType = fileData.contentType;
-    }
-  }
+  const { buffer, contentType, originalFileName } = await resolveCertificateBinary(cert, att);
 
   if (!buffer) {
     return res.status(404).json({ error: 'Certificate file content is not available on server storage.' });
   }
 
-  const ext = path.extname(cert?.original_file_name || att?.original_file_name || filePath || '.pdf').toLowerCase();
-  const origName = cert?.original_file_name || att?.original_file_name || `${cert?.course_name || 'Certificate'}_Certificate${ext}`;
-  const detectedMime = detectMimeFromBuffer(buffer);
-  const finalContentType = contentType || detectedMime || getMimeFromPath(origName);
-
-  res.setHeader('Content-Type', finalContentType);
+  res.setHeader('Content-Type', contentType);
   res.setHeader('Content-Length', buffer.length.toString());
-  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(origName)}"`);
+  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(originalFileName)}"`);
   res.setHeader('Cache-Control', 'private, no-store');
   return res.send(buffer);
 });
 
 router.get('/certificates/:certId/download', async (req: AuthRequest, res: Response) => {
   const certId = getRouteParam(req, 'certId');
-  let cert = typeof db.getCertificateById === 'function' ? await db.getCertificateById(certId) : null;
-  let att = typeof db.getAttachmentByRecordId === 'function' ? await db.getAttachmentByRecordId(certId) : null;
-  if (!att && !cert && typeof db.getAttachmentById === 'function') {
-    att = await db.getAttachmentById(certId);
-  }
+  const { cert, att, studentId } = await resolveCertificateEntity(certId);
 
-  const studentId = cert?.student_id || att?.student_id;
   if (!studentId) {
     return res.status(404).json({ error: 'Certificate record not found.' });
   }
@@ -1119,55 +1184,15 @@ router.get('/certificates/:certId/download', async (req: AuthRequest, res: Respo
     return res.status(403).json({ error: 'Forbidden: You do not have permission to download files for this student.' });
   }
 
-  if (!att && typeof db.getAttachmentForRecord === 'function') {
-    att = await db.getAttachmentForRecord(studentId, 'certificates', certId);
-  }
-
-  let buffer: Buffer | null = null;
-  let contentType = cert?.mime_type || att?.mime_type || '';
-
-  // 1. Primary: Direct record bytea persistence
-  if (cert?.file_data) {
-    buffer = Buffer.isBuffer(cert.file_data) ? cert.file_data : Buffer.from(cert.file_data);
-  }
-
-  // 2. Secondary: Attachments table bytea persistence
-  if (!buffer && att?.file_data) {
-    buffer = Buffer.isBuffer(att.file_data) ? att.file_data : Buffer.from(att.file_data);
-    if (!contentType && att.mime_type) contentType = att.mime_type;
-  }
-
-  // 3. Form Builder remote proxy fallback
-  const filePath = cert?.file_path || cert?.proof_file_path || att?.stored_file_name || '';
-  if (!buffer && filePath) {
-    const remote = await fetchRemoteFormBuilderBuffer(filePath);
-    if (remote) {
-      buffer = remote.buffer;
-      if (remote.contentType) contentType = remote.contentType;
-    }
-  }
-
-  // 4. Fallback: Supabase Storage / filesystem
-  if (!buffer && filePath) {
-    const fileData = await downloadFileFromStorage(filePath);
-    if (fileData) {
-      buffer = fileData.buffer;
-      if (!contentType && fileData.contentType) contentType = fileData.contentType;
-    }
-  }
+  const { buffer, contentType, originalFileName } = await resolveCertificateBinary(cert, att);
 
   if (!buffer) {
     return res.status(404).json({ error: 'Certificate file content is not available on server storage.' });
   }
 
-  const ext = path.extname(cert?.original_file_name || att?.original_file_name || filePath || '.pdf').toLowerCase();
-  const origName = cert?.original_file_name || att?.original_file_name || `${cert?.course_name || 'Certificate'}_Certificate${ext}`;
-  const detectedMime = detectMimeFromBuffer(buffer);
-  const finalContentType = contentType || detectedMime || getMimeFromPath(origName);
-
-  res.setHeader('Content-Type', finalContentType);
+  res.setHeader('Content-Type', contentType);
   res.setHeader('Content-Length', buffer.length.toString());
-  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(origName)}"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(originalFileName)}"`);
   return res.send(buffer);
 });
 

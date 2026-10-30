@@ -2717,15 +2717,27 @@ export class SQLiteDB {
       const matchedExisting = existingMap.get(recId) || existingMap.get(`name:${courseName.trim().toLowerCase()}`);
       const filePath = r.filePath !== undefined ? r.filePath : (r.file_path !== undefined ? r.file_path : (matchedExisting?.file_path || ''));
       const originalFileName = r.originalFileName !== undefined ? r.originalFileName : (r.original_file_name !== undefined ? r.original_file_name : (matchedExisting?.original_file_name || ''));
-      const fileData = r.fileData !== undefined ? r.fileData : (r.file_data !== undefined ? r.file_data : (matchedExisting?.file_data || null));
+      let fileData = r.fileData !== undefined ? r.fileData : (r.file_data !== undefined ? r.file_data : (matchedExisting?.file_data || null));
       const mimeType = r.mimeType !== undefined ? r.mimeType : (r.mime_type !== undefined ? r.mime_type : (matchedExisting?.mime_type || ''));
       const uploadedAt = r.uploadedAt || r.uploaded_at || matchedExisting?.uploaded_at || new Date().toISOString();
       const createdAt = r.createdAt || r.created_at || matchedExisting?.created_at || uploadedAt;
+
+      // Preserve file data from attachments table if not present on certificate record
+      if (!fileData) {
+        const existingAtt = (await queryOne('SELECT file_data FROM attachments WHERE (record_id = ? OR record_id = ? OR id = ?) AND is_deleted = 0 AND file_data IS NOT NULL LIMIT 1', [recId, matchedExisting?.id, `att-cert-${recId}`])) || null;
+        if (existingAtt?.file_data) {
+          fileData = existingAtt.file_data;
+        }
+      }
 
       await executeRun(`
         INSERT INTO certificate_records (id, student_id, course_name, platform, category, issue_date, certificate_id, file_path, original_file_name, file_data, mime_type, uploaded_at, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [recId, studentId, courseName, platform, category, issueDate, certId, filePath, originalFileName, fileData, mimeType, uploadedAt, createdAt]);
+
+      if (matchedExisting?.id && matchedExisting.id !== recId) {
+        await executeRun('UPDATE attachments SET record_id = ? WHERE record_id = ? AND student_id = ?', [recId, matchedExisting.id, studentId]).catch(() => {});
+      }
     }
   }
 
@@ -4783,6 +4795,7 @@ export class SQLiteDB {
 
   // ATTACHMENT / PROOF FILE ENGINE
   public async createAttachment(att: AttachmentRecord): Promise<void> {
+    await executeRun('DELETE FROM attachments WHERE id = ?', [att.id]).catch(() => {});
     await executeRun(`
       INSERT INTO attachments (id, student_id, record_type, record_id, original_file_name, stored_file_name, mime_type, file_size, uploaded_by_user_id, uploaded_by_role, uploaded_at, is_deleted, file_data)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)

@@ -421,3 +421,37 @@ test('7. Storage utilities and Form Builder proxy resilience', async () => {
   assert.equal(await fetchRemoteFormBuilderBuffer(''), null);
   assert.equal(await fetchRemoteFormBuilderBuffer(null), null);
 });
+
+test('8. Certificate resolution across full URLs, direct IDs, and Form Builder paths', async () => {
+  // 8a. Full URL containing /api/files/ resolves internal attachment directly
+  const fullUrlResolved = await fetchRemoteFormBuilderBuffer('http://127.0.0.1:5000/api/files/att-cert-001');
+  assert.ok(fullUrlResolved, 'Should resolve full URL with /api/files/ internally');
+  assert.equal(fullUrlResolved.contentType, 'image/png');
+
+  // 8b. Direct attachment ID resolves internal attachment directly
+  const directIdResolved = await fetchRemoteFormBuilderBuffer('att-cert-001');
+  assert.ok(directIdResolved, 'Should resolve direct att- ID internally');
+  assert.equal(directIdResolved.contentType, 'image/png');
+
+  // 8c. Certificate record referencing attachment by full URL in file_path
+  memory.prepare(`
+    INSERT INTO certificate_records (id, student_id, course_name, platform, category, issue_date, file_path, original_file_name)
+    VALUES ('cert-proxy-url', 'stu-user-1', 'Proxy URL Cert', 'Online', 'Technical', '2026-01-01', 'http://127.0.0.1:5000/api/files/att-cert-001', 'cert_proxy.png')
+  `).run();
+
+  const viewProxyUrl = await request('/api/faculty/certificates/cert-proxy-url/view', { userId: 'usr-fac-a' });
+  assert.equal(viewProxyUrl.status, 200);
+  assert.equal(viewProxyUrl.headers.get('content-type'), 'image/png');
+  assert.equal(viewProxyUrl.buffer.compare(PNG_BUFFER), 0);
+
+  // 8d. Certificate record referencing attachment by direct ID in file_path
+  memory.prepare(`
+    INSERT INTO certificate_records (id, student_id, course_name, platform, category, issue_date, file_path, original_file_name)
+    VALUES ('cert-direct-att', 'stu-user-1', 'Direct Att Cert', 'Online', 'Technical', '2026-01-01', 'att-cert-001', 'cert_direct.png')
+  `).run();
+
+  const viewDirectAtt = await request('/api/faculty/certificates/cert-direct-att/view', { userId: 'usr-fac-a' });
+  assert.equal(viewDirectAtt.status, 200);
+  assert.equal(viewDirectAtt.headers.get('content-type'), 'image/png');
+  assert.equal(viewDirectAtt.buffer.compare(PNG_BUFFER), 0);
+});
