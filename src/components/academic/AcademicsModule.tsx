@@ -463,7 +463,7 @@ export const AcademicsModule: React.FC<AcademicsModuleProps> = ({
   }, [rosterStudents, rosterSearchQuery]);
 
   return (
-    <div className="space-y-6">
+    <div className={userRole === 'FACULTY' ? 'faculty-academics space-y-6' : 'space-y-6'}>
       {/* MODULE HEADER & FOUR DEDICATED TABS */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/90 border border-slate-800 p-4 sm:p-5 rounded-2xl backdrop-blur-xl shadow-xl">
         <div className="flex items-center space-x-3">

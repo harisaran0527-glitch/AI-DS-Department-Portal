@@ -23,7 +23,7 @@ const database = {
 };
 isolateServer(database, {}, { namedModules: {
   '../postgresAdapter.js': { executeRun: forbiddenDependency, queryOne: forbiddenDependency, queryAll: forbiddenDependency, isPostgresActive: () => false, executeTransaction: forbiddenDependency },
-  '../storage.js': { MAX_FILE_SIZE_BYTES: 1024, MSG_FILE_TOO_LARGE: 'fixture limit', DANGEROUS_EXTENSIONS: new Set(), PROOF_ALLOWED_EXTENSIONS: new Set(['.pdf']), PROJECT_ALLOWED_EXTENSIONS: new Set(), validateUploadedFile: forbiddenDependency, uploadFileToStorage: forbiddenDependency, downloadFileFromStorage: forbiddenDependency, deleteFileFromStorage: forbiddenDependency, getMimeFromPath: () => 'application/pdf', detectMimeFromBuffer: () => 'application/pdf', fetchRemoteFormBuilderBuffer: async () => null },
+  '../storage.js': { MAX_FILE_SIZE_BYTES: 1024, MSG_FILE_TOO_LARGE: 'fixture limit', DANGEROUS_EXTENSIONS: new Set(), PROOF_ALLOWED_EXTENSIONS: new Set(['.pdf']), PROJECT_ALLOWED_EXTENSIONS: new Set(), validateUploadedFile: forbiddenDependency, uploadFileToStorage: forbiddenDependency, downloadFileFromStorage: forbiddenDependency, deleteFileFromStorage: forbiddenDependency, getMimeFromPath: () => 'application/pdf', detectMimeFromBuffer: () => 'application/pdf', fetchRemoteFormBuilderBuffer: async () => null, safeToBuffer: value => Buffer.isBuffer(value) ? value : null },
   '../services/skilledgeSync.js': { syncDepartmentSkillEdge: async () => { syncCalls++; return { isolated: true }; }, syncStudentSkillEdge: forbiddenDependency }
 } });
 const { default: facultyRoutes } = await import('../server/routes/faculty.ts');
@@ -41,13 +41,14 @@ const pipePath = `\\\\.\\pipe\\test-svc-auth-${Date.now()}`;
 const server = app.listen(pipePath);
 await new Promise(resolve => server.once('listening', resolve));
 after(() => new Promise(resolve => server.close(resolve)));
-const request = (path, role, method = 'GET', extra = {}) => new Promise((resolve, reject) => {
+const request = (path, role, method = 'GET', extra = {}, body) => new Promise((resolve, reject) => {
   const req = http.request({
     socketPath: pipePath,
     path,
     method,
     headers: {
       ...(role ? { Authorization: `Bearer ${signSessionToken(accounts.find(account => account.role === role))}`, 'X-Portal-Role': role } : {}),
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...extra
     }
   }, res => {
@@ -64,7 +65,44 @@ const request = (path, role, method = 'GET', extra = {}) => new Promise((resolve
     });
   });
   req.on('error', reject);
-  req.end();
+  req.end(body ? JSON.stringify(body) : undefined);
+});
+
+test('emergency onboarding retains required fields and derives scope from the Faculty assignment', async () => {
+  const previousAssignment = database.getFacultyAssignment;
+  const writes = [];
+  database.getFacultyAssignment = async () => ({ role: 'Class Coordinator', year: '2nd Year', section: 'A' });
+  database.upsertStudentWithUserLogin = async student => {
+    writes.push(student);
+    return { id: 'memory-only-created', ...student, register_no: student.registerNo };
+  };
+  database.logAudit = async () => {};
+  try {
+    assert.equal((await request('/api/faculty/students', 'FACULTY', 'POST', {}, {})).status, 400);
+    assert.equal(writes.length, 0);
+    for (const endpoint of ['/students', '/students/emergency-add']) {
+      const result = await request('/api/faculty' + endpoint, 'FACULTY', 'POST', {}, {
+        registerNo: 'memory-only-register', name: 'Memory-only student', email: 'STUDENT@example.invalid',
+        year: '4th Year', section: 'B', cgpa: 'N/A'
+      });
+      assert.equal(result.status, 201);
+    }
+    assert.equal(writes.length, 2);
+    for (const student of writes) {
+      assert.equal(student.year, '2nd Year');
+      assert.equal(student.section, 'A');
+      assert.equal(student.createdByFacultyId, 'faculty');
+      assert.equal(student.email, 'student@example.invalid');
+      assert.equal(student.cgpa, null);
+    }
+    database.getFacultyAssignment = async () => ({ role: 'Subject Faculty', year: '2nd Year', section: 'A' });
+    assert.equal((await request('/api/faculty/students', 'FACULTY', 'POST', {}, {})).status, 403);
+    assert.equal(writes.length, 2);
+  } finally {
+    database.getFacultyAssignment = previousAssignment;
+    delete database.upsertStudentWithUserLogin;
+    delete database.logAudit;
+  }
 });
 
 test('Student sessions cannot list staff rosters or mutate any faculty endpoint', async () => {

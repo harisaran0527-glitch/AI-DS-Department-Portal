@@ -3,7 +3,11 @@ import { test } from 'node:test';
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import { isolateServer } from './helpers/isolated-server.mjs';
-import { normalizeYear, normalizeSection } from '../server/db.js';
+
+// Install isolation before importing the database utilities, so dotenv and live
+// database bootstrap cannot run while checking in-memory mark fixtures.
+isolateServer({}, {}, { loadRealDatabase: true });
+const { normalizeYear, normalizeSection } = await import('../server/db.js');
 
 process.env.JWT_SECRET = 'isolated-test-secret-at-least-32-bytes-long-2026';
 

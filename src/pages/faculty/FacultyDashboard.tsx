@@ -8,6 +8,8 @@ import type { UserSession, Student, TeamHead } from '../../types';
 import { DashboardLayout, type MenuItem } from '../../components/layout/DashboardLayout';
 import { ConfirmDeleteModal } from '../../components/common/ConfirmDeleteModal';
 import { ForgotPasswordModal } from '../../components/common/ForgotPasswordModal';
+import { useFacultyDialog } from '../../components/faculty/useFacultyDialog';
+import '../../components/faculty/faculty-workspace.css';
 import { AcademicsModule } from '../../components/academic/AcademicsModule';
 import { BestEliteStudentsView } from '../../components/elite/BestEliteStudentsView';
 import { GeminiTopRecognitionView } from '../../components/ranking/GeminiTopRecognitionView';
@@ -103,6 +105,7 @@ export const FacultyDashboard: React.FC = () => {
   const [addPassword, setAddPassword] = useState('');
   const [addEntryType, setAddEntryType] = useState<'Regular' | 'Lateral Entry'>('Regular');
   const [showAddPassword, setShowAddPassword] = useState(false);
+  const emergencyDialogRef = useFacultyDialog(showAddStudentModal, () => setShowAddStudentModal(false));
   const [addError, setAddError] = useState('');
   const [, setAddSuccess] = useState('');
   const [isAddingStudent, setIsAddingStudent] = useState(false);
@@ -2191,8 +2194,8 @@ console.warn('Backend logout unavailable, clearing local session:', error);
 
             {/* CENTRAL STUDENT ROSTER TABLE CONTAINER */}
             <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-6 space-y-4 shadow-xl">
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
-                <div>
+              <div className="faculty-roster-toolbar">
+                <div className="faculty-roster-heading">
                   <h2 className="text-lg font-bold text-white flex items-center space-x-2 font-sans">
                     <Users className="w-5 h-5 text-sky-400" />
                     <span>My Students Roster — Central Section Roster</span>
@@ -2203,33 +2206,33 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                 </div>
 
                 {/* SEARCH & FILTERS BAR */}
-                <div className="flex flex-col sm:flex-row items-center gap-3">
-                  <div className="relative w-full sm:w-60">
+                <div className="faculty-roster-actions">
+                  <div className="faculty-roster-search">
                     <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
                     <input
                       type="text"
-                      placeholder="Search Reg No, Name, Email..."
+                      aria-label="Search assigned students" placeholder="Search Reg No, Name, Email..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-800 pl-8 pr-3 py-1.5 rounded-xl text-xs text-white font-mono"
                     />
                   </div>
 
-                  <div className="flex items-center space-x-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-mono">
+                  <div className="faculty-roster-filters" aria-label="Filter by entry type">
                     <button
-                      onClick={() => setEntryTypeFilter('ALL')}
+                      aria-pressed={entryTypeFilter === 'ALL'} onClick={() => setEntryTypeFilter('ALL')}
                       className={`px-2.5 py-1 rounded-lg transition-all ${entryTypeFilter === 'ALL' ? 'bg-sky-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
                     >
                       All
                     </button>
                     <button
-                      onClick={() => setEntryTypeFilter('Regular')}
+                      aria-pressed={entryTypeFilter === 'Regular'} onClick={() => setEntryTypeFilter('Regular')}
                       className={`px-2.5 py-1 rounded-lg transition-all ${entryTypeFilter === 'Regular' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
                     >
                       Regular
                     </button>
                     <button
-                      onClick={() => setEntryTypeFilter('Lateral Entry')}
+                      aria-pressed={entryTypeFilter === 'Lateral Entry'} onClick={() => setEntryTypeFilter('Lateral Entry')}
                       className={`px-2.5 py-1 rounded-lg transition-all ${entryTypeFilter === 'Lateral Entry' ? 'bg-amber-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
                     >
                       Lateral
@@ -2237,14 +2240,14 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                   </div>
 
                   {isClassCoordinator && (
-                    <div className="flex items-center space-x-2">
+                    <div className="faculty-roster-create">
                       <button
                         onClick={() => setShowAddStudentModal(true)}
-                        className="min-h-[44px] bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center space-x-1.5 transition-all shadow-md cursor-pointer shrink-0"
+                        className="faculty-emergency-trigger"
                         title="Emergency manual student onboarding for assigned section"
                       >
                         <UserPlus className="w-4 h-4" />
-                        <span>+ Add Student (Emergency)</span>
+                        <span>Add Student (Emergency)</span>
                       </button>
                     </div>
                   )}
@@ -6350,66 +6353,66 @@ console.warn('Backend logout unavailable, clearing local session:', error);
       {/* ADD STUDENT MODAL (MY STUDENTS CENTRAL ONBOARDING) */}
       {/* EMERGENCY ADD SINGLE STUDENT MODAL */}
       {showAddStudentModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl p-6 shadow-2xl space-y-4 text-xs max-h-[92vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+        <div className="faculty-emergency-overlay">
+          <div className="faculty-emergency-dialog" ref={emergencyDialogRef} role="dialog" aria-modal="true" aria-labelledby="faculty-emergency-title" aria-describedby="faculty-emergency-description" tabIndex={-1}>
+            <div className="faculty-emergency-header">
               <div>
-                <h3 className="font-bold text-white text-sm flex items-center space-x-2 font-sans">
+                <h3 id="faculty-emergency-title" className="font-bold text-white text-sm flex items-center space-x-2 font-sans">
                   <UserPlus className="w-4 h-4 text-emerald-400" />
                   <span>Emergency Student Onboarding — Section {assignedSection}</span>
                 </h3>
-                <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                <p id="faculty-emergency-description" className="text-[11px] text-slate-400 font-mono mt-0.5">
                   Manual onboarding for emergency individual student enrollment into your assigned class.
                 </p>
               </div>
-              <button onClick={() => setShowAddStudentModal(false)} className="text-slate-400 hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
+              <button type="button" aria-label="Close emergency student form" onClick={() => setShowAddStudentModal(false)} className="faculty-dialog-close"><X className="w-4 h-4" /></button>
             </div>
 
-            {addError && <div className="bg-red-950 border border-red-800 text-red-300 p-3 rounded-xl font-mono">{addError}</div>}
-
-            <form onSubmit={handleAddStudentByFaculty} className="space-y-3 font-mono">
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleAddStudentByFaculty} className="faculty-emergency-form">
+              <div className="faculty-emergency-fields">
+              {addError && <div role="alert" className="faculty-form-error">{addError}</div>}
+              <div className="faculty-emergency-grid">
                 <div>
-                  <label className="text-slate-300 font-bold block mb-1">Register Number *</label>
-                  <input type="text" required placeholder="e.g. 620125243101" value={addRegNo} onChange={(e) => setAddRegNo(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                  <label htmlFor="faculty-emergency-register" className="text-slate-300 font-bold block mb-1">Register Number *</label>
+                  <input id="faculty-emergency-register" type="text" required placeholder="e.g. 620125243101" value={addRegNo} onChange={(e) => setAddRegNo(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
                 </div>
                 <div>
-                  <label className="text-slate-300 font-bold block mb-1">Student Name *</label>
-                  <input type="text" required placeholder="Enter student name" value={addName} onChange={(e) => setAddName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white font-sans font-bold" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-slate-300 font-bold block mb-1">College Mail ID *</label>
-                  <input type="email" required placeholder="Enter official email" value={addCollegeMail} onChange={(e) => setAddCollegeMail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
-                </div>
-                <div>
-                  <label className="text-slate-300 font-bold block mb-1">Mobile Number</label>
-                  <input type="text" placeholder="Enter mobile number" value={addMobileNumber} onChange={(e) => setAddMobileNumber(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                  <label htmlFor="faculty-emergency-name" className="text-slate-300 font-bold block mb-1">Student Name *</label>
+                  <input id="faculty-emergency-name" type="text" required placeholder="Enter student name" value={addName} onChange={(e) => setAddName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white font-sans font-bold" />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="faculty-emergency-grid">
                 <div>
-                  <label className="text-slate-300 font-bold block mb-1">Personal Mail ID</label>
-                  <input type="email" placeholder="Enter personal email" value={addPersonalMail} onChange={(e) => setAddPersonalMail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                  <label htmlFor="faculty-emergency-college-email" className="text-slate-300 font-bold block mb-1">College Mail ID *</label>
+                  <input id="faculty-emergency-college-email" type="email" required placeholder="Enter official email" value={addCollegeMail} onChange={(e) => setAddCollegeMail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
                 </div>
                 <div>
-                  <label className="text-slate-300 font-bold block mb-1">Address / City</label>
-                  <input type="text" placeholder="Enter address / city" value={addAddress} onChange={(e) => setAddAddress(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                  <label htmlFor="faculty-emergency-mobile" className="text-slate-300 font-bold block mb-1">Mobile Number</label>
+                  <input id="faculty-emergency-mobile" type="text" placeholder="Enter mobile number" value={addMobileNumber} onChange={(e) => setAddMobileNumber(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="faculty-emergency-grid">
                 <div>
-                  <label className="text-slate-300 font-bold block mb-1">CGPA (or N/A)</label>
-                  <input type="text" placeholder="e.g. 8.45 or N/A" value={addCgpa} onChange={(e) => setAddCgpa(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                  <label htmlFor="faculty-emergency-personal-email" className="text-slate-300 font-bold block mb-1">Personal Mail ID</label>
+                  <input id="faculty-emergency-personal-email" type="email" placeholder="Enter personal email" value={addPersonalMail} onChange={(e) => setAddPersonalMail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                </div>
+                <div>
+                  <label htmlFor="faculty-emergency-address" className="text-slate-300 font-bold block mb-1">Address / City</label>
+                  <input id="faculty-emergency-address" type="text" placeholder="Enter address / city" value={addAddress} onChange={(e) => setAddAddress(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
+                </div>
+              </div>
+
+              <div className="faculty-emergency-grid">
+                <div>
+                  <label htmlFor="faculty-emergency-cgpa" className="text-slate-300 font-bold block mb-1">CGPA (or N/A)</label>
+                  <input id="faculty-emergency-cgpa" type="text" placeholder="e.g. 8.45 or N/A" value={addCgpa} onChange={(e) => setAddCgpa(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white" />
                   <span className="text-[10px] text-slate-500 block mt-0.5">Use &quot;N/A&quot; if not yet graded</span>
                 </div>
                 <div>
-                  <label className="text-slate-300 font-bold block mb-1">Entry Type</label>
-                  <select value={addEntryType} onChange={(e) => setAddEntryType(e.target.value as any)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white font-bold">
+                  <label htmlFor="faculty-emergency-entry" className="text-slate-300 font-bold block mb-1">Entry Type</label>
+                  <select id="faculty-emergency-entry" value={addEntryType} onChange={(e) => setAddEntryType(e.target.value as any)} className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white font-bold">
                     <option value="Regular">Regular</option>
                     <option value="Lateral Entry">Lateral Entry</option>
                   </select>
@@ -6417,26 +6420,27 @@ console.warn('Backend logout unavailable, clearing local session:', error);
               </div>
 
               <div>
-                <label className="text-slate-300 font-bold block mb-1">Portal Password (Optional)</label>
-                <div className="relative">
-                  <input type={showAddPassword ? 'text' : 'password'} placeholder="Enter portal password" value={addPassword} onChange={(e) => setAddPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 pr-9 rounded-xl text-white" />
-                  <button type="button" onClick={() => setShowAddPassword(!showAddPassword)} className="absolute right-2.5 top-3 text-slate-400 cursor-pointer">{showAddPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}</button>
+                <label htmlFor="faculty-emergency-password" className="text-slate-300 font-bold block mb-1">Portal Password (Optional)</label>
+                <div className="faculty-emergency-password">
+                  <input id="faculty-emergency-password" type={showAddPassword ? 'text' : 'password'} placeholder="Enter portal password" value={addPassword} onChange={(e) => setAddPassword(e.target.value)} className="w-full bg-slate-950 border border-slate-800 p-2.5 pr-9 rounded-xl text-white" />
+                  <button type="button" aria-label={showAddPassword ? 'Hide student password' : 'Show student password'} aria-pressed={showAddPassword} onClick={() => setShowAddPassword(!showAddPassword)} className="faculty-emergency-password-toggle">{showAddPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}</button>
                 </div>
                 <span className="text-[10px] text-slate-500 block mt-0.5">Student can log in using College Email and their Register Number</span>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-[10px]">
+              <div className="faculty-emergency-scope">
                 <div><span className="text-slate-500 block">Department</span><span className="text-sky-400 font-bold">AI & DS</span></div>
                 <div><span className="text-slate-500 block">Assigned Year</span><span className="text-slate-300 font-bold">{assignedYear}</span></div>
                 <div><span className="text-slate-500 block">Assigned Section</span><span className="text-indigo-400 font-bold">Section {assignedSection}</span></div>
               </div>
 
-              <div className="flex justify-end space-x-2 pt-2 font-sans">
-                <button type="button" onClick={() => setShowAddStudentModal(false)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl cursor-pointer">Cancel</button>
+              </div>
+              <div className="faculty-emergency-footer">
+                <button type="button" onClick={() => setShowAddStudentModal(false)} className="faculty-secondary-button">Cancel</button>
                 <button
                   type="submit"
                   disabled={isAddingStudent}
-                  className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-slate-950 font-bold px-4 py-2 rounded-xl cursor-pointer flex items-center space-x-2 min-h-[44px]"
+                  className="faculty-emergency-save"
                 >
                   {isAddingStudent ? (
                     <>

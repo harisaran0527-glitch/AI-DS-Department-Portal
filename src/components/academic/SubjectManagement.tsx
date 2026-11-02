@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { API } from '../../services/api';
+import { useFacultyDialog } from '../faculty/useFacultyDialog';
+import '../faculty/faculty-workspace.css';
 import type { Subject } from '../../types';
 import {
   BookOpen,
@@ -64,6 +66,15 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
 
   // HOD and STUDENT are strictly view-only
   const isReadOnly = userRole === 'HOD' || userRole === 'STUDENT';
+  const closeExcelModal = () => {
+    setShowExcelModal(false);
+    setExcelFile(null);
+    rawUploadedRowsRef.current = null;
+    setExcelPreviewSummary(null);
+    setExcelValidRows([]);
+    setExcelInvalidRows([]);
+  };
+  const subjectDialogRef = useFacultyDialog(userRole === 'FACULTY' && showExcelModal, closeExcelModal);
 
   const fetchSubjects = async () => {
     setIsLoading(true);
@@ -258,12 +269,12 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
   }, [subjects, searchQuery, yearFilter, semesterFilter, sectionFilter]);
 
   return (
-    <div className="space-y-6">
+    <div className={userRole === 'FACULTY' ? 'faculty-curriculum' : 'space-y-6'}>
       {/* HEADER & CONTROLS */}
-      <div className="bg-[#3039A8] border border-white/14 rounded-2xl p-6 space-y-4 shadow-xl text-white">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/14 pb-4">
+      <div className="subject-card bg-[#3039A8] border border-white/14 rounded-2xl p-6 space-y-4 shadow-xl text-white">
+        <div className="subject-header flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/14 pb-4">
           <div>
-            <h3 className="text-lg font-bold text-white flex items-center space-x-2 font-sans">
+            <h3 className="subject-title text-lg font-bold text-white flex items-center space-x-2 font-sans">
               <BookOpen className="w-5 h-5 text-cyan-300" />
               <span>Department Subject Master & Curriculum</span>
             </h3>
@@ -274,7 +285,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center space-x-2.5">
+          <div className="subject-actions flex items-center space-x-2.5">
             <button
               onClick={downloadSubjectTemplate}
               className="bg-[#1B205F] hover:bg-[#252B86] text-cyan-200 border border-white/14 px-3 py-2 rounded-xl text-xs font-mono flex items-center space-x-1.5 transition-colors cursor-pointer"
@@ -287,7 +298,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
             {!isReadOnly && (
               <button
                 onClick={() => setShowExcelModal(true)}
-                className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5 transition-all shadow-md cursor-pointer shrink-0 font-mono"
+                className="subject-primary bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5 transition-all shadow-md cursor-pointer shrink-0 font-mono"
               >
                 <Upload className="w-3.5 h-3.5" />
                 <span>Upload Subject Master (Excel)</span>
@@ -318,13 +329,14 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
         )}
 
         {/* SEARCH & FILTERS BAR */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+        <div className="subject-filters grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1">
           {/* SEARCH */}
-          <div className="relative">
+          <div className="subject-search relative">
+            {userRole === 'FACULTY' && <label className="subject-control-label" htmlFor="department-subject-search">Search subjects</label>}
             <Search className="w-3.5 h-3.5 text-[#AEB7F5] absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Search Code, Abbr, Subject, Faculty..."
+              id="department-subject-search" aria-label="Search department subjects" placeholder="Search Code, Abbr, Subject, Faculty..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-[#252B86] border border-white/14 pl-8 pr-3 py-1.5 rounded-xl text-xs text-white font-mono placeholder:text-[#AEB7F5] focus:outline-none focus:border-cyan-300"
@@ -333,7 +345,8 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
 
           {/* YEAR FILTER */}
           <div>
-            <select
+            {userRole === 'FACULTY' && <label className="subject-control-label" htmlFor="department-subject-year">Year</label>}
+            <select id="department-subject-year" aria-label="Filter subjects by year"
               value={yearFilter}
               onChange={(e) => setYearFilter(e.target.value)}
               className="w-full bg-[#252B86] border border-white/14 px-3 py-1.5 rounded-xl text-xs text-cyan-200 font-mono cursor-pointer hover:border-cyan-300"
@@ -348,7 +361,8 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
 
           {/* SEMESTER FILTER */}
           <div>
-            <select
+            {userRole === 'FACULTY' && <label className="subject-control-label" htmlFor="department-subject-semester">Semester</label>}
+            <select id="department-subject-semester" aria-label="Filter subjects by semester"
               value={semesterFilter}
               onChange={(e) => setSemesterFilter(e.target.value)}
               className="w-full bg-[#252B86] border border-white/14 px-3 py-1.5 rounded-xl text-xs text-cyan-200 font-mono cursor-pointer hover:border-cyan-300"
@@ -362,7 +376,8 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
 
           {/* SECTION FILTER */}
           <div>
-            <select
+            {userRole === 'FACULTY' && <label className="subject-control-label" htmlFor="department-subject-section">Section</label>}
+            <select id="department-subject-section" aria-label="Filter subjects by section"
               value={sectionFilter}
               onChange={(e) => setSectionFilter(e.target.value)}
               className="w-full bg-[#252B86] border border-white/14 px-3 py-1.5 rounded-xl text-xs text-cyan-200 font-mono cursor-pointer hover:border-cyan-300"
@@ -376,7 +391,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
         </div>
 
         {/* SUBJECTS MOBILE CARDS (< md) */}
-        <div className="md:hidden space-y-3">
+        <div className="subject-mobile md:hidden space-y-3">
           {isLoading ? (
             <div className="py-8 text-center text-[#AEB7F5] font-mono text-xs">
               Loading registered subjects...
@@ -441,7 +456,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
         </div>
 
         {/* SUBJECTS TABLE (hidden on mobile, visible md+) */}
-        <div className="hidden md:block overflow-x-auto rounded-xl border border-white/14 bg-[#3039A8] shadow-inner">
+        <div className="subject-table hidden md:block overflow-x-auto rounded-xl border border-white/14 bg-[#3039A8] shadow-inner">
           <table className="w-full text-left border-collapse text-xs font-mono">
             <thead>
               <tr className="bg-[#252B86] text-[#D9DEFF] border-b border-white/14 uppercase tracking-wider text-[11px]">
@@ -515,8 +530,8 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
 
       {/* EXCEL BULK UPLOAD MODAL FOR FACULTY */}
       {showExcelModal && !isReadOnly && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in font-sans">
-          <div className="bg-slate-900 border border-cyan-500/40 rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-y-auto shadow-2xl space-y-0 text-white">
+        <div className={userRole === 'FACULTY' ? 'faculty-subject-overlay' : 'fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in font-sans'}>
+          <div className={userRole === 'FACULTY' ? 'faculty-subject-dialog' : 'bg-slate-900 border border-cyan-500/40 rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-y-auto shadow-2xl space-y-0 text-white'} ref={subjectDialogRef} role={userRole === 'FACULTY' ? 'dialog' : undefined} aria-modal={userRole === 'FACULTY' ? true : undefined} aria-label={userRole === 'FACULTY' ? 'Upload Department Subject Master' : undefined} tabIndex={userRole === 'FACULTY' ? -1 : undefined}>
             {/* MODAL HEADER */}
             <div className="bg-slate-950 p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center space-x-2 text-cyan-400 font-bold text-base">
@@ -524,15 +539,8 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
                 <span>Upload Subject Master (Excel / CSV)</span>
               </div>
               <button
-                onClick={() => {
-                  setShowExcelModal(false);
-                  setExcelFile(null);
-                  rawUploadedRowsRef.current = null;
-                  setExcelPreviewSummary(null);
-                  setExcelValidRows([]);
-                  setExcelInvalidRows([]);
-                }}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
+                onClick={closeExcelModal}
+                aria-label="Close subject upload" className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -570,8 +578,8 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">Target Year</label>
-                    <select
+                    <label htmlFor="subject-upload-year" className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">Target Year</label>
+                    <select id="subject-upload-year"
                       value={uploadTargetYear}
                       onChange={(e) => {
                         const newYr = e.target.value;
@@ -595,8 +603,8 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
                     </select>
                   </div>
                   <div>
-                    <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">Target Semester</label>
-                    <select
+                    <label htmlFor="subject-upload-semester" className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">Target Semester</label>
+                    <select id="subject-upload-semester"
                       value={uploadTargetSemester}
                       onChange={(e) => {
                         const newSem = e.target.value;
@@ -613,8 +621,8 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
                     </select>
                   </div>
                   <div>
-                    <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">Target Section</label>
-                    <select
+                    <label htmlFor="subject-upload-section" className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">Target Section</label>
+                    <select id="subject-upload-section"
                       value={uploadTargetSection}
                       onChange={(e) => {
                         const newSec = e.target.value;
@@ -644,7 +652,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
                     type="file"
                     accept=".xlsx, .xls, .csv"
                     onChange={handleExcelFileChange}
-                    className="hidden"
+                    className={userRole === 'FACULTY' ? 'faculty-file-input' : 'hidden'}
                   />
                 </label>
               </div>
@@ -740,14 +748,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
             <div className="bg-slate-950 p-4 sm:p-5 border-t border-slate-800 flex items-center justify-end space-x-3">
               <button
                 type="button"
-                onClick={() => {
-                  setShowExcelModal(false);
-                  setExcelFile(null);
-                  rawUploadedRowsRef.current = null;
-                  setExcelPreviewSummary(null);
-                  setExcelValidRows([]);
-                  setExcelInvalidRows([]);
-                }}
+                onClick={closeExcelModal}
                 className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs font-mono cursor-pointer"
               >
                 Cancel
