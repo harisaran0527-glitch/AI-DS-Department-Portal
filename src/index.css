@@ -155,7 +155,8 @@ html.dark .portal-input:focus {
 }
 
 html.dark .portal-input::placeholder {
-  color: #64748B !important;
+  color: #94A3B8 !important;
+  opacity: 1 !important;
 }
 
 html.dark select option {
@@ -170,7 +171,8 @@ html.dark input, html.dark select, html.dark textarea {
 }
 
 html.dark input::placeholder, html.dark textarea::placeholder {
-  color: #64748B !important;
+  color: #94A3B8 !important;
+  opacity: 1 !important;
 }
 
 html.dark table {
@@ -185,7 +187,7 @@ html.dark th {
 
 html.dark td {
   border-color: #252B36 !important;
-  color: #94A3B8 !important;
+  color: #CBD5E1 !important;
 }
 
 html.dark tr:hover td {
@@ -196,6 +198,47 @@ html.dark [class*="border-slate-800"],
 html.dark [class*="border-slate-700"],
 html.dark [class*="border-white/14"] {
   border-color: #252B36 !important;
+}
+
+/* High Contrast Accent Colors in Dark Mode (target >= 4.5:1 on dark surfaces) */
+html.dark [class*="text-slate-500"],
+html.dark [class*="text-gray-500"],
+html.dark [class*="text-zinc-500"] {
+  color: #94A3B8 !important;
+}
+
+html.dark [class*="text-slate-600"],
+html.dark [class*="text-slate-700"],
+html.dark [class*="text-slate-800"],
+html.dark [class*="text-slate-900"],
+html.dark [class*="text-gray-600"],
+html.dark [class*="text-gray-700"],
+html.dark [class*="text-gray-800"],
+html.dark [class*="text-gray-900"],
+html.dark [class*="text-zinc-600"],
+html.dark [class*="text-zinc-700"],
+html.dark [class*="text-zinc-800"],
+html.dark [class*="text-zinc-900"] {
+  color: #CBD5E1 !important;
+}
+
+/* Dark Mode Soft Tint Badges & Pills */
+html.dark [class*="bg-purple-950"] { background-color: rgba(88, 28, 135, 0.45) !important; color: #E9D5FF !important; border-color: rgba(192, 132, 252, 0.4) !important; }
+html.dark [class*="bg-amber-950"] { background-color: rgba(120, 53, 15, 0.45) !important; color: #FDE68A !important; border-color: rgba(251, 191, 36, 0.4) !important; }
+html.dark [class*="bg-cyan-950"] { background-color: rgba(22, 78, 99, 0.45) !important; color: #A5F3FC !important; border-color: rgba(34, 211, 238, 0.4) !important; }
+html.dark [class*="bg-indigo-950"] { background-color: rgba(49, 46, 129, 0.45) !important; color: #C7D2FE !important; border-color: rgba(129, 140, 248, 0.4) !important; }
+html.dark [class*="bg-emerald-950"] { background-color: rgba(6, 78, 59, 0.45) !important; color: #A7F3D0 !important; border-color: rgba(52, 211, 153, 0.4) !important; }
+html.dark [class*="bg-rose-950"] { background-color: rgba(136, 19, 55, 0.45) !important; color: #FECDD3 !important; border-color: rgba(251, 113, 133, 0.4) !important; }
+html.dark [class*="bg-sky-950"] { background-color: rgba(12, 74, 110, 0.45) !important; color: #BAE6FD !important; border-color: rgba(56, 189, 248, 0.4) !important; }
+
+html.dark [class*="bg-purple-950"] *,
+html.dark [class*="bg-amber-950"] *,
+html.dark [class*="bg-cyan-950"] *,
+html.dark [class*="bg-indigo-950"] *,
+html.dark [class*="bg-emerald-950"] *,
+html.dark [class*="bg-rose-950"] *,
+html.dark [class*="bg-sky-950"] * {
+  color: inherit !important;
 }
 
 html.dark .brand-accent-text {
@@ -337,34 +380,31 @@ html.light .text-\[\#D9DEFF\] {
   color: #0F172A !important;
 }
 
-/* Maintain Crisp White Text on Solid / Saturated Buttons & Badges in Light Mode */
-html.light button[class*="bg-indigo-"],
-html.light button[class*="bg-emerald-"],
-html.light button[class*="bg-rose-"],
-html.light button[class*="bg-red-"],
-html.light button[class*="bg-cyan-6"],
-html.light button[class*="bg-blue-"],
-html.light button[class*="bg-purple-"],
-html.light button[class*="bg-amber-"],
-html.light button[class*="bg-sky-"],
-html.light button.btn-primary,
-html.light a[class*="bg-indigo-"],
-html.light a[class*="bg-emerald-"],
-html.light a[class*="bg-rose-"],
-html.light a[class*="bg-cyan-6"],
-html.light a[class*="bg-blue-"],
-html.light a[class*="bg-amber-"],
-html.light a[class*="bg-sky-"],
-html.light button[class*="bg-indigo-"] *,
-html.light button[class*="bg-emerald-"] *,
-html.light button[class*="bg-rose-"] *,
-html.light button[class*="bg-red-"] *,
-html.light button[class*="bg-cyan-6"] *,
-html.light button[class*="bg-blue-"] *,
-html.light button[class*="bg-purple-"] *,
-html.light button[class*="bg-amber-"] *,
-html.light button[class*="bg-sky-"] *,
-html.light button.btn-primary * {
+/* Maintain Crisp White Text on Solid / Saturated Buttons in Light Mode */
+html.light button:is([class*="bg-indigo-6"], [class*="bg-indigo-7"], [class*="bg-indigo-8"],
+                     [class*="bg-emerald-6"], [class*="bg-emerald-7"], [class*="bg-emerald-8"],
+                     [class*="bg-rose-6"], [class*="bg-rose-7"], [class*="bg-rose-8"],
+                     [class*="bg-red-6"], [class*="bg-red-7"], [class*="bg-red-8"],
+                     [class*="bg-cyan-6"], [class*="bg-cyan-7"],
+                     [class*="bg-blue-6"], [class*="bg-blue-7"], [class*="bg-blue-8"],
+                     [class*="bg-purple-6"], [class*="bg-purple-7"], [class*="bg-purple-8"],
+                     [class*="bg-sky-6"], [class*="bg-sky-7"], [class*="bg-sky-8"],
+                     .btn-primary),
+html.light a:is([class*="bg-indigo-6"], [class*="bg-indigo-7"], [class*="bg-indigo-8"],
+                [class*="bg-emerald-6"], [class*="bg-emerald-7"], [class*="bg-emerald-8"],
+                [class*="bg-rose-6"], [class*="bg-rose-7"], [class*="bg-rose-8"],
+                [class*="bg-cyan-6"], [class*="bg-cyan-7"],
+                [class*="bg-blue-6"], [class*="bg-blue-7"], [class*="bg-blue-8"],
+                [class*="bg-sky-6"], [class*="bg-sky-7"], [class*="bg-sky-8"]),
+html.light button:is([class*="bg-indigo-6"], [class*="bg-indigo-7"], [class*="bg-indigo-8"],
+                     [class*="bg-emerald-6"], [class*="bg-emerald-7"], [class*="bg-emerald-8"],
+                     [class*="bg-rose-6"], [class*="bg-rose-7"], [class*="bg-rose-8"],
+                     [class*="bg-red-6"], [class*="bg-red-7"], [class*="bg-red-8"],
+                     [class*="bg-cyan-6"], [class*="bg-cyan-7"],
+                     [class*="bg-blue-6"], [class*="bg-blue-7"], [class*="bg-blue-8"],
+                     [class*="bg-purple-6"], [class*="bg-purple-7"], [class*="bg-purple-8"],
+                     [class*="bg-sky-6"], [class*="bg-sky-7"], [class*="bg-sky-8"],
+                     .btn-primary) * {
   color: #FFFFFF !important;
 }
 
@@ -372,23 +412,39 @@ html.light .text-slate-200,
 html.light .text-slate-300,
 html.light .text-\[\#94A3B8\],
 html.light .text-\[\#AEB7F5\] {
-  color: #334155 !important;
+  color: #1E293B !important;
 }
 
 html.light .text-slate-400,
-html.light .text-slate-500 {
+html.light .text-slate-500,
+html.light .text-gray-400,
+html.light .text-gray-500,
+html.light .text-zinc-400,
+html.light .text-zinc-500 {
   color: #475569 !important;
 }
 
 /* High Contrast Accent Colors in Light Mode */
 html.light [class*="text-cyan-400"],
-html.light [class*="text-cyan-300"] {
-  color: #0284C7 !important;
+html.light [class*="text-cyan-300"],
+html.light [class*="text-sky-400"],
+html.light [class*="text-sky-300"] {
+  color: #0369A1 !important;
+}
+
+html.light [class*="text-blue-400"],
+html.light [class*="text-blue-300"] {
+  color: #1D4ED8 !important;
 }
 
 html.light [class*="text-indigo-400"],
 html.light [class*="text-indigo-300"] {
   color: #4338CA !important;
+}
+
+html.light [class*="text-purple-400"],
+html.light [class*="text-purple-300"] {
+  color: #6B21A8 !important;
 }
 
 html.light [class*="text-emerald-400"],
@@ -401,12 +457,32 @@ html.light [class*="text-amber-300"] {
   color: #B45309 !important;
 }
 
+html.light [class*="text-rose-400"],
+html.light [class*="text-rose-300"] {
+  color: #BE123C !important;
+}
+
+html.light [class*="text-red-400"],
+html.light [class*="text-red-300"] {
+  color: #B91C1C !important;
+}
+
+html.light [class*="text-teal-400"],
+html.light [class*="text-teal-300"] {
+  color: #0F766E !important;
+}
+
+html.light [class*="text-yellow-400"],
+html.light [class*="text-yellow-300"] {
+  color: #A16207 !important;
+}
+
 html.light [class*="border-slate-800"],
 html.light [class*="border-slate-700"],
 html.light [class*="border-\[\#252B36\]"],
 html.light [class*="border-\[\#1E4D8F\]"],
 html.light [class*="border-white/14"] {
-  border-color: #E2E8F0 !important;
+  border-color: #CBD5E1 !important;
 }
 
 html.light input,
@@ -426,7 +502,8 @@ html.light textarea:focus {
 
 html.light input::placeholder,
 html.light textarea::placeholder {
-  color: #94A3B8 !important;
+  color: #64748B !important;
+  opacity: 1 !important;
 }
 
 html.light select option {
@@ -446,7 +523,7 @@ html.light th {
 
 html.light td {
   border-color: #E2E8F0 !important;
-  color: #334155 !important;
+  color: #1E293B !important;
 }
 
 html.light tr:hover td {
@@ -459,6 +536,9 @@ html.light button[class*="bg-slate-800"] {
   color: #0F172A !important;
   border-color: #CBD5E1 !important;
 }
+html.light button[class*="bg-slate-800"] * {
+  color: #0F172A !important;
+}
 html.light button[class*="bg-slate-800"]:hover {
   background-color: #E2E8F0 !important;
   color: #0F172A !important;
@@ -466,7 +546,10 @@ html.light button[class*="bg-slate-800"]:hover {
 html.light button[class*="bg-slate-900"] {
   background-color: #F1F5F9 !important;
   color: #0F172A !important;
-  border-color: #E2E8F0 !important;
+  border-color: #CBD5E1 !important;
+}
+html.light button[class*="bg-slate-900"] * {
+  color: #0F172A !important;
 }
 html.light button[class*="bg-slate-900"]:hover {
   background-color: #E2E8F0 !important;
@@ -523,10 +606,220 @@ html.light aside nav button:not(.sidebar-nav-active):not(.sidebar-child-active) 
 html.light [class*="bg-purple-950"] { background-color: #F3E8FF !important; color: #6B21A8 !important; border-color: #D8B4FE !important; }
 html.light [class*="bg-amber-950"] { background-color: #FEF3C7 !important; color: #92400E !important; border-color: #FDE68A !important; }
 html.light [class*="bg-cyan-950"] { background-color: #E0F2FE !important; color: #075985 !important; border-color: #BAE6FD !important; }
-html.light [class*="bg-indigo-950"] { background-color: #E0E7FF !important; color: #3730A3 !important; border-color: #C7D2FE !important; }
+html.light [class*="bg-indigo-950"] { background-color: #EEF2FF !important; color: #3730A3 !important; border-color: #C7D2FE !important; }
 html.light [class*="bg-emerald-950"] { background-color: #D1FAE5 !important; color: #065F46 !important; border-color: #A7F3D0 !important; }
 html.light [class*="bg-rose-950"] { background-color: #FFE4E6 !important; color: #9F1239 !important; border-color: #FECDD3 !important; }
 html.light [class*="bg-sky-950"] { background-color: #E0F2FE !important; color: #0369A1 !important; border-color: #BAE6FD !important; }
+
+html.light [class*="bg-purple-950"] *,
+html.light [class*="bg-amber-950"] *,
+html.light [class*="bg-cyan-950"] *,
+html.light [class*="bg-indigo-950"] *,
+html.light [class*="bg-emerald-950"] *,
+html.light [class*="bg-rose-950"] *,
+html.light [class*="bg-sky-950"] * {
+  color: inherit !important;
+}
+
+/* Modal Backdrop Overlays in Light Mode: semi-transparent dim slate, never solid white */
+html.light .fixed.inset-0[class*="backdrop-blur"],
+html.light div.fixed.inset-0[class*="bg-slate-950/"],
+html.light div.fixed.inset-0[class*="bg-[#080A0F]/"] {
+  background-color: rgba(15, 23, 42, 0.65) !important;
+}
+
+/* ============================================================
+   STUDENT INFORMATION HEADER BANNER (LIGHT & DARK ACCESSIBLE)
+   ============================================================ */
+.student-info-header-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.125rem 1.25rem;
+  border-radius: 1rem;
+  border-width: 1px;
+  border-style: solid;
+  margin-bottom: 1.5rem;
+  position: relative;
+  overflow: hidden;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+@media (min-width: 1024px) {
+  .student-info-header-banner {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+/* Dark Mode Student Banner */
+:root,
+[data-theme="dark"],
+html.dark {
+  --sb-bg: #12161F;
+  --sb-border: #252B36;
+  --sb-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  --sb-btn-bg: rgba(30, 27, 75, 0.85);
+  --sb-btn-border: rgba(99, 102, 241, 0.5);
+  --sb-btn-text: #C7D2FE;
+  --sb-btn-hover-bg: rgba(49, 46, 129, 0.95);
+  --sb-btn-hover-text: #FFFFFF;
+  --sb-btn-icon: #818CF8;
+  --sb-btn-sec-bg: #1E293B;
+  --sb-btn-sec-border: #334155;
+  --sb-btn-sec-text: #E2E8F0;
+  --sb-divider: #252B36;
+  --sb-label: #94A3B8;
+  --sb-name: #F1F5F9;
+  --sb-reg: #38BDF8;
+  --sb-year: #E2E8F0;
+  --sb-entry-bg: rgba(6, 78, 59, 0.4);
+  --sb-entry-border: rgba(52, 211, 153, 0.3);
+  --sb-entry-text: #34D399;
+  --sb-cgpa-bg: rgba(120, 53, 15, 0.4);
+  --sb-cgpa-border: rgba(251, 191, 36, 0.3);
+  --sb-cgpa-text: #FBBF24;
+  --sb-select-bg: #0D1017;
+  --sb-select-border: #252B36;
+  --sb-select-text: #F1F5F9;
+  --sb-switcher-border: #252B36;
+}
+
+/* Light Mode Student Banner */
+[data-theme="light"],
+html.light {
+  --sb-bg: #FFFFFF;
+  --sb-border: #CBD5E1;
+  --sb-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+  --sb-btn-bg: #EEF2FF;
+  --sb-btn-border: #A5B4FC;
+  --sb-btn-text: #312E81;
+  --sb-btn-hover-bg: #E0E7FF;
+  --sb-btn-hover-text: #1E1B4B;
+  --sb-btn-icon: #4F46E5;
+  --sb-btn-sec-bg: #F1F5F9;
+  --sb-btn-sec-border: #CBD5E1;
+  --sb-btn-sec-text: #1E293B;
+  --sb-divider: #E2E8F0;
+  --sb-label: #475569;
+  --sb-name: #0F172A;
+  --sb-reg: #0369A1;
+  --sb-year: #1E293B;
+  --sb-entry-bg: #D1FAE5;
+  --sb-entry-border: #A7F3D0;
+  --sb-entry-text: #065F46;
+  --sb-cgpa-bg: #FEF3C7;
+  --sb-cgpa-border: #FDE68A;
+  --sb-cgpa-text: #92400E;
+  --sb-select-bg: #FFFFFF;
+  --sb-select-border: #CBD5E1;
+  --sb-select-text: #0F172A;
+  --sb-switcher-border: #E2E8F0;
+}
+
+.student-info-header-banner {
+  background-color: var(--sb-bg) !important;
+  border-color: var(--sb-border) !important;
+  box-shadow: var(--sb-shadow) !important;
+}
+
+.student-banner-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  border-radius: 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 700;
+  min-height: 40px;
+  background-color: var(--sb-btn-bg) !important;
+  border: 1px solid var(--sb-btn-border) !important;
+  color: var(--sb-btn-text) !important;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.student-banner-btn:hover {
+  background-color: var(--sb-btn-hover-bg) !important;
+  color: var(--sb-btn-hover-text) !important;
+}
+
+.student-banner-btn svg {
+  color: var(--sb-btn-icon) !important;
+}
+
+.student-banner-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  border-radius: 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 700;
+  min-height: 40px;
+  background-color: var(--sb-btn-sec-bg) !important;
+  border: 1px solid var(--sb-btn-sec-border) !important;
+  color: var(--sb-btn-sec-text) !important;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.student-banner-divider {
+  width: 1px;
+  height: 2rem;
+  background-color: var(--sb-divider) !important;
+}
+
+.student-banner-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--sb-label) !important;
+  letter-spacing: 0.02em;
+}
+
+.student-banner-name {
+  color: var(--sb-name) !important;
+}
+
+.student-banner-reg {
+  color: var(--sb-reg) !important;
+}
+
+.student-banner-year {
+  color: var(--sb-year) !important;
+}
+
+.student-banner-entry {
+  background-color: var(--sb-entry-bg) !important;
+  border: 1px solid var(--sb-entry-border) !important;
+  color: var(--sb-entry-text) !important;
+}
+
+.student-banner-cgpa {
+  background-color: var(--sb-cgpa-bg) !important;
+  border: 1px solid var(--sb-cgpa-border) !important;
+  color: var(--sb-cgpa-text) !important;
+}
+
+.student-banner-switcher {
+  border-color: var(--sb-switcher-border) !important;
+}
+
+.student-banner-select {
+  background-color: var(--sb-select-bg) !important;
+  border: 1px solid var(--sb-select-border) !important;
+  color: var(--sb-select-text) !important;
+}
+
+.student-banner-select:focus {
+  border-color: #0284C7 !important;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2);
+}
 
 /* Light Mode Custom Scrollbars */
 html.light ::-webkit-scrollbar-track {

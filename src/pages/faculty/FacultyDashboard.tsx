@@ -1901,57 +1901,62 @@ console.warn('Backend logout unavailable, clearing local session:', error);
     const regNo = selectedStudent.registerNo || (selectedStudent as any).register_no || '';
 
     return (
-      <div className="bg-gradient-to-r from-slate-900 via-[#0d1424] to-slate-900 border border-indigo-500/30 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6 font-mono shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
-
-        <div className="flex flex-wrap items-center gap-3 z-10">
+      <div className="student-info-header-banner">
+        <div className="flex flex-wrap items-center gap-3 z-10 min-w-0">
           <button
             onClick={handleBackToTeam}
-            className="bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 hover:text-white border border-indigo-700/60 text-xs px-3.5 py-2 rounded-xl flex items-center space-x-1.5 transition-all cursor-pointer font-bold shadow-sm"
+            type="button"
+            className="student-banner-btn"
           >
-            <ArrowLeft className="w-4 h-4 text-indigo-400" />
-            <span>← Back to Team</span>
+            <ArrowLeft className="w-4 h-4 shrink-0" />
+            <span className="font-bold">Back to Team</span>
           </button>
           <button
             onClick={handleBackToTeamHeads}
-            className="bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs px-3.5 py-2 rounded-xl flex items-center space-x-1.5 transition-all cursor-pointer font-bold shadow-sm"
+            type="button"
+            className="student-banner-btn-secondary"
           >
-            <span>← Back to Team Heads</span>
+            <span>Back to Team Heads</span>
           </button>
 
-          <div className="h-6 w-px bg-slate-800 hidden sm:block mx-1" />
+          <div className="student-banner-divider hidden sm:block mx-1" />
 
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs">
-            <div>
-              <span className="text-slate-400 text-[11px]">Student Name: </span>
-              <span className="text-white font-bold text-sm font-sans">{selectedStudent.name}</span>
+          <div className="flex flex-wrap items-center gap-x-4 sm:gap-x-5 gap-y-2 text-xs">
+            <div className="flex items-baseline space-x-1.5">
+              <span className="student-banner-label">Student Name:</span>
+              <span className="student-banner-name font-bold text-sm font-sans">{selectedStudent.name}</span>
             </div>
-            <div>
-              <span className="text-slate-400 text-[11px]">Register Number: </span>
-              <span className="text-indigo-400 font-bold text-sm">{regNo}</span>
+            <div className="flex items-baseline space-x-1.5">
+              <span className="student-banner-label">Register Number:</span>
+              <span className="student-banner-reg font-bold text-sm font-mono">{regNo}</span>
             </div>
-            <div>
-              <span className="text-slate-400 text-[11px]">Role: </span>
-              <span className={`font-bold px-2 py-0.5 rounded text-[11px] ${selectedTeamContext.role === 'Team Head' ? 'bg-amber-950 text-amber-300 border border-amber-800' : 'bg-sky-950 text-sky-300 border border-sky-800'}`}>
+            <div className="flex items-center space-x-1.5">
+              <span className="student-banner-label">Role:</span>
+              <span className={`font-bold px-2 py-0.5 rounded text-[11px] ${selectedTeamContext.role === 'Team Head' ? 'student-banner-cgpa' : 'student-banner-btn'}`}>
                 {selectedTeamContext.role}
               </span>
             </div>
-            <div>
-              <span className="text-slate-400 text-[11px]">Team Head: </span>
-              <span className="text-amber-300 font-bold">{selectedTeamContext.headName}</span>
+            <div className="flex items-baseline space-x-1.5">
+              <span className="student-banner-label">Team Head:</span>
+              <span className="student-banner-cgpa font-bold px-2 py-0.5 rounded text-xs">{selectedTeamContext.headName}</span>
             </div>
           </div>
         </div>
 
         {/* Quick Switcher dropdown for Team Context */}
-        <div className="z-10 flex items-center space-x-2">
+        <div className="z-10 flex items-center space-x-2 w-full lg:w-auto justify-end border-t lg:border-t-0 pt-3 lg:pt-0 student-banner-switcher">
+          <label htmlFor="team-quick-switch-select" className="student-banner-label font-bold text-xs shrink-0">
+            Switch Student:
+          </label>
           <select
+            id="team-quick-switch-select"
             value={selectedStudent.id}
             onChange={(e) => {
               const sel = students.find((s) => s.id === e.target.value);
               if (sel) handleSelectStudent(sel);
             }}
-            className="bg-slate-950 border border-indigo-800/80 text-xs text-indigo-300 rounded-xl px-3 py-1.5 font-mono cursor-pointer hover:border-indigo-500"
+            className="student-banner-select text-xs rounded-xl px-3 py-2 font-mono cursor-pointer w-full sm:w-auto min-h-[40px]"
+            aria-label="Switch Student"
           >
             <option value={selectedStudent.id}>Switch Student...</option>
             {students.map((s) => (
@@ -1996,56 +2001,62 @@ console.warn('Backend logout unavailable, clearing local session:', error);
     const entryType = selectedStudent.entryType || (selectedStudent as any).entry_type || 'Regular';
 
     return (
-      <div className="bg-gradient-to-r from-slate-900 via-[#0d1527] to-slate-900 border border-sky-500/30 p-4 rounded-2xl flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-6 font-mono shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-36 h-36 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="flex flex-wrap items-center gap-4 z-10">
+      <div className="student-info-header-banner">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 z-10 min-w-0">
           <button
             onClick={handleBackToStudentSelection}
-            className="bg-sky-950/80 hover:bg-sky-900 text-sky-300 hover:text-white border border-sky-700/60 text-xs px-3.5 py-2 rounded-xl flex items-center space-x-1.5 transition-all shadow-sm cursor-pointer"
+            type="button"
+            className="student-banner-btn"
+            aria-label="Back to Student Selection"
           >
-            <ArrowLeft className="w-4 h-4 text-sky-400" />
-            <span className="font-bold">← Back to Student Selection</span>
+            <ArrowLeft className="w-4 h-4 shrink-0" />
+            <span className="font-bold">Back to Student Selection</span>
           </button>
 
-          <div className="h-8 w-px bg-slate-800/80 hidden sm:block" />
+          <div className="student-banner-divider hidden sm:block" />
 
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs">
-            <div>
-              <span className="text-slate-400 text-[11px]">Student Name: </span>
-              <span className="text-white font-bold text-sm font-sans">{selectedStudent.name}</span>
+          <div className="flex flex-wrap items-center gap-x-4 sm:gap-x-5 gap-y-2 text-xs">
+            <div className="flex items-baseline space-x-1.5">
+              <span className="student-banner-label">Student Name:</span>
+              <span className="student-banner-name font-bold text-sm font-sans">{selectedStudent.name}</span>
             </div>
-            <div>
-              <span className="text-slate-400 text-[11px]">Register Number: </span>
-              <span className="text-sky-400 font-bold text-sm">{regNo}</span>
+            <div className="flex items-baseline space-x-1.5">
+              <span className="student-banner-label">Register Number:</span>
+              <span className="student-banner-reg font-bold font-mono text-sm">{regNo}</span>
             </div>
-            <div>
-              <span className="text-slate-400 text-[11px]">Year / Sec: </span>
-              <span className="text-slate-200 font-bold">{selectedStudent.year || assignedYear} / {selectedStudent.section || assignedSection}</span>
+            <div className="flex items-baseline space-x-1.5">
+              <span className="student-banner-label">Year / Sec:</span>
+              <span className="student-banner-year font-bold font-mono text-xs">{selectedStudent.year || assignedYear} / {selectedStudent.section || assignedSection}</span>
             </div>
-            <div>
-              <span className="text-slate-400 text-[11px]">Entry: </span>
-              <span className="text-emerald-400 font-bold">{entryType}</span>
+            <div className="flex items-center space-x-1.5">
+              <span className="student-banner-label">Entry:</span>
+              <span className="student-banner-entry font-bold text-[11px] px-2 py-0.5 rounded-md font-mono">{entryType}</span>
             </div>
             {selectedStudent.cgpa !== undefined && (
-              <div>
-                <span className="text-slate-400 text-[11px]">CGPA: </span>
-                <span className="text-amber-300 font-bold">{(selectedStudent.cgpa !== null && selectedStudent.cgpa !== undefined && String(selectedStudent.cgpa) !== '') ? Number(selectedStudent.cgpa).toFixed(2) : 'Not Available'}</span>
+              <div className="flex items-center space-x-1.5">
+                <span className="student-banner-label">CGPA:</span>
+                <span className="student-banner-cgpa font-bold text-xs px-2 py-0.5 rounded-md font-mono">
+                  {(selectedStudent.cgpa !== null && selectedStudent.cgpa !== undefined && String(selectedStudent.cgpa) !== '') ? Number(selectedStudent.cgpa).toFixed(2) : 'Not Available'}
+                </span>
               </div>
             )}
           </div>
         </div>
 
         {/* Quick Switcher dropdown right inside banner */}
-        <div className="z-10 flex items-center space-x-2 w-full lg:w-auto justify-end border-t lg:border-t-0 border-slate-800/80 pt-3 lg:pt-0">
-          <span className="text-[11px] text-slate-400 font-bold hidden sm:inline">Switch Student:</span>
+        <div className="z-10 flex items-center space-x-2 w-full lg:w-auto justify-end border-t lg:border-t-0 pt-3 lg:pt-0 student-banner-switcher">
+          <label htmlFor="student-quick-switch-select" className="student-banner-label font-bold text-xs shrink-0">
+            Switch Student:
+          </label>
           <select
+            id="student-quick-switch-select"
             value={selectedStudent.id}
             onChange={(e) => {
               const sel = students.find((s) => s.id === e.target.value);
               if (sel) handleSelectStudent(sel);
             }}
-            className="bg-slate-950 border border-sky-800/80 text-xs text-sky-300 rounded-xl px-3 py-1.5 font-mono cursor-pointer hover:border-sky-500 w-full sm:w-auto"
+            className="student-banner-select text-xs rounded-xl px-3 py-2 font-mono cursor-pointer w-full sm:w-auto min-h-[40px]"
+            aria-label="Switch Student"
           >
             {students.map((s) => (
               <option key={s.id} value={s.id}>
@@ -2100,14 +2111,14 @@ console.warn('Backend logout unavailable, clearing local session:', error);
               className="bg-slate-950 hover:bg-slate-800/80 border border-slate-800 hover:border-sky-500/60 p-3.5 rounded-xl cursor-pointer transition-all duration-150 space-y-2 group shadow-sm"
             >
               <div className="flex items-center justify-between">
-                <span className="text-sky-400 font-mono text-xs font-bold">{stu.registerNo}</span>
-                <span className="text-[10px] px-2 py-0.2 rounded-full font-bold bg-slate-800 text-slate-300">
+                <span className="text-sky-700 dark:text-sky-400 font-mono text-xs font-bold">{stu.registerNo}</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                   {stu.entryType || 'Regular'}
                 </span>
               </div>
-              <div className="text-white font-bold text-sm truncate font-sans group-hover:text-sky-300">{stu.name}</div>
-              <div className="text-[11px] text-slate-400 font-mono truncate">{stu.collegeEmail || stu.email}</div>
-              <button className="w-full mt-1 bg-sky-600/20 group-hover:bg-sky-600 text-sky-300 group-hover:text-white font-bold py-1.5 rounded-lg text-xs transition-all flex items-center justify-center space-x-1 border border-sky-500/30">
+              <div className="text-slate-900 dark:text-white font-bold text-sm truncate font-sans group-hover:text-sky-600 dark:group-hover:text-sky-300">{stu.name}</div>
+              <div className="text-[11px] text-slate-600 dark:text-slate-400 font-mono truncate">{stu.collegeEmail || stu.email}</div>
+              <button className="w-full mt-1 bg-sky-50 dark:bg-sky-950/80 hover:bg-sky-600 dark:hover:bg-sky-600 text-sky-700 dark:text-sky-200 hover:text-white dark:hover:text-white font-bold py-1.5 rounded-lg text-xs transition-all flex items-center justify-center space-x-1 border border-sky-200 dark:border-sky-700/60 shadow-sm cursor-pointer">
                 <span>Select Profile →</span>
               </button>
             </div>
