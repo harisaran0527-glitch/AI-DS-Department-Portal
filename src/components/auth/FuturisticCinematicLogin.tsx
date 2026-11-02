@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API } from '../../services/api';
-import { User, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, ShieldCheck, Sparkles, ArrowLeft } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ForgotPasswordModal } from '../common/ForgotPasswordModal';
-import { ParticleField } from './ParticleField';
+import { PortalLoginLayout, PortalLoginCard, PortalLoginRecovery } from './PortalLoginLayout';
 import type { Role } from '../../types';
 
 interface FuturisticCinematicLoginProps {
@@ -22,69 +19,35 @@ export const FuturisticCinematicLogin: React.FC<FuturisticCinematicLoginProps> =
 }) => {
   const navigate = useNavigate();
 
-  // Parallax mouse position tracking for desktop
-  const mousePos = useRef({ x: 0, y: 0 });
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768 || window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isMobile) return;
-      mousePos.current = {
-        x: (e.clientX / window.innerWidth) * 2 - 1,
-        y: (e.clientY / window.innerHeight) * 2 - 1,
-      };
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => {
-      window.removeEventListener('resize', checkMobile);
-      window.removeEventListener('mousemove', handleMouseMove);
-    };
-  }, [isMobile]);
-
-  // Form States
+  const submitting = useRef(false);
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
 
-  // Field Focus States
-  const [focusedField, setFocusedField] = useState<'identifier' | 'password' | null>(null);
-
-  // Auth Status & Feedback
   const [authStatus, setAuthStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [authenticatedName, setAuthenticatedName] = useState('');
 
-  // Clean up any stale remembered emails on mount, reset input states, and enforce fixed dark theme
+  // Clean up any stale remembered emails on mount, reset input states, without changing the saved theme
   useEffect(() => {
     setIdentifier('');
     setPassword('');
     setShowPassword(false);
-setErrorMessage('');
+    setErrorMessage('');
     setAuthStatus('idle');
-    setFocusedField(null);
     setRememberMe(false);
     localStorage.removeItem(`remembered_email_${portalRole.toLowerCase()}`);
     localStorage.removeItem('remembered_email_student');
     localStorage.removeItem('remembered_email_faculty');
     localStorage.removeItem('remembered_email_hod');
     localStorage.removeItem('remembered_email_admin');
-    document.documentElement.classList.remove('light');
-    document.documentElement.classList.add('dark');
-    document.documentElement.setAttribute('data-theme', 'dark');
-    document.body.setAttribute('data-theme', 'dark');
   }, [portalRole]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (authStatus === 'loading') return;
+    if (authStatus === 'loading' || submitting.current) return;
 
     if (!identifier.trim() || !password.trim()) {
       setErrorMessage('Credentials required to initiate portal authentication');
@@ -93,6 +56,7 @@ setErrorMessage('');
     }
 
     setErrorMessage('');
+    submitting.current = true;
     setAuthStatus('loading');
 
     try {
@@ -118,306 +82,22 @@ setErrorMessage('');
       } else {
         setErrorMessage(msg || `Invalid ${roleSubtitle} credentials. Verify your login details.`);
       }
+    } finally {
+      submitting.current = false;
     }
   };
 
-  const isHod = portalRole === 'HOD';
-  const isStudent = portalRole === 'STUDENT';
-
   return (
-    <div className="min-h-screen bg-[#061229] text-white flex flex-col items-center justify-start py-8 sm:py-12 px-4 relative overflow-x-hidden overflow-y-auto font-sans select-none stage">
-      {/* Interactive Floating Particle Canvas */}
-      <ParticleField mouse={mousePos} intensity={1.1} />
-
-      {/* Atmospheric Environment Background Layers */}
-      <div className="env on pointer-events-none">
-        <div className="fog-a" />
-        <div className="fog-b" />
-        <div className="fog-c" />
-        <div className="shaft s1 hidden md:block" />
-        <div className="shaft s2 hidden md:block" />
-        <div className="shaft s3 hidden md:block" />
-        <div className="floor" />
-        <div className="grid-floor" />
-        <div className="vignette" />
-        <div className="noise" />
-      </div>
-
-      {/* Intro Center Seed Line Animation */}
-      <div className="seed pointer-events-none">
-        <div className="seed-line" />
-        <div className="seed-core" />
-      </div>
-
-      {/* MAIN CONTAINER FOR LOGIN TERMINAL AND SCROLL-DOWN CARDS */}
-      <div className="relative z-10 w-full max-w-[460px] my-auto px-2 sm:px-0 space-y-4">
-        {/* BACK TO PORTAL HUB NAVIGATION */}
-        <div className="flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => navigate('/')}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#071A3D]/90 hover:bg-[#0B2559] text-xs font-mono text-cyan-300 hover:text-white border border-[#1E4D8F]/60 shadow-[0_0_12px_rgba(34,211,238,0.12)] transition-all cursor-pointer"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Back to Portal Hub</span>
-          </button>
-        </div>
-        <motion.div
-          initial={{ opacity: 0, y: 28, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-          className="panel relative rounded-2xl p-6 sm:p-9 space-y-6 overflow-hidden border border-[#123A73]/60 bg-[#0B2559]/80 backdrop-blur-2xl shadow-[0_25px_70px_rgba(0,0,0,0.8),0_0_50px_rgba(18,58,115,0.4)]"
-        >
-          {/* Holographic Scanner Beam Bar */}
-          <div className="panel-scan" />
-
-          {/* Flowing Energy Border */}
-          <div className="panel-energy" />
-
-          {/* Corner Tech Brackets */}
-          <div className="corner tl" />
-          <div className="corner tr" />
-          <div className="corner bl" />
-          <div className="corner br" />
-
-          {/* TOP STATUS BAR (ThemeToggle Removed per Requirement 1) */}
-          <div className="flex items-center justify-between border-b border-[#1E4D8F]/50 pb-3.5">
-            <div className="flex items-center space-x-2">
-              <span className="w-2 h-2 rounded-full bg-[#22D3EE] animate-pulse shadow-[0_0_10px_#22D3EE]" />
-              <span className="text-[10px] font-mono font-bold tracking-widest text-[#22D3EE] uppercase">
-                SECURE ACCESS NODE
-              </span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <span className="text-[10px] font-mono text-slate-300 bg-[#071A3D] px-2.5 py-0.5 rounded border border-[#1E4D8F]/60 font-semibold tracking-wider">
-                AVSEC-AI&DS v4.9
-              </span>
-            </div>
-          </div>
-
-          {/* BRANDING HEADER */}
-          <div className="flex flex-col items-center justify-center text-center space-y-3 pt-1">
-            {/* College Logo Container with Orbit Rings */}
-            <div className="logo relative">
-              <div className="logo-glow" />
-              <div className="ring r1" />
-              <div className="ring r2" />
-              <div className="ring r3" />
-              <div className="orbit o1">
-                <i />
-                <i />
-              </div>
-              <div className="relative z-10 w-10 h-10 flex items-center justify-center rounded-xl bg-[#071A3D] border border-[#1E4D8F] shadow-[0_0_16px_rgba(34,211,238,0.2)]">
-                <img
-                  src="/images/avsec-salem-logo.png"
-                  alt="AVS Engineering College Logo"
-                  className="h-8 w-auto max-h-8 max-w-[32px] object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.6)]"
-                  onError={(e) => {
-                    (e.target as HTMLElement).style.display = 'none';
-                  }}
-                />
-              </div>
-            </div>
-
-            <div>
-              <span className="text-[11px] font-mono font-extrabold text-[#22D3EE] tracking-[0.2em] uppercase block">
-                AVS ENGINEERING COLLEGE
-              </span>
-              <h2 className="text-sm font-bold text-white tracking-widest uppercase mt-0.5">
-                DEPARTMENT OF AI & DATA SCIENCE
-              </h2>
-              <h1 className="text-xl font-extrabold text-white tracking-tight mt-1.5 font-sans">
-                {isHod ? 'HOD PORTAL ACCESS' : isStudent ? 'STUDENT PORTAL ACCESS' : 'FACULTY WORKSPACE'}
-              </h1>
-              <p className="text-xs text-[#D9E6FF]/80 font-mono mt-1">
-                {isHod
-                  ? 'Department Governance & Executive Operations'
-                  : isStudent
-                  ? 'Student Academic & Performance Portal'
-                  : 'Faculty Academic & Research Management'}
-              </p>
-            </div>
-          </div>
-
-          {/* AUTH STATUS DISPLAY / FORM */}
-          <AnimatePresence mode="wait">
-            {authStatus === 'success' ? (
-              <motion.div
-                key="success"
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0 }}
-                className="bg-[#071A3D] border border-[#22D3EE] rounded-xl p-6 text-center space-y-3 shadow-[0_0_30px_rgba(34,211,238,0.25)]"
-              >
-                <div className="w-12 h-12 rounded-full bg-[#22D3EE]/20 border border-[#22D3EE] flex items-center justify-center mx-auto text-[#22D3EE] shadow-[0_0_20px_rgba(34,211,238,0.5)]">
-                  <CheckCircle2 className="w-7 h-7 animate-bounce" />
-                </div>
-                <div className="space-y-1">
-                  <span className="text-[10px] font-mono font-extrabold text-[#22D3EE] tracking-widest uppercase block">
-                    IDENTITY VERIFIED
-                  </span>
-                  <h3 className="text-base font-bold text-white">Welcome, {authenticatedName}</h3>
-                  <p className="text-xs text-slate-300 font-mono animate-pulse">
-                    Launching {roleSubtitle} Dashboard...
-                  </p>
-                </div>
-              </motion.div>
-            ) : (
-              <motion.form
-                key="form"
-                onSubmit={handleLoginSubmit}
-                autoComplete="off"
-                className="space-y-4"
-              >
-                {/* ERROR MESSAGE ALERT */}
-                {errorMessage && (
-                  <div className="bg-rose-950/80 border border-rose-500/80 text-rose-200 p-3 rounded-xl text-xs font-mono flex items-center space-x-2 animate-shake">
-                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-                    <span className="break-words leading-tight">{errorMessage}</span>
-                  </div>
-                )}
-
-                {/* USER / EMAIL INPUT FIELD */}
-                <div
-                  className={`field ${focusedField === 'identifier' || identifier ? 'lifted' : ''} ${
-                    focusedField === 'identifier' ? 'focused' : ''
-                  }`}
-                >
-                  <div className="field-scan" />
-                  <div className="field-line" />
-                  <div className="edge-dot t" />
-                  <div className="edge-dot b" />
-                  <div className="field-inner">
-                    <div className="field-icon">
-                      <User className="w-[18px] h-[18px]" />
-                    </div>
-                    <input
-                      id={`${portalRole.toLowerCase()}-identifier`}
-                      name={`${portalRole.toLowerCase()}-identifier`}
-                      type="text"
-                      required
-                      disabled={authStatus === 'loading'}
-                      value={identifier}
-                      onChange={(e) => setIdentifier(e.target.value)}
-                      onFocus={() => setFocusedField('identifier')}
-                      onBlur={() => setFocusedField(null)}
-                      placeholder={placeholderIdentifier || "Enter your college email or ID"}
-                      aria-label={placeholderIdentifier}
-                      autoComplete="off"
-                    />
-                    <div className="caret-glow" />
-                  </div>
-                </div>
-
-                {/* PASSWORD INPUT FIELD */}
-                <div
-                  className={`field ${focusedField === 'password' || password ? 'lifted' : ''} ${
-                    focusedField === 'password' ? 'focused' : ''
-                  }`}
-                >
-                  <div className="field-scan" />
-                  <div className="field-line" />
-                  <div className="edge-dot t" />
-                  <div className="edge-dot b" />
-                  <div className="field-inner">
-                    <div className="field-icon">
-                      <Lock className="w-[18px] h-[18px]" />
-                    </div>
-                    <input
-                      id={`${portalRole.toLowerCase()}-password`}
-                      name={`${portalRole.toLowerCase()}-password`}
-                      type={showPassword ? 'text' : 'password'}
-                      required
-                      disabled={authStatus === 'loading'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      onFocus={() => setFocusedField('password')}
-                      onBlur={() => setFocusedField(null)}
-                      placeholder="Enter your password"
-                      aria-label="Portal password"
-                      autoComplete="new-password"
-                    />
-                    <button
-                      type="button"
-                      disabled={authStatus === 'loading'}
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="eye"
-                      title={showPassword ? "Hide password" : "Show password"}
-                      aria-label={showPassword ? "Hide password" : "Show password"}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="w-[18px] h-[18px] text-[#22D3EE]" />
-                      ) : (
-                        <Eye className="w-[18px] h-[18px] text-slate-400 hover:text-white" />
-                      )}
-                    </button>
-                    <div className="caret-glow" />
-                  </div>
-                </div>
-
-                {/* CONTROLS ROW */}
-                <div className="row-between pt-1">
-                  <button
-                    type="button"
-                    className={`check ${rememberMe ? 'on' : ''}`}
-                    onClick={() => setRememberMe(!rememberMe)}
-                  >
-                    <i />
-                    <span>Remember device</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="link"
-                    onClick={() => setIsForgotPasswordOpen(true)}
-                  >
-                    Forgot Password?
-                  </button>
-                </div>
-
-                {/* SUBMIT BUTTON */}
-                <div className="btn-shell pt-2">
-                  <div className="btn-aura" />
-                  <button
-                    type="submit"
-                    disabled={authStatus === 'loading'}
-                    className={`btn ${authStatus === 'loading' ? 'charging' : ''}`}
-                  >
-                    <div className="btn-sheen" />
-                    <div className="btn-energy" />
-                    <span className="btn-label flex items-center justify-center space-x-2">
-                      {authStatus === 'loading' ? (
-                        <>
-                          <Sparkles className="w-4 h-4 animate-spin text-[#22D3EE]" />
-                          <span>AUTHENTICATING NODE...</span>
-                        </>
-                      ) : (
-                        <>
-                          <ShieldCheck className="w-4 h-4 text-[#22D3EE]" />
-                          <span>INITIATE LOG IN</span>
-                        </>
-                      )}
-                    </span>
-                  </button>
-                </div>
-              </motion.form>
-            )}
-          </AnimatePresence>
-
-          {/* FOOTER CAPTION */}
-          <div className="pt-2 text-center text-[10px] font-mono text-slate-400 border-t border-[#1E4D8F]/30">
-            AVS Engineering College • Department of AI & DS
-          </div>
-        </motion.div>
-
-      </div>
-
-      {/* FORGOT PASSWORD MODAL */}
-      <ForgotPasswordModal
-        isOpen={isForgotPasswordOpen}
-        portalRole={portalRole}
-        onClose={() => setIsForgotPasswordOpen(false)}
+    <PortalLoginLayout role={portalRole}>
+      <PortalLoginCard
+        role={portalRole} identifierLabel={portalRole === 'STUDENT' ? 'Register Number / College Email' : portalRole === 'FACULTY' ? 'Faculty email or ID' : 'HOD email or ID'} placeholderIdentifier={placeholderIdentifier}
+        identifier={identifier} password={password} showPassword={showPassword} rememberMe={rememberMe}
+        authStatus={authStatus} errorMessage={errorMessage} authenticatedName={authenticatedName}
+        onIdentifierChange={setIdentifier} onPasswordChange={setPassword}
+        onVisibilityChange={() => setShowPassword(value => !value)} onRememberChange={setRememberMe}
+        onForgotPassword={() => setIsForgotPasswordOpen(true)} onSubmit={handleLoginSubmit}
       />
-    </div>
+      <PortalLoginRecovery role={portalRole} isOpen={isForgotPasswordOpen} onClose={() => setIsForgotPasswordOpen(false)} />
+    </PortalLoginLayout>
   );
 };
