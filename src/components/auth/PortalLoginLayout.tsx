@@ -61,7 +61,6 @@ const PORTAL_CONTENT = {
 export const PortalLoginLayout: React.FC<{ role: Role; children: React.ReactNode }> = ({ role, children }) => {
   const { theme } = useTheme();
   const portal = PORTAL_CONTENT[role];
-  const Icon = portal.icon;
 
   return (
     <div className="portal-login" data-role={role.toLowerCase()} data-theme={theme}>
@@ -77,6 +76,12 @@ export const PortalLoginLayout: React.FC<{ role: Role; children: React.ReactNode
         </div>
         <ThemeToggle className="login-theme-toggle" />
       </header>
+
+      <figure className="login-mobile-campus">
+        <img src="/images/avsec-college-front.jpg" alt="Original front view of AVS Engineering College"
+          width="594" height="334" loading="eager" fetchPriority="high" decoding="async" />
+        <figcaption>Photo: FreeApply.com</figcaption>
+      </figure>
 
       <main className="login-main">
         <section className="login-introduction" aria-labelledby="login-portal-title">
@@ -100,11 +105,6 @@ export const PortalLoginLayout: React.FC<{ role: Role; children: React.ReactNode
         </section>
 
         <div className="login-form-column">
-          <div className="login-mobile-intro">
-            <span className="login-role-icon"><Icon size={25} strokeWidth={1.7} aria-hidden="true" /></span>
-            <h1>{portal.name} Portal</h1>
-            <p>{portal.mobileDescription}</p>
-          </div>
           {children}
           <p className="login-security"><LockKeyhole size={13} aria-hidden="true" />Secure access to your department workspace</p>
         </div>
@@ -149,7 +149,8 @@ export const PortalLoginCard: React.FC<PortalLoginCardProps> = (props) => {
     <section className="login-card" aria-labelledby="login-card-title">
       <div className="login-card-heading">
         <span className="login-role-icon"><Icon size={25} strokeWidth={1.7} aria-hidden="true" /></span>
-        <h2 id="login-card-title">{portal.name} login</h2>
+        <span className="login-mobile-department">AI &amp; DS Department</span>
+        <h2 id="login-card-title"><span className="login-heading-desktop">{portal.name} login</span><span className="login-heading-mobile">{portal.name} Login</span></h2>
         <p>Sign in with your existing portal credentials.</p>
       </div>
 

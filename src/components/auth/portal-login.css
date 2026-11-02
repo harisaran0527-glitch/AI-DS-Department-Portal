@@ -88,7 +88,7 @@
 .portal-login .login-campus img { display: block; width: 100%; height: auto; aspect-ratio: 594 / 334; object-fit: contain; border-radius: 16px; border: 1px solid var(--login-border); }
 .login-campus figcaption { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; color: var(--login-muted); font-size: 9px; line-height: 1.5; }
 .login-form-column { width: 100%; max-width: 430px; justify-self: end; min-width: 0; }
-.login-mobile-intro { display: none; }
+.login-mobile-campus, .login-mobile-department, .login-heading-mobile { display: none; }
 .login-card { padding: 34px; background: var(--login-surface); border: 1px solid var(--login-border); border-radius: 22px; box-shadow: 0 16px 48px rgb(16 35 64 / 6%); }
 .login-role-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 14px; background: var(--login-tint); color: var(--login-accent); }
 .portal-login .login-card-heading h2 { margin: 20px 0 8px; color: var(--login-heading) !important; font-size: 25px !important; line-height: 1.25; font-weight: 700; letter-spacing: -.03em; }
@@ -158,33 +158,48 @@
   .login-footer { padding-inline: 28px; }
 }
 @media (max-width: 740px) {
+  .portal-login { background: var(--login-surface); }
   .portal-login .login-header { min-height: 72px; padding: max(12px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) 12px max(18px, env(safe-area-inset-left)); gap: 12px; }
   .portal-login .login-brand img { width: 40px; height: 40px; padding: 3px; }
   .login-brand { gap: 10px; }
-  .portal-login .login-brand-full { display: none; }
-  .portal-login .login-brand-short { display: block; font-size: 12px; }
+  .portal-login .login-brand-full { display: block; font-size: clamp(10px, 2.8vw, 12px); letter-spacing: .02em; }
+  .portal-login .login-brand-short { display: none; }
   .login-brand span { font-size: 9px; }
   .portal-login .login-theme-toggle span { display: none; }
-  .portal-login .login-main { display: block; margin: 0 auto auto; padding: 24px max(18px, env(safe-area-inset-right)) 22px max(18px, env(safe-area-inset-left)) !important; }
+  .login-mobile-campus { display: block; position: relative; width: 100%; margin: 0; background: var(--login-soft); }
+  .portal-login .login-mobile-campus img { display: block; width: 100%; height: auto; aspect-ratio: 594 / 334; object-fit: contain; object-position: center; }
+  .login-mobile-campus figcaption { position: absolute; top: 10px; right: max(12px, env(safe-area-inset-right)); padding: 4px 7px; border-radius: 5px; background: rgb(12 28 48 / 75%); color: #fff; font-size: 8px; line-height: 1.5; }
+  .portal-login .login-main {
+    position: relative;
+    z-index: 1;
+    display: block;
+    max-width: none;
+    margin: -32px 0 0;
+    padding: 0 !important;
+    border-radius: 32px 32px 0 0;
+    background: var(--login-surface) !important;
+    box-shadow: 0 -5px 20px rgb(21 49 84 / 6%);
+  }
   .login-introduction { display: none; }
-  .login-form-column { max-width: 420px; margin-inline: auto; }
-  .login-mobile-intro { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 5px 12px; align-items: center; margin-bottom: 22px; }
-  .login-mobile-intro .login-role-icon { width: 44px; height: 44px; border-radius: 12px; grid-row: 1 / 3; }
-  .portal-login .login-mobile-intro h1 { margin: 0; color: var(--login-heading) !important; font-size: 25px !important; line-height: 1.2; font-weight: 750; letter-spacing: -.035em; }
-  .login-mobile-intro p { margin: 0; color: var(--login-text); font-size: 11px; line-height: 1.6; }
-  .login-card { padding: 24px; border-radius: 18px; box-shadow: 0 6px 24px rgb(16 35 64 / 4%); }
-  .login-card-heading .login-role-icon { display: none; }
-  .portal-login .login-card-heading h2 { margin: 0 0 8px; font-size: 21px !important; }
-  .login-card-heading > p { margin-bottom: 22px; font-size: 11px; }
-  .login-form { gap: 16px; }
-  .login-field label { font-size: 11px; }
-  .login-security { margin-top: 16px; font-size: 9px; }
-  .login-footer { flex-direction: column; align-items: center; gap: 4px; text-align: center; padding: 16px 18px max(16px, env(safe-area-inset-bottom)); font-size: 9px; }
+  .login-form-column { max-width: none; margin-inline: 0; }
+  .login-card { width: 100%; max-width: 480px; margin-inline: auto; padding: 24px max(24px, env(safe-area-inset-right)) 20px max(24px, env(safe-area-inset-left)); border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .login-card-heading { text-align: center; }
+  .login-card-heading .login-role-icon { display: grid; width: 46px; height: 46px; margin-inline: auto; border-radius: 13px; }
+  .login-mobile-department { display: inline-flex; margin-top: 12px; padding: 4px 10px; border: 1px solid var(--login-border); border-radius: 100px; color: var(--login-accent); font-size: 10px; line-height: 1.5; font-weight: 550; }
+  .login-heading-desktop { display: none; }
+  .login-heading-mobile { display: inline; }
+  .portal-login .login-card-heading h2 { margin: 12px 0 8px; font-size: 28px !important; line-height: 1.2; letter-spacing: -.035em; }
+  .login-card-heading > p { margin-bottom: 22px; font-size: 12px; }
+  .login-form { gap: 14px; }
+  .login-field label { font-size: 12px; }
+  .portal-login[data-theme="dark"] .login-field input { background: var(--login-soft) !important; }
+  .portal-login .login-back { width: 100%; min-height: 46px; margin-top: 14px; padding: 12px; border: 1px solid var(--login-border); border-radius: 10px; background: var(--login-soft); color: var(--login-heading); font-size: 12px; }
+  .login-security { margin: 0; padding: 0 18px 20px; font-size: 9px; }
+  .login-footer { flex-direction: column; align-items: center; gap: 4px; margin-top: auto; text-align: center; background: var(--login-surface); padding: 16px 18px max(16px, env(safe-area-inset-bottom)); font-size: 9px; }
 }
 @media (max-width: 359px) {
   .portal-login .login-header { padding-inline: 14px; }
-  .portal-login .login-main { padding-inline: 14px !important; padding-top: 20px !important; }
-  .login-card { padding: 20px 16px; }
+  .login-card { padding: 22px 20px 20px; }
   .login-remember, .login-forgot { font-size: 10px; }
 }
 @media (prefers-reduced-motion: reduce) {
