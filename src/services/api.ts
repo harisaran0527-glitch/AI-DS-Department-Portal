@@ -882,6 +882,91 @@ export const API = {
     }, 1000);
   },
 
+  getCertificateBlob: async (certId: string): Promise<{ blob: Blob; contentType: string; fileName: string; fileSize?: number }> => {
+    const activeRole = getActivePortalRole() || 'FACULTY';
+    const token = getValidSessionToken(activeRole);
+    const headers: Record<string, string> = {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      'X-Portal-Role': activeRole
+    };
+
+    let res = await fetch(`${API_BASE}/faculty/certificates/${encodeURIComponent(certId)}/view`, {
+      method: 'GET',
+      cache: 'no-store',
+      headers,
+      credentials: 'include'
+    });
+
+    if (!res.ok) {
+      try {
+        return await API.getFileBlob(certId);
+      } catch {
+        // preserve original error
+      }
+      let errMsg = `Failed to fetch certificate (${res.status})`;
+      try {
+        const errJson = await res.json();
+        if (errJson?.error) errMsg = `${errJson.error} (${res.status})`;
+      } catch {
+        // ignore
+      }
+      throw new Error(errMsg);
+    }
+
+    const contentType = res.headers.get('Content-Type') || 'application/pdf';
+    let fileName = 'certificate';
+    const disposition = res.headers.get('Content-Disposition');
+    if (disposition && disposition.includes('filename=')) {
+      const match = disposition.match(/filename="?([^";]+)"?/);
+      if (match && match[1]) {
+        fileName = decodeURIComponent(match[1]);
+      }
+    }
+    const blob = await res.blob();
+    return { blob, contentType, fileName, fileSize: blob.size };
+  },
+
+  downloadCertificateBlob: async (certId: string, suggestedFileName?: string): Promise<void> => {
+    const activeRole = getActivePortalRole() || 'FACULTY';
+    const token = getValidSessionToken(activeRole);
+    const headers: Record<string, string> = {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      'X-Portal-Role': activeRole
+    };
+
+    let res = await fetch(`${API_BASE}/faculty/certificates/${encodeURIComponent(certId)}/download`, {
+      method: 'GET',
+      cache: 'no-store',
+      headers,
+      credentials: 'include'
+    });
+
+    if (!res.ok) {
+      return API.downloadFileBlob(certId, suggestedFileName);
+    }
+
+    let fileName = suggestedFileName || 'certificate';
+    const disposition = res.headers.get('Content-Disposition');
+    if (disposition && disposition.includes('filename=')) {
+      const match = disposition.match(/filename="?([^";]+)"?/);
+      if (match && match[1]) {
+        fileName = decodeURIComponent(match[1]);
+      }
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => {
+      window.URL.revokeObjectURL(url);
+    }, 1000);
+  },
+
   // Faculty Certificate Upload & File Management
   uploadCertificateForFaculty: async (studentId: string, formData: FormData) => {
     return request<{ message: string; certId: string; certificates: any[]; overallScore?: number }>(`/faculty/students/${studentId}/certificates/upload`, {

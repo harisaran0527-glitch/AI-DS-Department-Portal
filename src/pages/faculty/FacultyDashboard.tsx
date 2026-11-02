@@ -16,6 +16,7 @@ import { GeminiTopRecognitionView } from '../../components/ranking/GeminiTopReco
 import { GeminiCategoryBestPerformerCard } from '../../components/ranking/GeminiCategoryBestPerformerCard';
 import { GeminiFullLeetCodeDashboard } from '../../components/ranking/GeminiFullLeetCodeDashboard';
 import { ProofAttachmentControl } from '../../components/common/ProofAttachmentControl';
+import { CertificatePreviewModal } from '../../components/faculty/CertificatePreviewModal';
 import { getNptelUrlForStudent } from '../../services/nptelUrlHelper';
 import {
   Users,
@@ -33,6 +34,8 @@ import {
   UserCheck,
   UserPlus,
   FileSpreadsheet,
+  Building2,
+  Image as ImageIcon,
   Key,
   Lock,
   Eye,
@@ -66,6 +69,13 @@ function formatDate(d?: string): string {
   const parsed = new Date(d);
   if (isNaN(parsed.getTime())) return 'Never';
   return parsed.toLocaleString();
+}
+
+function formatFileSizeHelper(bytes?: number): string {
+  if (!bytes || isNaN(bytes)) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
 export const FacultyDashboard: React.FC = () => {
@@ -301,6 +311,14 @@ export const FacultyDashboard: React.FC = () => {
   const [certSaveFeedback, setCertSaveFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [certSaveStep, setCertSaveStep] = useState<'IDLE' | 'UPLOADING' | 'SAVING' | 'SUCCESS'>('IDLE');
   const [certCardErrors, setCertCardErrors] = useState<Record<string, string>>({});
+  const [selectedPreviewCert, setSelectedPreviewCert] = useState<{
+    certId: string;
+    title: string;
+    fileName?: string;
+    fileSize?: number;
+    mimeType?: string;
+  } | null>(null);
+  const [replacingCertId, setReplacingCertId] = useState<string | null>(null);
 
   // --- LEETCODE STATE ---
   const [leetcodeSelectedEmail, setLeetcodeSelectedEmail] = useState<string>('');
@@ -874,14 +892,57 @@ export const FacultyDashboard: React.FC = () => {
     }
   };
 
+  const handleOpenCertificatePreview = (c: any) => {
+    setCertCardErrors(prev => { const n = { ...prev }; delete n[c.id]; return n; });
+    setSelectedPreviewCert({
+      certId: c.id,
+      title: c.courseName || c.course_name || c.title || 'Certificate',
+      fileName: c.originalFileName || c.original_file_name || `${c.courseName || c.title || 'Certificate'}.pdf`,
+      fileSize: c.fileSize || c.file_size,
+      mimeType: c.mimeType || c.mime_type
+    });
+  };
+
+  const handleReplaceCertificateFile = async (cert: any, file: File) => {
+    if (!selectedStudent || !cert?.id || !file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      setCertCardErrors(prev => ({ ...prev, [cert.id]: 'File size exceeds 10 MB limit.' }));
+      return;
+    }
+    setReplacingCertId(cert.id);
+    setCertCardErrors(prev => { const n = { ...prev }; delete n[cert.id]; return n; });
+    try {
+      const formData = new FormData();
+      formData.append('courseName', cert.courseName || cert.course_name || cert.title || 'Certificate');
+      formData.append('platform', cert.platform || cert.issuingOrganization || cert.issuedBy || 'General');
+      formData.append('category', cert.category || 'Technical Certification');
+      if (cert.issueDate || cert.issue_date) {
+        formData.append('issueDate', cert.issueDate || cert.issue_date);
+      }
+      formData.append('file', file);
+      await API.updateCertificateForFaculty(selectedStudent.id, cert.id, formData);
+      await reloadStudent360();
+      setCertSaveFeedback({ type: 'success', message: 'Certificate attachment replaced successfully.' });
+      setTimeout(() => setCertSaveFeedback(null), 3000);
+    } catch (err: any) {
+      setCertCardErrors(prev => ({ ...prev, [cert.id]: err.message || 'Failed to replace certificate file.' }));
+    } finally {
+      setReplacingCertId(null);
+    }
+  };
+
   const handleViewCertificate = async (certId: string) => {
     setCertCardErrors(prev => { const n = { ...prev }; delete n[certId]; return n; });
-    try {
-      await openAuthenticatedFile(`/faculty/certificates/${encodeURIComponent(certId)}/view`, 'FACULTY');
-    } catch (error: any) {
-      const msg = error instanceof Error ? error.message : 'Certificate attachment could not be loaded.';
-      setCertCardErrors(prev => ({ ...prev, [certId]: msg }));
+    const cert = (student360Edit?.certificates || []).find((x: any) => x.id === certId);
+    if (cert) {
+      handleOpenCertificatePreview(cert);
+      return;
     }
+    setSelectedPreviewCert({
+      certId,
+      title: 'Certificate Document',
+      fileName: 'certificate.pdf'
+    });
   };
 
   const handleDownloadCertificate = async (certId: string, filename?: string) => {
@@ -4618,23 +4679,23 @@ console.warn('Backend logout unavailable, clearing local session:', error);
               assignedYear={assignedYear}
               assignedSection={assignedSection}
             />
-            <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-6 space-y-6 shadow-xl">
+            <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-6 space-y-6 shadow-sm dark:shadow-xl">
             {activeTab.startsWith('bth-') ? renderBestTeamStudentHeader() : renderSelectedStudentHeader()}
 
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800/80 pb-3">
               <div className="space-y-1">
-                <h2 className="text-lg font-bold text-white flex items-center space-x-2 font-sans">
-                  <FileText className="w-5 h-5 text-sky-400" />
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center space-x-2 font-sans">
+                  <FileText className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                   <span>Certificate Showcase & Verification</span>
                 </h2>
-                <p className="text-xs text-slate-400 font-mono mt-0.5">Upload, verify, and manage external course certifications with database persistence.</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">Upload, verify, and manage external course certifications with database persistence.</p>
               </div>
 
               {selectedStudent && (
                 <button
                   type="button"
                   onClick={() => handleOpenCertModal()}
-                  className="bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white font-bold font-sans text-xs px-4 py-2 rounded-xl cursor-pointer shadow-md transition-all flex items-center space-x-1.5 shrink-0"
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold font-sans text-xs px-4 py-2 rounded-xl cursor-pointer shadow-md transition-all flex items-center space-x-1.5 shrink-0"
                 >
                   <Plus className="w-4 h-4 text-white" />
                   <span>Upload Certificate</span>
@@ -4647,25 +4708,35 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                 {/* CERTIFICATE RECORDS LIST */}
                 {(student360Edit?.certificates || []).length > 0 && (
                   <div className="space-y-3">
-                    <h4 className="font-bold text-sky-400 uppercase font-sans text-sm">
+                    <h4 className="font-bold text-indigo-600 dark:text-indigo-400 uppercase font-sans text-sm">
                       Certificate Records ({(student360Edit?.certificates || []).length})
                     </h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
                       {(student360Edit?.certificates || []).map((c: any, idx: number) => {
                         const hasFile = Boolean(c.filePath || c.file_path || c.originalFileName || c.original_file_name || c.fileData || c.file_data);
+                        const fileName = c.originalFileName || c.original_file_name || '';
+                        const isDocPdf = fileName.toLowerCase().endsWith('.pdf') || (c.mimeType || '').includes('pdf');
+                        const isDocImg = /\.(jpe?g|png|webp|gif)$/i.test(fileName) || (c.mimeType || '').startsWith('image/');
+                        const formatTag = isDocPdf ? 'PDF' : isDocImg ? (fileName.split('.').pop() || 'IMG').toUpperCase() : 'DOC';
+
                         return (
-                          <div key={c.id || idx} className="bg-slate-950 border border-slate-800 p-4 rounded-xl space-y-3 shadow-md flex flex-col justify-between">
-                            <div className="space-y-2">
-                              <div className="flex justify-between items-center">
-                                <span className="bg-sky-950 text-sky-300 font-bold px-2 py-0.5 rounded border border-sky-800">
-                                  {c.category || 'Technical Certification'}
+                          <div
+                            key={c.id || idx}
+                            className="bg-white dark:bg-slate-950 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4"
+                          >
+                            <div className="space-y-3">
+                              {/* Top Row: Category Badge + Edit/Delete Actions */}
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 tracking-wide font-sans">
+                                  <Award className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                                  <span>{c.category || 'Technical Certification'}</span>
                                 </span>
                                 <div className="flex items-center space-x-1 shrink-0">
                                   <button
                                     type="button"
                                     title="Edit certificate details"
                                     onClick={() => handleStartEditCert(c)}
-                                    className="text-slate-400 hover:text-sky-300 p-1 cursor-pointer transition-colors"
+                                    className="text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                                   >
                                     <Pencil className="w-4 h-4" />
                                   </button>
@@ -4673,79 +4744,173 @@ console.warn('Backend logout unavailable, clearing local session:', error);
                                     type="button"
                                     title="Delete certificate record"
                                     onClick={() => handleDeleteCertificateRecord(c.id, c.courseName || c.course_name || c.title || 'Certificate')}
-                                    className="text-red-400 hover:text-red-300 p-1 cursor-pointer transition-colors"
+                                    className="text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
                                   >
                                     <Trash2 className="w-4 h-4" />
                                   </button>
                                 </div>
                               </div>
 
-                              <div className="text-white font-bold font-sans text-sm leading-snug line-clamp-2">
+                              {/* Certificate Name */}
+                              <h3 className="text-base font-bold font-sans text-slate-900 dark:text-white leading-snug line-clamp-2">
                                 {c.courseName || c.course_name || c.title}
-                              </div>
+                              </h3>
 
-                              <div className="space-y-1 text-xs font-mono text-slate-400 pt-1">
+                              {/* Metadata Block (Only show recorded metadata) */}
+                              <div className="space-y-1.5 text-xs font-sans text-slate-600 dark:text-slate-300 pt-0.5">
                                 {(c.platform || c.issuingOrganization || c.issuedBy) && (
-                                  <div className="truncate">
-                                    <span className="text-slate-500">Issuing Org:</span>{' '}
-                                    <strong className="text-slate-200">{c.platform || c.issuingOrganization || c.issuedBy}</strong>
+                                  <div className="flex items-center gap-1.5 truncate">
+                                    <Building2 className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400 shrink-0" />
+                                    <span className="text-slate-500 dark:text-slate-400">Issuing Org:</span>
+                                    <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                                      {c.platform || c.issuingOrganization || c.issuedBy}
+                                    </span>
                                   </div>
                                 )}
                                 {(c.issueDate || c.issue_date || c.issued_date) && (
-                                  <div>
-                                    <span className="text-slate-500">Issue Date:</span>{' '}
-                                    <span className="text-slate-300">{formatDate(c.issueDate || c.issue_date || c.issued_date)}</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <Calendar className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400 shrink-0" />
+                                    <span className="text-slate-500 dark:text-slate-400">Issue Date:</span>
+                                    <span className="font-medium text-slate-700 dark:text-slate-200">
+                                      {formatDate(c.issueDate || c.issue_date || c.issued_date)}
+                                    </span>
                                   </div>
                                 )}
-                                {(c.originalFileName || c.original_file_name) && (
-                                  <div className="text-[11px] text-slate-400 flex items-center space-x-1 truncate">
-                                    <FileText className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                                    <span className="truncate">{c.originalFileName || c.original_file_name}</span>
+                                {(c.credentialId || c.credential_id || c.certificateId || c.certificate_id) && (
+                                  <div className="flex items-center gap-1.5 truncate">
+                                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
+                                    <span className="text-slate-500 dark:text-slate-400">Credential ID:</span>
+                                    <span className="font-mono text-[11px] font-semibold text-slate-700 dark:text-slate-200 truncate">
+                                      {c.credentialId || c.credential_id || c.certificateId || c.certificate_id}
+                                    </span>
                                   </div>
                                 )}
                               </div>
                             </div>
 
-                            {/* Inline Card Error Notification for missing/unreachable files */}
+                            {/* Inline Card Error Notification */}
                             {certCardErrors[c.id] && (
-                              <div className="p-2.5 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-200 text-xs flex items-center justify-between gap-2 font-mono">
+                              <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/80 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-200 text-xs flex items-center justify-between gap-2 font-mono">
                                 <div className="flex items-center gap-1.5 min-w-0">
-                                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                                  <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
                                   <span className="truncate">{certCardErrors[c.id]}</span>
                                 </div>
                                 <button
                                   type="button"
                                   onClick={() => setCertCardErrors(prev => { const n = { ...prev }; delete n[c.id]; return n; })}
-                                  className="text-rose-400 hover:text-white p-0.5 cursor-pointer"
+                                  className="text-rose-500 hover:text-rose-700 dark:text-rose-400 dark:hover:text-white p-0.5 cursor-pointer"
                                 >
                                   <X className="w-3.5 h-3.5" />
                                 </button>
                               </div>
                             )}
 
-                            {/* View / Download Actions */}
-                            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                            {/* File Attachment Box */}
+                            <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80">
                               {hasFile ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleViewCertificate(c.id)}
-                                    className="flex-1 bg-sky-950/80 hover:bg-sky-900 text-sky-300 border border-sky-800/80 px-2.5 py-1.5 rounded-lg text-center font-bold text-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer font-sans"
-                                  >
-                                    <ExternalLink className="w-3.5 h-3.5 text-sky-400" />
-                                    <span>View File</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDownloadCertificate(c.id, c.originalFileName || c.original_file_name)}
-                                    className="flex-1 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 px-2.5 py-1.5 rounded-lg text-center font-bold text-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer font-sans"
-                                  >
-                                    <Download className="w-3.5 h-3.5 text-slate-400" />
-                                    <span>Download</span>
-                                  </button>
-                                </>
+                                <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                  {/* Left: Icon + File Name + File Size & Type */}
+                                  <div className="flex items-center space-x-2.5 min-w-0">
+                                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 shadow-sm ${
+                                      isDocPdf
+                                        ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/70 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                                        : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
+                                    }`}>
+                                      {isDocPdf ? (
+                                        <FileText className="w-4 h-4" />
+                                      ) : (
+                                        <ImageIcon className="w-4 h-4" />
+                                      )}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div
+                                        className="font-bold text-xs text-slate-800 dark:text-slate-100 truncate max-w-[180px] sm:max-w-[140px] md:max-w-[180px] lg:max-w-[160px] xl:max-w-[200px]"
+                                        title={fileName || 'Certificate Proof Document'}
+                                      >
+                                        {fileName || 'Certificate Proof Document'}
+                                      </div>
+                                      <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono flex items-center space-x-1.5">
+                                        <span>{formatFileSizeHelper(c.fileSize || c.file_size)}</span>
+                                        <span>•</span>
+                                        <span className="uppercase font-semibold text-indigo-600 dark:text-indigo-400">
+                                          {formatTag}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Right: Controls (View, Download, Replace, Delete) */}
+                                  <div className="flex items-center space-x-1.5 shrink-0 self-end sm:self-auto">
+                                    {/* VIEW: Opens CertificatePreviewModal */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenCertificatePreview(c)}
+                                      className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs px-2.5 py-1.5 rounded-lg flex items-center space-x-1 shadow-sm transition-all cursor-pointer"
+                                      title="Preview certificate in document viewer"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                      <span>View</span>
+                                    </button>
+
+                                    {/* DOWNLOAD: Authenticated Download */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDownloadCertificate(c.id, fileName)}
+                                      className="bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs px-2.5 py-1.5 rounded-lg flex items-center space-x-1 transition-all cursor-pointer"
+                                      title="Download certificate file"
+                                    >
+                                      <Download className="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />
+                                      <span className="hidden xl:inline">Download</span>
+                                    </button>
+
+                                    {/* REPLACE: Hidden File Input Trigger */}
+                                    <label
+                                      title="Replace proof document"
+                                      className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                                    >
+                                      <RefreshCw className={`w-3.5 h-3.5 ${replacingCertId === c.id ? 'animate-spin text-indigo-500' : ''}`} />
+                                      <input
+                                        type="file"
+                                        accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                                        className="hidden"
+                                        disabled={replacingCertId === c.id}
+                                        onChange={(e) => {
+                                          const f = e.target.files?.[0];
+                                          if (f) handleReplaceCertificateFile(c, f);
+                                          e.target.value = '';
+                                        }}
+                                      />
+                                    </label>
+
+                                    {/* DELETE: Confirmation */}
+                                    <button
+                                      type="button"
+                                      title="Delete certificate"
+                                      onClick={() => handleDeleteCertificateRecord(c.id, c.courseName || c.course_name || c.title || 'Certificate')}
+                                      className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
                               ) : (
-                                <span className="text-slate-500 text-xs italic">No document file attached</span>
+                                <div className="bg-slate-50 dark:bg-slate-900 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl p-3 flex items-center justify-between">
+                                  <span className="text-slate-500 dark:text-slate-400 text-xs italic">No document file attached</span>
+                                  <label className="bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 text-xs font-semibold px-2.5 py-1 rounded-lg flex items-center space-x-1 cursor-pointer transition-colors">
+                                    <Upload className="w-3 h-3" />
+                                    <span>Upload Proof</span>
+                                    <input
+                                      type="file"
+                                      accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                                      className="hidden"
+                                      onChange={(e) => {
+                                        const f = e.target.files?.[0];
+                                        if (f) handleReplaceCertificateFile(c, f);
+                                        e.target.value = '';
+                                      }}
+                                    />
+                                  </label>
+                                </div>
                               )}
                             </div>
                           </div>
@@ -7387,6 +7552,16 @@ console.warn('Backend logout unavailable, clearing local session:', error);
           </div>
         </div>
       )}
+      {/* CERTIFICATE PREVIEW MODAL */}
+      <CertificatePreviewModal
+        isOpen={Boolean(selectedPreviewCert)}
+        onClose={() => setSelectedPreviewCert(null)}
+        certId={selectedPreviewCert?.certId || ''}
+        certificateTitle={selectedPreviewCert?.title || ''}
+        fileName={selectedPreviewCert?.fileName}
+        fileSize={selectedPreviewCert?.fileSize}
+        mimeType={selectedPreviewCert?.mimeType}
+      />
     </DashboardLayout>
   );
 };
