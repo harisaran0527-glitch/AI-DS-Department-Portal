@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const REPO_ROOT = path.resolve('C:/Users/DELL/Downloads/AI-DS-Department-Portal-main/AI-DS-Department-Portal-main');
+const REPO_ROOT = process.cwd();
 
 test('Certificate UI: FacultyDashboard renders 2-column desktop grid and single-column mobile layout', () => {
   const code = fs.readFileSync(path.join(REPO_ROOT, 'src/pages/faculty/FacultyDashboard.tsx'), 'utf8');

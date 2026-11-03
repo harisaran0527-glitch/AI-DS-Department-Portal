@@ -272,26 +272,26 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
     <div className={userRole === 'FACULTY' ? 'faculty-curriculum' : 'space-y-6'}>
       {/* HEADER & CONTROLS */}
       <div className="subject-card bg-[#3039A8] border border-white/14 rounded-2xl p-6 space-y-4 shadow-xl text-white">
-        <div className="subject-header flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/14 pb-4">
-          <div>
+        <div className="subject-header flex flex-col items-start gap-3 border-b border-white/14 pb-4">
+          <div className="w-full">
             <h3 className="subject-title text-lg font-bold text-white flex items-center space-x-2 font-sans">
-              <BookOpen className="w-5 h-5 text-cyan-300" />
+              <BookOpen className="w-5 h-5 text-cyan-300 shrink-0" />
               <span>Department Subject Master & Curriculum</span>
             </h3>
-            <p className="text-xs text-[#D9DEFF] font-mono mt-0.5">
+            <p className="text-xs text-[#D9DEFF] font-mono mt-1 leading-relaxed">
               {userRole === 'HOD'
                 ? 'Authoritative view of all Faculty-uploaded Department Subjects from Supabase PostgreSQL (View-Only).'
                 : 'Official Department Subject Master. Subjects are managed exclusively via Excel bulk upload.'}
             </p>
           </div>
 
-          <div className="subject-actions flex items-center space-x-2.5">
+          <div className="subject-actions flex flex-wrap items-center gap-2.5">
             <button
               onClick={downloadSubjectTemplate}
-              className="bg-[#1B205F] hover:bg-[#252B86] text-cyan-200 border border-white/14 px-3 py-2 rounded-xl text-xs font-mono flex items-center space-x-1.5 transition-colors cursor-pointer"
+              className="bg-[#1B205F] hover:bg-[#252B86] text-cyan-200 border border-white/14 px-3.5 py-2 rounded-xl text-xs font-mono flex items-center space-x-1.5 transition-colors cursor-pointer"
               title="Download Excel Template"
             >
-              <Download className="w-3.5 h-3.5 text-cyan-400" />
+              <Download className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
               <span>Template (.xlsx)</span>
             </button>
 
@@ -300,7 +300,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
                 onClick={() => setShowExcelModal(true)}
                 className="subject-primary bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5 transition-all shadow-md cursor-pointer shrink-0 font-mono"
               >
-                <Upload className="w-3.5 h-3.5" />
+                <Upload className="w-3.5 h-3.5 shrink-0" />
                 <span>Upload Subject Master (Excel)</span>
               </button>
             )}
@@ -667,7 +667,7 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
               {/* PREVIEW SUMMARY */}
               {excelPreviewSummary && (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
                     <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
                       <span className="text-[10px] text-slate-400 block uppercase">Total Rows</span>
                       <span className="text-base font-bold text-white font-mono">{excelPreviewSummary.totalRowsProcessed}</span>
@@ -704,8 +704,8 @@ export const SubjectManagement: React.FC<SubjectManagementProps> = ({
                   {excelValidRows.length > 0 && (
                     <div className="space-y-2">
                       <span className="text-xs font-bold text-slate-300">Ready to Import ({excelValidRows.length} Subjects):</span>
-                      <div className="max-h-52 overflow-y-auto border border-slate-800 rounded-xl bg-slate-950">
-                        <table className="w-full text-left border-collapse text-[11px] font-mono">
+                      <div className="max-h-52 overflow-y-auto overflow-x-auto border border-slate-800 rounded-xl bg-slate-950">
+                        <table className="w-full min-w-[500px] text-left border-collapse text-[11px] font-mono">
                           <thead>
                             <tr className="bg-slate-900 text-slate-400 border-b border-slate-800">
                               <th className="p-2">#</th>

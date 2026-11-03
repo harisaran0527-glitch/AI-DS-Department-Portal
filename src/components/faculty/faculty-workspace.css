@@ -74,18 +74,18 @@ html:is(.light, .dark) .faculty-curriculum input::placeholder { color: var(--fac
 html.light .faculty-form-error { color: #9d2035; background: #fff1f3; }
 .faculty-curriculum { min-width: 0; container-type: inline-size; }
 .faculty-curriculum .subject-card { background: var(--faculty-surface) !important; border: 1px solid var(--faculty-border) !important; color: var(--faculty-text) !important; border-radius: 18px; padding: 24px; box-shadow: 0 4px 20px rgb(15 35 65 / 5%); }
-.faculty-curriculum .subject-header { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 18px; padding-bottom: 20px; border-color: var(--faculty-border) !important; }
-.faculty-curriculum .subject-header > div:first-child { flex: 1 1 310px; min-width: 0; }
-.faculty-curriculum .subject-title { align-items: flex-start; gap: 10px; color: var(--faculty-heading) !important; line-height: 1.5; font-size: 18px; letter-spacing: -.02em; }
-.faculty-curriculum .subject-title svg { flex-shrink: 0; width: 22px; height: 22px; margin-top: 2px; color: var(--faculty-accent) !important; }
+.faculty-curriculum .subject-header { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding-bottom: 16px; border-color: var(--faculty-border) !important; }
+.faculty-curriculum .subject-header > div:first-child { width: 100%; min-width: 0; }
+.faculty-curriculum .subject-title { display: flex; align-items: center; gap: 8px; color: var(--faculty-heading) !important; line-height: 1.4; font-size: 18px; letter-spacing: -.02em; }
+.faculty-curriculum .subject-title svg { flex-shrink: 0; width: 20px; height: 20px; color: var(--faculty-accent) !important; }
 .faculty-curriculum .subject-title span { margin-left: 0 !important; color: var(--faculty-heading) !important; }
-.faculty-curriculum .subject-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
+.faculty-curriculum .subject-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%; }
 .faculty-curriculum .subject-actions > * { margin: 0 !important; }
-.faculty-curriculum .subject-actions button { min-height: 44px; padding: 10px 12px; border: 1px solid var(--faculty-border); border-radius: 10px; background: var(--faculty-soft) !important; color: var(--faculty-heading) !important; font-size: 12px; line-height: 1.5; white-space: normal; gap: 7px; box-shadow: none; }
+.faculty-curriculum .subject-actions button { min-height: 40px; padding: 8px 14px; border: 1px solid var(--faculty-border); border-radius: 10px; background: var(--faculty-soft) !important; color: var(--faculty-heading) !important; font-size: 12px; line-height: 1.5; white-space: normal; gap: 7px; box-shadow: none; }
 .faculty-curriculum .subject-actions button svg { color: inherit !important; flex-shrink: 0; }
 .faculty-curriculum .subject-actions button span { color: inherit !important; margin-left: 0 !important; }
 .faculty-curriculum .subject-actions button.subject-primary { background: var(--faculty-primary) !important; color: #fff !important; border-color: transparent !important; }
-.faculty-curriculum .subject-card p { color: var(--faculty-text) !important; font-size: 12px; line-height: 1.75; margin-top: 8px; }
+.faculty-curriculum .subject-card p { color: var(--faculty-text) !important; font-size: 12px; line-height: 1.6; margin-top: 4px; }
 .faculty-curriculum .subject-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 14px; padding: 0; }
 .faculty-curriculum .subject-control-label { display: block; margin-bottom: 7px; color: var(--faculty-heading) !important; font-size: 11px; font-weight: 600; line-height: 1.6; }
 .faculty-curriculum .subject-filters > div { min-width: 0; }
@@ -121,11 +121,11 @@ html.light .faculty-form-error { color: #9d2035; background: #fff1f3; }
 .faculty-curriculum .faculty-subject-dialog > div:last-child button:last-child span { color: #fff !important; }
 .faculty-file-input { display: block; width: 100%; margin-top: 12px; font-size: 12px; }
 .faculty-curriculum .faculty-subject-dialog label:has(.faculty-file-input) { display: flex; flex-wrap: wrap; padding: 16px; line-height: 1.7; }
-.faculty-academics > div:first-child { flex-wrap: wrap; align-items: flex-start; }
+.faculty-academics > div:first-child { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
 .faculty-academics > div:first-child > div { min-width: 0; }
-.faculty-academics > div:first-child > div:first-child { flex: 1 1 300px; }
-.faculty-academics > div:first-child > div:last-child { flex: 1 1 360px; }
-.faculty-academics > div:first-child button { min-height: 44px; white-space: normal; }
+.faculty-academics > div:first-child > div:first-child { flex: 1 1 auto; min-width: min(100%, 260px); }
+.faculty-academics > div:first-child > div:last-child { flex: 0 0 auto; width: auto; max-width: 100%; height: auto; align-self: center; }
+.faculty-academics > div:first-child button { min-height: 38px; white-space: nowrap; }
 @container (max-width: 700px) {
   .faculty-curriculum .subject-mobile { display: block !important; }
   .faculty-curriculum .subject-table { display: none !important; }
@@ -141,10 +141,13 @@ html.light .faculty-form-error { color: #9d2035; background: #fff1f3; }
   .faculty-emergency-footer { padding: 14px 16px; }
   .faculty-emergency-footer button { flex: 1 1 180px; }
   .faculty-emergency-scope { grid-template-columns: minmax(0, 1fr); }
-  .faculty-curriculum .subject-card { padding: 18px 16px !important; }
-  .faculty-curriculum .subject-actions { width: 100%; }
-  .faculty-curriculum .subject-actions button { flex: 1 1 180px; }
+  .faculty-curriculum .subject-card { padding: 16px !important; }
+  .faculty-curriculum .subject-actions { width: 100%; display: flex; flex-wrap: wrap; gap: 8px; }
+  .faculty-curriculum .subject-actions button { flex: 1 1 calc(50% - 4px); min-width: 140px; justify-content: center; }
   .faculty-subject-dialog > div { padding: 18px 16px; }
+  .faculty-academics > div:first-child { flex-direction: column; align-items: stretch; gap: 12px; }
+  .faculty-academics > div:first-child > div:last-child { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .faculty-academics > div:first-child > div:last-child > button { width: 100%; justify-content: center; text-align: center; white-space: normal; padding: 8px 10px; font-size: 11px; }
 }
 @media (pointer: coarse) {
   .faculty-roster-filters button { min-height: 44px; }

@@ -1065,7 +1065,7 @@ Register No: <strong className="text-white">{registerNoDisplay}</strong> | Batch
                 {Array.isArray(_attendance?.historyLogs) && _attendance.historyLogs.length > 0 ? (
                   <>
                     {/* Desktop table */}
-                    <div className="hidden sm:block bg-slate-950 border border-slate-800 rounded-xl overflow-hidden max-h-96 overflow-y-auto">
+                    <div className="hidden sm:block bg-slate-950 border border-slate-800 rounded-xl overflow-hidden max-h-96 overflow-y-auto overflow-x-auto">
                       <table className="w-full text-left font-sans text-xs">
                         <thead className="bg-slate-900 text-slate-400 font-mono text-[10px] uppercase sticky top-0 border-b border-slate-800">
                           <tr>
@@ -1382,7 +1382,7 @@ Register No: <strong className="text-white">{registerNoDisplay}</strong> | Batch
 
             {/* ACADEMIC MARKS & EXAM HISTORY */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 text-xs">
-              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
                 <h3 className="text-lg font-bold text-white flex items-center space-x-2">
                   <BookOpen className="w-5 h-5 text-indigo-400" />
                   <span>Academic Performance & Exam Marksheet History</span>
@@ -1460,7 +1460,7 @@ Register No: <strong className="text-white">{registerNoDisplay}</strong> | Batch
             />
 
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 text-xs">
-              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
                 <h3 className="text-lg font-bold text-white flex items-center space-x-2">
                   <Trophy className="w-5 h-5 text-indigo-400" />
                   <span>My Project Showcase — Software & Hardware Records</span>

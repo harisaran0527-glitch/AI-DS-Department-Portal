@@ -465,13 +465,13 @@ export const AcademicsModule: React.FC<AcademicsModuleProps> = ({
   return (
     <div className={userRole === 'FACULTY' ? 'faculty-academics space-y-6' : 'space-y-6'}>
       {/* MODULE HEADER & FOUR DEDICATED TABS */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/90 border border-slate-800 p-4 sm:p-5 rounded-2xl backdrop-blur-xl shadow-xl">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-900/90 border border-slate-800 p-4 sm:p-5 rounded-2xl backdrop-blur-xl shadow-xl">
+        <div className="flex items-center space-x-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
             <BookOpen className="w-5 h-5" />
           </div>
-          <div>
-            <h2 className="text-lg font-bold text-white tracking-wide">Academics Management</h2>
+          <div className="min-w-0">
+            <h2 className="text-lg font-bold text-white tracking-wide truncate">Academics Management</h2>
             <p className="text-xs text-slate-400 font-mono">
               Exclusive Excel Bulk Upload for Subjects & Marks • View Saved Records & Student Roster
             </p>
@@ -479,54 +479,54 @@ export const AcademicsModule: React.FC<AcademicsModuleProps> = ({
         </div>
 
         {/* 4 DEDICATED SECTIONS */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+        <div className="academics-tab-nav inline-flex flex-wrap items-center gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800 w-fit max-w-full h-auto self-start lg:self-center">
           <button
             onClick={() => setActiveSubTab('subject-master')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center space-x-1.5 cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center space-x-1.5 cursor-pointer shrink-0 ${
               activeSubTab === 'subject-master'
                 ? 'bg-cyan-500 text-slate-950 font-bold shadow-[0_0_15px_rgba(6,182,212,0.4)]'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            <BookOpen className="w-3.5 h-3.5" />
+            <BookOpen className="w-3.5 h-3.5 shrink-0" />
             <span>1. Subject Master</span>
           </button>
 
           {!isReadOnly && (
             <button
               onClick={() => setActiveSubTab('bulk-marks')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center space-x-1.5 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center space-x-1.5 cursor-pointer shrink-0 ${
                 activeSubTab === 'bulk-marks'
                   ? 'bg-cyan-500 text-slate-950 font-bold shadow-[0_0_15px_rgba(6,182,212,0.4)]'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              <Upload className="w-3.5 h-3.5" />
+              <Upload className="w-3.5 h-3.5 shrink-0" />
               <span>2. Bulk Marks Upload</span>
             </button>
           )}
 
           <button
             onClick={() => setActiveSubTab('saved-records')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center space-x-1.5 cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center space-x-1.5 cursor-pointer shrink-0 ${
               activeSubTab === 'saved-records'
                 ? 'bg-cyan-500 text-slate-950 font-bold shadow-[0_0_15px_rgba(6,182,212,0.4)]'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            <ListOrdered className="w-3.5 h-3.5" />
+            <ListOrdered className="w-3.5 h-3.5 shrink-0" />
             <span>3. Saved Exam Records</span>
           </button>
 
           <button
             onClick={() => setActiveSubTab('student-roster')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center space-x-1.5 cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center space-x-1.5 cursor-pointer shrink-0 ${
               activeSubTab === 'student-roster'
                 ? 'bg-cyan-500 text-slate-950 font-bold shadow-[0_0_15px_rgba(6,182,212,0.4)]'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            <GraduationCap className="w-3.5 h-3.5" />
+            <GraduationCap className="w-3.5 h-3.5 shrink-0" />
             <span>4. Student Roster</span>
           </button>
         </div>
@@ -635,7 +635,7 @@ export const AcademicsModule: React.FC<AcademicsModuleProps> = ({
               {/* Subject Master Preview & Validation Report */}
               {subjectPreviewResult && (
                 <div className="space-y-4 pt-3 border-t border-slate-800 animate-in fade-in duration-200">
-                  <div className="grid grid-cols-3 gap-3 text-center text-xs font-mono">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 text-center text-xs font-mono">
                     <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
                       <span className="text-slate-400 block text-[10px]">TOTAL ROWS</span>
                       <span className="text-white font-bold text-base">{subjectPreviewResult.summary.totalRowsProcessed}</span>
@@ -900,8 +900,8 @@ export const AcademicsModule: React.FC<AcademicsModuleProps> = ({
                       <CheckCircle2 className="w-4 h-4" />
                       <span>Valid Marks Preview for {selectedExamType} ({marksPreviewResult.validRows.length})</span>
                     </h4>
-                    <div className="max-h-56 overflow-y-auto border border-emerald-500/30 rounded-xl bg-slate-950">
-                      <table className="w-full text-[11px] font-mono text-left text-slate-300">
+                    <div className="max-h-56 overflow-y-auto overflow-x-auto border border-emerald-500/30 rounded-xl bg-slate-950">
+                      <table className="w-full min-w-[560px] text-[11px] font-mono text-left text-slate-300">
                         <thead className="bg-slate-900 text-emerald-400 sticky top-0">
                           <tr>
                             <th className="p-2 border-b border-slate-800">Row</th>
@@ -1324,7 +1324,7 @@ export const AcademicsModule: React.FC<AcademicsModuleProps> = ({
                 {/* Content */}
                 <div className="p-6 space-y-5">
                   {/* Summary Badges */}
-                  <div className="grid grid-cols-3 gap-3 font-mono text-center">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 font-mono text-center">
                     <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
                       <span className="text-[10px] text-slate-400 uppercase block">CGPA</span>
                       <span className="text-base font-bold text-amber-300">
